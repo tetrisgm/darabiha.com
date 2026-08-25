@@ -14,25 +14,35 @@ function cardDate(value: string | null) {
 export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
   const { depth, groups } = buildGenerations(tree);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
-  const gesture = useRef<{ x: number; y: number; view: typeof view } | null>(null);
+  const gesture = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const point = (person: Person) => {
     const group = groups.get(depth.get(person.id) ?? 0) ?? [];
     const index = group.findIndex((item) => item.id === person.id);
     return { x: 50 + (index - (group.length - 1) / 2) * 18, y: 28 + (depth.get(person.id) ?? 0) * 28 };
   };
   const begin = (event: React.PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    gesture.current = { x: event.clientX, y: event.clientY, view };
+    gesture.current = { x: event.clientX, y: event.clientY, view, moved: false };
   };
   const move = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!gesture.current) return;
-    setView({ ...view, x: gesture.current.view.x + event.clientX - gesture.current.x, y: gesture.current.view.y + event.clientY - gesture.current.y });
+    const dx = event.clientX - gesture.current.x;
+    const dy = event.clientY - gesture.current.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) gesture.current.moved = true;
+    setView((current) => ({ ...current, x: gesture.current!.view.x + dx, y: gesture.current!.view.y + dy }));
   };
-  const end = () => { gesture.current = null; };
+  const end = () => { suppressClick.current = Boolean(gesture.current?.moved); gesture.current = null; };
   const zoom = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    setView({ ...view, scale: Math.max(.5, Math.min(3, view.scale * (event.deltaY > 0 ? .92 : 1.08))) });
+    const factor = event.deltaY > 0 ? .92 : 1.08;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setView((current) => {
+      const nextScale = Math.max(.5, Math.min(3, current.scale * factor));
+      const cx = event.clientX - rect.left - rect.width / 2;
+      const cy = event.clientY - rect.top - rect.height / 2;
+      return { scale: nextScale, x: cx - (cx - current.x) * (nextScale / current.scale), y: cy - (cy - current.y) * (nextScale / current.scale) };
+    });
   };
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
@@ -49,7 +59,7 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
         {tree.relationships.filter((link) => link.type === "spouse").map((link) => { const from = tree.people.find((person) => person.id === link.fromPersonId); const to = tree.people.find((person) => person.id === link.toPersonId); if (!from || !to) return null; const a = point(from); const b = point(to); return <line className="spouse-connector" key={link.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />; })}
         {parentGroups.map(({ child, parents }) => { if (!child) return null; const childPoint = point(child); const parentPoints = parents.map(point); const left = Math.min(...parentPoints.map((item) => item.x)); const right = Math.max(...parentPoints.map((item) => item.x)); const junctionY = childPoint.y - 14; return <g className="parent-connector" key={child.id}><line x1={left} y1={parentPoints[0].y} x2={right} y2={parentPoints[0].y} /><line x1={(left + right) / 2} y1={parentPoints[0].y} x2={(left + right) / 2} y2={junctionY} /><line x1={left} y1={junctionY} x2={right} y2={junctionY} /><line x1={childPoint.x} y1={junctionY} x2={childPoint.x} y2={childPoint.y} /></g>; })}
       </svg>
-      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); return <button className="tree-card" style={{ left: `${p.x}%`, top: `${p.y}%` }} key={person.id} onClick={() => onSelect(person)} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); return <button className="tree-card" style={{ left: `${p.x}%`, top: `${p.y}%` }} key={person.id} onClick={() => { if (!suppressClick.current) onSelect(person); suppressClick.current = false; }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
     </div>
   </div>;
 }
