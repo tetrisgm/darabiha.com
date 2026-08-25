@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Float, Html, Line, OrbitControls, Sparkles, Stars } from "@react-three/drei";
+import { Float, Html, Line, OrbitControls, Sparkles } from "@react-three/drei";
 import { AdditiveBlending, Color, type Vector3 } from "three";
 import type { FamilyTree, Person } from "../../lib/types";
 
@@ -36,10 +36,10 @@ function PersonOrb({ person, position, onSelect }: { person: Person; position: V
 export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
   const positions = layout(tree);
   return <div className="family-canvas"><Canvas camera={{ position: [0, 0, 13], fov: 42 }} dpr={[1, 2]} gl={{ antialias: true }}>
-    <color attach="background" args={[new Color("#08090b")]} /><fog attach="fog" args={["#08090b", 9, 24]} />
-    <ambientLight intensity={0.4} /><pointLight position={[0, 3, 4]} color="#ffd7a0" intensity={20} distance={12} /><pointLight position={[-5, -5, 2]} color="#55d9e8" intensity={16} distance={14} />
-    <Stars radius={35} depth={20} count={900} factor={1.4} saturation={0} fade speed={0.35} /><Sparkles count={100} scale={[16, 10, 8]} size={2} speed={0.25} color="#ffb58d" />
-    {tree.relationships.map((link) => { const from = positions.get(link.fromPersonId); const to = positions.get(link.toPersonId); if (!from || !to) return null; const mid: Vector3 = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2 + 0.18, (from[2] + to[2]) / 2 + 0.4] as Vector3; return <group key={link.id}><Line points={[from, mid, to]} color={link.type === "spouse" ? "#ffad72" : "#70dbe4"} lineWidth={1.4} transparent opacity={0.8} /><Line points={[from, mid, to]} color={link.type === "spouse" ? "#ffad72" : "#70dbe4"} lineWidth={6} transparent opacity={0.08} blending={AdditiveBlending} /></group>; })}
+    <color attach="background" args={[new Color("#f5f5f7")]} /><fog attach="fog" args={["#f5f5f7", 9, 24]} />
+    <ambientLight intensity={0.7} /><pointLight position={[0, 3, 4]} color="#ffffff" intensity={20} distance={12} /><pointLight position={[-5, -5, 2]} color="#7d8cff" intensity={12} distance={14} />
+    <Sparkles count={65} scale={[16, 10, 8]} size={1.5} speed={0.18} color="#7d8cff" />
+    {tree.relationships.map((link) => { const from = positions.get(link.fromPersonId); const to = positions.get(link.toPersonId); if (!from || !to) return null; const mid: Vector3 = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2 + 0.18, (from[2] + to[2]) / 2 + 0.4] as Vector3; return <group key={link.id}><Line points={[from, mid, to]} color={link.type === "spouse" ? "#8b5cf6" : "#147ef5"} lineWidth={1.2} transparent opacity={0.72} /><Line points={[from, mid, to]} color={link.type === "spouse" ? "#8b5cf6" : "#147ef5"} lineWidth={5} transparent opacity={0.07} blending={AdditiveBlending} /></group>; })}
     {[...positions.entries()].map(([id, position]) => { const person = tree.people.find((candidate) => candidate.id === id); return person ? <PersonOrb key={id} person={person} position={position} onSelect={onSelect} /> : null; })}
     <OrbitControls enablePan={false} minDistance={7} maxDistance={18} autoRotate autoRotateSpeed={0.18} /></Canvas></div>;
 }

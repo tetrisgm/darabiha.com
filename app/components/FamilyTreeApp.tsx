@@ -169,8 +169,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="border-b border-[var(--line)] px-6 py-6 sm:px-8">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">Family archivist</p>
-                <h2 className="mt-1 font-serif text-2xl tracking-[-0.025em]">Add to our story</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">Archive</p>
+                <h2 className="mt-1 font-serif text-2xl tracking-[-0.025em]">{viewer.canEdit ? "Add to the record" : "Search the archive"}</h2>
               </div>
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] text-sm text-white">✦</span>
             </div>
@@ -178,7 +178,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
           <div className="flex flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
             {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} signInPath={signInPath} />
+              <PublicArchiveChat signedIn={viewer.signedIn} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -260,7 +260,7 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PublicArchiveChat({ signedIn, signInPath }: { signedIn: boolean; signInPath: string }) {
+function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
   const [question, setQuestion] = useState("");
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
@@ -272,13 +272,12 @@ function PublicArchiveChat({ signedIn, signInPath }: { signedIn: boolean; signIn
   return (
     <div className="m-auto w-full max-w-sm text-center">
       <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-xl text-[var(--accent)] shadow-sm">✦</span>
-      <h3 className="mt-5 font-serif text-2xl">Ask about the family</h3>
-      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Ask a question about people, relationships, dates, or stories in the public archive.</p>
+      <h3 className="mt-5 font-serif text-2xl">Find a person or story</h3>
+      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>
       <textarea value={question} onChange={(event) => setQuestion(event.target.value)} className="mt-5 min-h-24 w-full rounded-2xl border border-[var(--line)] bg-white p-3 text-left text-sm outline-none" placeholder="Who are the children of…?" />
-      <button onClick={ask} disabled={busy || !question.trim()} className="mt-3 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Thinking…" : "Ask the archivist"}</button>
+      <button onClick={ask} disabled={busy || !question.trim()} className="mt-3 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Searching…" : "Search"}</button>
       {reply && <p className="mt-5 rounded-2xl border border-[var(--line)] bg-white p-4 text-left text-sm leading-6">{reply}</p>}
       <p className="mt-5 text-xs leading-5 text-[var(--muted)]">Want to add or correct something? {signedIn ? "Your account is not on the editor list." : "Sign in with Apple as an invited editor."}</p>
-      {!signedIn && <a className="mt-5 inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white" href={signInPath}><span className="text-base" aria-hidden="true"></span> Sign in with Apple</a>}
     </div>
   );
 }
