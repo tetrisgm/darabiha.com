@@ -68,17 +68,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [addingPerson, setAddingPerson] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
-  const [edgeReveal, setEdgeReveal] = useState(false);
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useMemo(() => generationGroups(tree), [tree]);
-  useEffect(() => {
-    if (!chatCollapsed) return;
-    const onPointerMove = (event: PointerEvent) => setEdgeReveal(event.clientX <= 28);
-    window.addEventListener("pointermove", onPointerMove);
-    return () => window.removeEventListener("pointermove", onPointerMove);
-  }, [chatCollapsed]);
 
   async function sendMessage() {
     const text = input.trim();
@@ -138,11 +131,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
             <div className="workspace-header mb-5 flex items-center justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                <span className="workspace-mark" aria-hidden="true" />
                 <div className="min-w-0"><p className="truncate text-base font-semibold tracking-[-.01em]">Darabiha</p><button type="button" className="workspace-branch">family archive <span aria-hidden="true">⌄</span></button></div>
               </div>
               <div className="flex items-center gap-1">
-                <button className="workspace-icon" aria-label="Activity" title="Activity">◷</button>
                 <button className="sidebar-toggle" onClick={() => setChatCollapsed(true)} aria-label="Collapse family chat" title="Collapse family chat">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="2" /><path d="M7 3v14M11.5 7.5 9 10l2.5 2.5" /></svg>
                 </button>
@@ -180,7 +171,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
             )}
           </div>
         </aside>
-        <button className={`chat-edge-reveal ${edgeReveal ? "is-visible" : ""}`} onClick={() => { setChatCollapsed(false); setEdgeReveal(false); }} aria-label="Show family chat" title="Show family chat">›</button>
+        <button className={`chat-edge-reveal ${chatCollapsed ? "is-visible" : ""}`} onClick={() => setChatCollapsed(false)} aria-label="Show family chat" title="Show family chat">›</button>
         <section className="relative h-screen min-h-screen min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
           <div className="relative h-full min-h-screen">
