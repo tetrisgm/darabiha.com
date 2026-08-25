@@ -25,12 +25,35 @@ function layout(tree: FamilyTree) {
   return positions;
 }
 
+function displayDate(value: string | null) {
+  if (!value) return null;
+  const parts = value.split("-").map(Number);
+  if (parts.length === 3 && parts.every(Number.isFinite)) {
+    return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])));
+  }
+  return value;
+}
+
+function displayPlace(person: Person, kind: "birth" | "death") {
+  const city = kind === "birth" ? person.birthCity : person.deathCity;
+  const country = kind === "birth" ? person.birthCountry : person.deathCountry;
+  const legacy = kind === "birth" ? person.birthPlace : person.deathPlace;
+  return [city, country].filter(Boolean).join(", ") || legacy || null;
+}
+
+function slabDetails(person: Person) {
+  const born = person.birthDate || displayPlace(person, "birth");
+  const bornText = born ? `Born${person.birthDate ? ` ${displayDate(person.birthDate)}` : ""}${displayPlace(person, "birth") ? ` in ${displayPlace(person, "birth")}` : ""}` : "Birth details unknown";
+  if (!person.deathDate && !displayPlace(person, "death")) return bornText;
+  return `${bornText}  ·  Died${person.deathDate ? ` ${displayDate(person.deathDate)}` : ""}${displayPlace(person, "death") ? ` in ${displayPlace(person, "death")}` : ""}`;
+}
+
 function PersonOrb({ person, position, onSelect }: { person: Person; position: Vector3; onSelect: (person: Person) => void }) {
   return <Float speed={0} rotationIntensity={0} floatIntensity={0}><group position={position} onClick={(event) => { event.stopPropagation(); onSelect(person); }}>
     <RoundedBox args={[2.05, 1.3, 0.08]} radius={0.12} smoothness={5}><meshStandardMaterial color="#17181c" roughness={0.38} metalness={0.08} emissive="#28344b" emissiveIntensity={0.28} /></RoundedBox>
     <mesh position={[0, 0.28, 0.052]}><planeGeometry args={[1.82, 0.52]} /><meshBasicMaterial color="#242933" /></mesh>
     <Text position={[-0.82, -0.02, 0.06]} anchorX="left" anchorY="middle" maxWidth={1.7} fontSize={0.16} color="#ffffff" outlineWidth={0.004} outlineColor="#000000">{person.displayName}</Text>
-    <Text position={[-0.82, -0.28, 0.06]} anchorX="left" anchorY="middle" maxWidth={1.7} fontSize={0.095} color="#aeb8c8">{person.birthDate || "Year unknown"}{person.birthCity ? `  ·  ${person.birthCity}` : ""}</Text>
+    <Text position={[-0.82, -0.28, 0.06]} anchorX="left" anchorY="middle" maxWidth={1.7} fontSize={0.085} color="#aeb8c8" lineHeight={1.2}>{slabDetails(person)}</Text>
     <mesh scale={1.12}><boxGeometry args={[2.05, 1.3, 0.08]} /><meshBasicMaterial color="#5b8cff" transparent opacity={0.06} blending={AdditiveBlending} /></mesh>
   </group></Float>;
 }
