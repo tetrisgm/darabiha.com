@@ -150,7 +150,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
         <aside className="flex min-h-[640px] flex-col border-t border-[var(--line)] bg-[var(--sidebar)] lg:border-l lg:border-t-0">
           <div className="flex flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
-            {viewer.canEdit && <button className="mb-4 w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-left text-sm font-medium text-[var(--ink)] transition hover:border-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add person directly</button>}
             {viewer.signedIn && <div className="relative mb-3 flex justify-end"><button className="rounded-full px-3 py-1 text-2xl leading-none text-[var(--muted)] hover:bg-[var(--wash)]" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
             {!viewer.canEdit ? (
               <PublicArchiveChat signedIn={viewer.signedIn} />
@@ -168,6 +167,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                 </div>
 
                 <div className="pt-5">
+                  <button className="mb-4 rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add a person</button>
                   {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
                   <div className="rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Tell me what you remember…" aria-label="Message the family archivist" />
