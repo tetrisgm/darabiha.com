@@ -117,12 +117,20 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
       .bind(person.displayName, person.givenName, person.familyName, person.birthDate, person.deathDate,
         person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, proposal.personId));
+  } else if (proposal.kind === "delete_person") {
+    statements.push(
+      env.DB.prepare("DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?").bind(proposal.personId, proposal.personId),
+      env.DB.prepare("DELETE FROM story_people WHERE person_id = ?").bind(proposal.personId),
+      env.DB.prepare("DELETE FROM people WHERE id = ?").bind(proposal.personId),
+    );
   } else if (proposal.kind === "add_relationship") {
     if (proposal.fromPersonId === proposal.toPersonId) throw new Error("A person cannot be related to themself.");
     if (!(["parent", "spouse"] as const).includes(proposal.relationshipType)) throw new Error("Unsupported relationship.");
     statements.push(env.DB.prepare(`INSERT INTO relationships
       (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), proposal.fromPersonId, proposal.toPersonId, proposal.relationshipType, now));
+  } else if (proposal.kind === "delete_relationship") {
+    statements.push(env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(proposal.relationshipId));
   } else if (proposal.kind === "add_story") {
     if (!proposal.title.trim() || !proposal.body.trim()) throw new Error("A story needs a title and text.");
     const storyId = crypto.randomUUID();
@@ -130,6 +138,21 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       .bind(storyId, proposal.title.trim(), proposal.body.trim(), nullable(proposal.date), nullable(proposal.place), now));
     for (const personId of proposal.personIds) statements.push(env.DB.prepare(`INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)`).bind(storyId, personId));
     for (const attachmentId of proposal.attachmentIds) statements.push(env.DB.prepare(`INSERT OR IGNORE INTO story_attachments (story_id, attachment_id) VALUES (?, ?)`).bind(storyId, attachmentId));
+  } else if (proposal.kind === "update_story") {
+    if (!proposal.title.trim() || !proposal.body.trim()) throw new Error("A story needs a title and text.");
+    statements.push(
+      env.DB.prepare("UPDATE stories SET title = ?, body = ?, date = ?, place = ? WHERE id = ?").bind(proposal.title.trim(), proposal.body.trim(), nullable(proposal.date), nullable(proposal.place), proposal.storyId),
+      env.DB.prepare("DELETE FROM story_people WHERE story_id = ?").bind(proposal.storyId),
+      env.DB.prepare("DELETE FROM story_attachments WHERE story_id = ?").bind(proposal.storyId),
+    );
+    for (const personId of proposal.personIds) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)").bind(proposal.storyId, personId));
+    for (const attachmentId of proposal.attachmentIds) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_attachments (story_id, attachment_id) VALUES (?, ?)").bind(proposal.storyId, attachmentId));
+  } else if (proposal.kind === "delete_story") {
+    statements.push(
+      env.DB.prepare("DELETE FROM story_people WHERE story_id = ?").bind(proposal.storyId),
+      env.DB.prepare("DELETE FROM story_attachments WHERE story_id = ?").bind(proposal.storyId),
+      env.DB.prepare("DELETE FROM stories WHERE id = ?").bind(proposal.storyId),
+    );
   }
   statements.push(env.DB.prepare(`INSERT INTO change_log
     (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)

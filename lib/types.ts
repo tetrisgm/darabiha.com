@@ -66,6 +66,18 @@ export type AddRelationshipProposal = {
   relationshipType: "parent" | "spouse";
 };
 
+export type DeletePersonProposal = {
+  kind: "delete_person";
+  summary: string;
+  personId: string;
+};
+
+export type DeleteRelationshipProposal = {
+  kind: "delete_relationship";
+  summary: string;
+  relationshipId: string;
+};
+
 export type AddStoryProposal = {
   kind: "add_story";
   summary: string;
@@ -77,8 +89,37 @@ export type AddStoryProposal = {
   attachmentIds: string[];
 };
 
+export type UpdateStoryProposal = {
+  kind: "update_story";
+  summary: string;
+  storyId: string;
+  title: string;
+  body: string;
+  date: string | null;
+  place: string | null;
+  personIds: string[];
+  attachmentIds: string[];
+};
+
+export type DeleteStoryProposal = {
+  kind: "delete_story";
+  summary: string;
+  storyId: string;
+};
+
+export type AgentConflict = {
+  question: string;
+  reason: string;
+  candidatePersonIds: string[];
+  evidence: string[];
+};
+
 export type ChangeProposal =
   | AddPersonProposal
   | UpdatePersonProposal
+  | DeletePersonProposal
   | AddRelationshipProposal
-  | AddStoryProposal;
+  | DeleteRelationshipProposal
+  | AddStoryProposal
+  | UpdateStoryProposal
+  | DeleteStoryProposal;
