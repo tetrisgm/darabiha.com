@@ -151,3 +151,15 @@ export async function attachPersonPhoto(personId: string, file: File, actorEmail
     .bind(attachment.id, new Date().toISOString(), personId).run();
   return readTree();
 }
+
+export async function removePerson(personId: string, actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?").bind(personId, personId),
+    env.DB.prepare("DELETE FROM story_people WHERE person_id = ?").bind(personId),
+    env.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "remove_person", "Removed a family member", JSON.stringify({ personId }), now),
+  ]);
+  return readTree();
+}

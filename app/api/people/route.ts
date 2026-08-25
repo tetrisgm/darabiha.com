@@ -1,5 +1,5 @@
 import { requireEditor } from "../../authz";
-import { addRelationship, applyProposal, attachPersonPhoto, readTree, updatePerson } from "../../../db/store";
+import { addRelationship, applyProposal, attachPersonPhoto, readTree, removePerson, updatePerson } from "../../../db/store";
 
 export const runtime = "edge";
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -25,10 +25,11 @@ export async function POST(request: Request) {
     if (action === "update") {
       return Response.json({ ok: true, tree: await updatePerson(String(body.personId ?? ""), (body.patch ?? {}) as Record<string, unknown>, auth.user.email) });
     }
+    if (action === "remove") return Response.json({ ok: true, tree: await removePerson(String(body.personId ?? ""), auth.user.email) });
     if (action === "add") {
       const displayName = String(body.displayName ?? "").trim();
       if (!displayName) return Response.json({ error: "display_name_required" }, { status: 400 });
-      return Response.json({ ok: true, tree: await applyProposal({ kind: "add_person", summary: "Added a family member", person: { displayName, givenName: null, familyName: null, birthDate: null, deathDate: null, birthPlace: null, deathPlace: null, biography: null, photoAttachmentId: null } }, auth.user.email) });
+      return Response.json({ ok: true, tree: await applyProposal({ kind: "add_person", summary: "Added a family member", person: { displayName, givenName: null, familyName: null, birthDate: null, deathDate: null, birthPlace: null, deathPlace: null, birthCity: null, birthCountry: null, deathCity: null, deathCountry: null, biography: null, photoAttachmentId: null } }, auth.user.email) });
     }
     if (action === "relationship") {
       const relationshipType = body.relationshipType === "spouse" ? "spouse" : "parent";

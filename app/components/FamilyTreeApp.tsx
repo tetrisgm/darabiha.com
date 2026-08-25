@@ -14,7 +14,7 @@ type Props = {
 };
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
-type PendingProposal = { id: string; proposal: ChangeProposal; state: "pending" | "applying" | "applied" | "error" };
+type PendingProposal = { id: string; proposal: ChangeProposal; state: "pending" | "applying" | "applied" | "error"; appliedPersonId?: string };
 
 function generationGroups(tree: FamilyTree): Person[][] {
   if (!tree.people.length) return [];
@@ -88,7 +88,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       if (!response.ok) throw new Error(data.error || "request_failed");
       setMessages([...nextMessages, { role: "assistant", text: data.reply || "I prepared that for review." }]);
       if (data.proposals?.length) {
-        setProposals((current) => [...current, ...data.proposals!.map((proposal) => ({ id: crypto.randomUUID(), proposal, state: "pending" as const }))]);
+        const imported = data.proposals!.map((proposal) => ({ id: crypto.randomUUID(), proposal, state: "pending" as const }));
+        setProposals((current) => [...current, ...imported]);
+        for (const item of imported) await applyChange(item);
       }
       setFiles([]);
       if (fileRef.current) fileRef.current.value = "";
@@ -112,10 +114,18 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       const data = await response.json() as { tree?: FamilyTree; error?: string };
       if (!response.ok || !data.tree) throw new Error(data.error || "change_failed");
       setTree(data.tree);
-      setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "applied" } : candidate));
+      const appliedPersonId = item.proposal.kind === "add_person" ? data.tree.people.find((person) => person.displayName === item.proposal.person.displayName)?.id : undefined;
+      setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "applied", appliedPersonId } : candidate));
     } catch {
       setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "error" } : candidate));
     }
+  }
+
+  async function undoChange(item: PendingProposal) {
+    if (!item.appliedPersonId) return;
+    const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "remove", personId: item.appliedPersonId }) });
+    const data = await response.json() as { tree?: FamilyTree };
+    if (response.ok && data.tree) { setTree(data.tree); setProposals((current) => current.filter((candidate) => candidate.id !== item.id)); }
   }
 
   async function applyAll() {
@@ -202,6 +212,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                       <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{item.proposal.summary}</p>
                       {item.proposal.kind === "add_person" && <div className="mt-3 rounded-xl bg-[var(--wash)] p-3 text-xs leading-5 text-[var(--muted)]"><p><strong>{item.proposal.person.birthDate || "Year unknown"}</strong>{item.proposal.person.birthCity || item.proposal.person.birthCountry ? ` · ${[item.proposal.person.birthCity, item.proposal.person.birthCountry].filter(Boolean).join(", ")}` : ""}</p>{item.proposal.person.biography && <p className="mt-1">{item.proposal.person.biography}</p>}</div>}
                       {item.state === "pending" && <button className="mt-2 text-xs text-[var(--muted)] underline" onClick={() => setProposals((current) => current.filter((candidate) => candidate.id !== item.id))}>Dismiss</button>}
+                      {item.state === "applied" && item.appliedPersonId && <button className="mt-2 text-xs text-red-700 underline" onClick={() => undoChange(item)}>Undo and remove from tree</button>}
                       <button className="mt-3 w-full rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white disabled:cursor-default disabled:opacity-50" disabled={item.state === "applying" || item.state === "applied"} onClick={() => applyChange(item)}>
                         {item.state === "applied" ? "Added to the tree ✓" : item.state === "applying" ? "Applying…" : item.state === "error" ? "Try again" : "Review complete · apply"}
                       </button>
