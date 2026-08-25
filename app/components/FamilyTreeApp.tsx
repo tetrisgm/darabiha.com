@@ -127,7 +127,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         <section className="relative overflow-hidden px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
           <div className="absolute inset-0 tree-grid opacity-45" aria-hidden="true" />
           <div className="relative mx-auto max-w-5xl">
-            {viewer.canEdit && <div className="mb-4 flex justify-end"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add person</button></div>}
 
             <div className="relative min-h-[580px] overflow-hidden rounded-[2rem] border border-[#26363a] bg-[#08090b] shadow-[0_24px_80px_rgba(62,45,28,0.12)]">
               {tree.people.length ? <FamilyTreeCanvas tree={tree} onSelect={setSelectedPerson} /> : <EmptyTree canEdit={viewer.canEdit} />}
@@ -151,6 +150,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
         <aside className="flex min-h-[640px] flex-col border-t border-[var(--line)] bg-[var(--sidebar)] lg:border-l lg:border-t-0">
           <div className="flex flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
+            {viewer.canEdit && <button className="mb-4 w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-left text-sm font-medium text-[var(--ink)] transition hover:border-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add person directly</button>}
             {viewer.signedIn && <div className="relative mb-3 flex justify-end"><button className="rounded-full px-3 py-1 text-2xl leading-none text-[var(--muted)] hover:bg-[var(--wash)]" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
             {!viewer.canEdit ? (
               <PublicArchiveChat signedIn={viewer.signedIn} />
