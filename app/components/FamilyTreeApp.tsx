@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import type { ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
@@ -61,7 +60,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [proposals, setProposals] = useState<PendingProposal[]>([]);
+  const [, setProposals] = useState<PendingProposal[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
@@ -154,6 +153,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
         <aside className="flex min-h-[640px] flex-col border-t border-[var(--line)] bg-[var(--sidebar)] lg:border-l lg:border-t-0">
           <div className="flex flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
+            {!viewer.signedIn && <a className="mb-4 self-end rounded-full bg-black px-4 py-2 text-sm font-semibold text-white" href={signInPath}>&nbsp; Sign in with Apple</a>}
             {viewer.signedIn && <div className="relative mb-3 flex justify-end"><button className="rounded-full px-3 py-1 text-2xl leading-none text-[var(--muted)] hover:bg-[var(--wash)]" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
             {!viewer.canEdit ? (
               <PublicArchiveChat signedIn={viewer.signedIn} />
