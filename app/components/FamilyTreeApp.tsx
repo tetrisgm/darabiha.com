@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
+import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 
 type Props = {
   initialTree: FamilyTree;
@@ -67,7 +68,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const generations = useMemo(() => generationGroups(tree), [tree]);
+  useMemo(() => generationGroups(tree), [tree]);
 
   async function sendMessage() {
     const text = input.trim();
@@ -142,21 +143,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
               </span>
             </div>
 
-            <div className="relative flex min-h-[580px] flex-col items-center gap-14 rounded-[2rem] border border-[var(--line)] bg-white/60 px-5 py-12 shadow-[0_24px_80px_rgba(62,45,28,0.06)] backdrop-blur-sm sm:px-10">
-              {generations.length ? generations.map((generation, generationIndex) => (
-                <div className="tree-generation relative flex w-full flex-wrap justify-center gap-4 sm:gap-8" key={generationIndex}>
-                  {generation.map((person) => (
-                    <button className="person-card" key={person.id} title={person.biography || person.displayName} onClick={() => setSelectedPerson(person)}>
-                      <span className="person-avatar" aria-hidden="true">{person.displayName.slice(0, 1).toUpperCase()}</span>
-                      <span className="min-w-0 text-left">
-                        <span className="block truncate font-serif text-lg leading-tight">{person.displayName}</span>
-                        <span className="mt-1 block text-xs text-[var(--muted)]">{lifeLine(person)}</span>
-                        {(person.birthCity || person.birthCountry || person.birthPlace) && <span className="block text-[11px] text-[var(--muted)]">{locationLine(person.birthCity, person.birthCountry, person.birthPlace)}</span>}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )) : <EmptyTree canEdit={viewer.canEdit} />}
+            <div className="relative min-h-[580px] overflow-hidden rounded-[2rem] border border-[#26363a] bg-[#08090b] shadow-[0_24px_80px_rgba(62,45,28,0.12)]">
+              {tree.people.length ? <FamilyTreeCanvas tree={tree} onSelect={setSelectedPerson} /> : <EmptyTree canEdit={viewer.canEdit} />}
 
               {tree.stories.length > 0 && (
                 <div className="mt-auto w-full border-t border-[var(--line)] pt-5">

@@ -82,3 +82,9 @@ button { cursor: pointer; }
   .person-card { width: min(12rem, 48%); gap: .6rem; padding: .7rem; }
   .person-avatar { height: 2.25rem; width: 2.25rem; font-size: 1rem; }
 }
+
+.family-canvas { position: absolute; inset: 0; min-height: 580px; }
+.family-canvas canvas { display: block; }
+.three-person-label { display: flex; min-width: 118px; flex-direction: column; align-items: center; gap: 2px; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; background: rgba(24,24,27,.78); padding: 8px 14px; color: #f4efe5; font: 600 10px/1.2 Inter, sans-serif; letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 0 28px rgba(77,219,230,.14); backdrop-filter: blur(10px); transition: transform .2s ease, border-color .2s ease; }
+.three-person-label:hover { transform: scale(1.06); border-color: #ffad72; }
+.three-person-label span { color: rgba(244,239,229,.58); font-size: 9px; letter-spacing: .08em; }
