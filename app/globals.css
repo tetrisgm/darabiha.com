@@ -107,7 +107,7 @@ button { cursor: pointer; }
 .safari-tree-card { position:absolute; display:flex; width:clamp(10rem,18vw,15rem); min-height:5rem; transform:translate(-50%,-50%); flex-direction:column; justify-content:center; border:1px solid rgba(156,180,235,.45); border-radius:1rem; background:rgba(48,56,75,.96); padding:1rem; color:#fff; box-shadow:0 14px 40px rgba(0,0,0,.3); pointer-events:auto; text-align:left; }
 .safari-tree-card span { margin-top:.35rem; color:#c5d0e8; font-size:.75rem; }
 .safari-tree-card { cursor:pointer; }
-.family-canvas canvas { display: block; width: 100% !important; height: 100% !important; min-height: 100vh; }
+.family-canvas canvas { display: block; width: 100% !important; height: 100% !important; min-height: 100vh; pointer-events:none; }
 .three-person-label { display: flex; min-width: 118px; flex-direction: column; align-items: center; gap: 2px; border: 1px solid rgba(0,0,0,.12); border-radius: 999px; background: rgba(255,255,255,.82); padding: 8px 14px; color: #1d1d1f; font: 600 10px/1.2 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 8px 24px rgba(0,0,0,.08); backdrop-filter: blur(14px); transition: transform .2s ease, border-color .2s ease; }
 .three-person-label:hover { transform: scale(1.06); border-color: #0071e3; }
 .three-person-label span { color: #6e6e73; font-size: 9px; letter-spacing: .04em; }
