@@ -81,6 +81,7 @@ test("Safari gets a visible custom grab cursor and clickable-card cursor", async
   await page.goto("/");
   const canvas = page.locator(".family-canvas");
   await expect(canvas).toHaveAttribute("data-interactive", "true");
+  await expect(canvas).toBeVisible();
   const canvasBox = await canvas.boundingBox();
   expect(canvasBox).not.toBeNull();
   const emptyPoint = { x: canvasBox!.x + 20, y: canvasBox!.y + 20 };
