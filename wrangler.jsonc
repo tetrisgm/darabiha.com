@@ -4,7 +4,15 @@
   "main": "dist/server/index.js",
   "compatibility_date": "2026-08-25",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "PUBLIC_ORIGIN": "https://darabiha.com",
+    "APPLE_TEAM_ID": "52WM463HR2",
+    "APPLE_KEY_ID": "J6958HV8HB"
+  },
   "assets": { "directory": "dist/client" },
+  "routes": [
+    { "pattern": "darabiha.com/*", "zone_name": "darabiha.com" }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
