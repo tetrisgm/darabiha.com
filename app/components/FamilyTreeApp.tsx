@@ -123,7 +123,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
-      <header className="flex h-20 items-center justify-between border-b border-[var(--line)] px-5 sm:px-8 lg:px-12">
+      <header className="relative z-30 flex h-20 items-center justify-between border-b border-[var(--line)] bg-[var(--paper)] px-5 sm:px-8 lg:px-12">
         <Link className="font-serif text-xl tracking-[-0.02em]" href="/">Darabiha</Link>
         {!viewer.signedIn && <a className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a>}
       </header>
