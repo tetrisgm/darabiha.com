@@ -25,6 +25,7 @@ test("a person card opens a navigable record", async ({ page }) => {
   await page.goto("/");
   await page.locator(".tree-card").first().click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator(".person-drawer-backdrop")).toBeVisible();
   await expect(page.getByText("Family member")).toBeVisible();
 });
 
@@ -69,7 +70,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("13");
+  expect(version).toBe("14");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
