@@ -7,6 +7,10 @@ export type Person = {
   deathDate: string | null;
   birthPlace: string | null;
   deathPlace: string | null;
+  birthCity: string | null;
+  birthCountry: string | null;
+  deathCity: string | null;
+  deathCountry: string | null;
   biography: string | null;
   photoAttachmentId: string | null;
 };

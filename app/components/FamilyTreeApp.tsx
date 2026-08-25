@@ -47,6 +47,7 @@ function lifeLine(person: Person) {
   if (!person.birthDate && !person.deathDate) return "Dates not recorded";
   return `${person.birthDate ?? "?"} – ${person.deathDate ?? "present"}`;
 }
+function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
 function proposalLabel(proposal: ChangeProposal) {
   if (proposal.kind === "add_person") return `Add ${proposal.person.displayName}`;
@@ -150,6 +151,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                       <span className="min-w-0 text-left">
                         <span className="block truncate font-serif text-lg leading-tight">{person.displayName}</span>
                         <span className="mt-1 block text-xs text-[var(--muted)]">{lifeLine(person)}</span>
+                        {(person.birthCity || person.birthCountry || person.birthPlace) && <span className="block text-[11px] text-[var(--muted)]">{locationLine(person.birthCity, person.birthCountry, person.birthPlace)}</span>}
                       </span>
                     </button>
                   ))}
@@ -186,7 +188,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
           <div className="flex flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
             {!viewer.canEdit ? (
-              <AccessPrompt signedIn={viewer.signedIn} signInPath={signInPath} />
+              <PublicArchiveChat signedIn={viewer.signedIn} signInPath={signInPath} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -240,7 +242,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 }
 
 function PersonModal({ person, tree, canEdit, onClose, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onTreeChange: (tree: FamilyTree) => void }) {
-  const [form, setForm] = useState({ displayName: person.displayName, birthDate: person.birthDate ?? "", deathDate: person.deathDate ?? "", birthPlace: person.birthPlace ?? "", deathPlace: person.deathPlace ?? "", biography: person.biography ?? "" });
+  const [form, setForm] = useState({ displayName: person.displayName, birthDate: person.birthDate ?? "", deathDate: person.deathDate ?? "", birthPlace: person.birthPlace ?? "", deathPlace: person.deathPlace ?? "", birthCity: person.birthCity ?? "", birthCountry: person.birthCountry ?? "", deathCity: person.deathCity ?? "", deathCountry: person.deathCountry ?? "", biography: person.biography ?? "" });
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [newName, setNewName] = useState("");
@@ -251,7 +253,7 @@ function PersonModal({ person, tree, canEdit, onClose, onTreeChange }: { person:
   return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" aria-labelledby="person-modal-title" onClick={(event) => event.stopPropagation()}>
     <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button>
     {person.photoAttachmentId ? <img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <div className="person-modal-avatar">{person.displayName.slice(0, 1).toUpperCase()}</div>}
-    <p className="eyebrow">Family member</p><h2 id="person-modal-title" className="font-serif text-3xl">{person.displayName}</h2><p className="mt-1 text-sm text-[var(--muted)]">{lifeLine(person)}</p>
+    <p className="eyebrow">Family member</p><h2 id="person-modal-title" className="font-serif text-3xl">{person.displayName}</h2><p className="mt-1 text-sm text-[var(--muted)]">{lifeLine(person)}</p><div className="mt-4 grid gap-2 text-sm text-[var(--muted)] sm:grid-cols-2"><div><span className="eyebrow">Born</span><p>{person.birthDate || "Year not recorded"} · {locationLine(person.birthCity, person.birthCountry, person.birthPlace) || "Place not recorded"}</p></div><div><span className="eyebrow">Died</span><p>{person.deathDate || "Still living / unknown"} · {locationLine(person.deathCity, person.deathCountry, person.deathPlace) || "Place not recorded"}</p></div></div>
     {person.biography && <p className="mt-5 text-sm leading-6">{person.biography}</p>}
     <div className="modal-relationships">{[["Parents", parents], ["Spouse", spouses], ["Children", children], ["Siblings", siblings], ["Cousins", cousins]].map(([label, people]) => (people as Person[]).length ? <div key={label as string}><p className="eyebrow">{label as string}</p><div className="flex flex-wrap gap-2">{(people as Person[]).map((relative) => <button className="relationship-chip" key={relative.id} onClick={() => { onClose(); setTimeout(() => document.querySelector(`[title=\"${CSS.escape(relative.displayName)}\"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 0); }}>{relative.displayName}</button>)}</div></div> : null)}</div>
     {canEdit && <div className="modal-editor"><p className="eyebrow">Edit record</p>{(["displayName", "birthDate", "deathDate", "birthPlace", "deathPlace"] as const).map((field) => <input key={field} className="modal-input" value={form[field]} placeholder={field.replace(/([A-Z])/g, " $1")} onChange={(event) => setForm({ ...form, [field]: event.target.value })} />)}<textarea className="modal-input min-h-20" value={form.biography} placeholder="Biography or notes" onChange={(event) => setForm({ ...form, biography: event.target.value })} /><div className="flex items-center justify-between"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save changes"}</button>{notice && <span className="text-xs text-[var(--muted)]">{notice}</span>}</div><p className="eyebrow mt-3">Add a relationship</p><div className="grid grid-cols-[1fr_auto_auto] gap-2"><select className="modal-input" value={relativeId} onChange={(event) => setRelativeId(event.target.value)}><option value="">Choose a person</option>{tree.people.filter((candidate) => candidate.id !== person.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.displayName}</option>)}</select><select className="modal-input" value={relativeType} onChange={(event) => setRelativeType(event.target.value as typeof relativeType)}><option value="parent">Parent</option><option value="child">Child</option><option value="spouse">Spouse</option></select><button className="rounded-full border border-[var(--line)] px-3 text-xs" disabled={!relativeId} onClick={async () => { const fromPersonId = relativeType === "child" ? relativeId : person.id; const toPersonId = relativeType === "child" ? person.id : relativeId; const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "relationship", fromPersonId, toPersonId, relationshipType: relativeType === "child" ? "parent" : relativeType }) }); const data = await response.json() as { tree?: FamilyTree }; if (response.ok && data.tree) { onTreeChange(data.tree); setNotice("Relationship added"); } else setNotice("Could not add relationship"); }}>Add</button></div><p className="eyebrow mt-3">Add a name</p><div className="flex gap-2"><input className="modal-input" value={newName} placeholder="New family member" onChange={(event) => setNewName(event.target.value)} /><button className="rounded-full border border-[var(--line)] px-3 text-xs" onClick={async () => { if (!newName.trim()) return; const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "add", displayName: newName }) }); const data = await response.json() as { tree?: FamilyTree }; if (response.ok && data.tree) { onTreeChange(data.tree); setNewName(""); setNotice("Name added"); } }}>Add</button></div></div>}
@@ -268,12 +270,24 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function AccessPrompt({ signedIn, signInPath }: { signedIn: boolean; signInPath: string }) {
+function PublicArchiveChat({ signedIn, signInPath }: { signedIn: boolean; signInPath: string }) {
+  const [question, setQuestion] = useState("");
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function ask() {
+    if (!question.trim() || busy) return;
+    setBusy(true); setReply("");
+    try { const response = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: question }) }); const data = await response.json() as { reply?: string; error?: string }; setReply(response.ok ? data.reply || "No answer recorded." : "The archivist could not answer right now."); } finally { setBusy(false); }
+  }
   return (
-    <div className="m-auto max-w-xs text-center">
+    <div className="m-auto w-full max-w-sm text-center">
       <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-xl text-[var(--accent)] shadow-sm">✦</span>
-      <h3 className="mt-5 font-serif text-2xl">{signedIn ? "Family editors only" : "Help build the tree"}</h3>
-      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{signedIn ? "You’re signed in, but this account is not on the family editor list." : "The tree is public. Adding or changing family history is reserved for invited editors."}</p>
+      <h3 className="mt-5 font-serif text-2xl">Ask about the family</h3>
+      <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Ask a question about people, relationships, dates, or stories in the public archive.</p>
+      <textarea value={question} onChange={(event) => setQuestion(event.target.value)} className="mt-5 min-h-24 w-full rounded-2xl border border-[var(--line)] bg-white p-3 text-left text-sm outline-none" placeholder="Who are the children of…?" />
+      <button onClick={ask} disabled={busy || !question.trim()} className="mt-3 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Thinking…" : "Ask the archivist"}</button>
+      {reply && <p className="mt-5 rounded-2xl border border-[var(--line)] bg-white p-4 text-left text-sm leading-6">{reply}</p>}
+      <p className="mt-5 text-xs leading-5 text-[var(--muted)]">Want to add or correct something? {signedIn ? "Your account is not on the editor list." : "Sign in with Apple as an invited editor."}</p>
       {!signedIn && <a className="mt-5 inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white" href={signInPath}><span className="text-base" aria-hidden="true"></span> Sign in with Apple</a>}
     </div>
   );

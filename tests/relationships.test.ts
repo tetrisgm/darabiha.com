@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { relatedPeople } from "../lib/relationships";
 import type { FamilyTree, Person } from "../lib/types";
 
-const person = (id: string, displayName = id): Person => ({ id, displayName, givenName: null, familyName: null, birthDate: null, deathDate: null, birthPlace: null, deathPlace: null, biography: null, photoAttachmentId: null });
+const person = (id: string, displayName = id): Person => ({ id, displayName, givenName: null, familyName: null, birthDate: null, deathDate: null, birthPlace: null, deathPlace: null, birthCity: null, birthCountry: null, deathCity: null, deathCountry: null, biography: null, photoAttachmentId: null });
 const tree: FamilyTree = {
   people: ["grandparent", "parent", "me", "sibling", "child", "cousin", "spouse"].map((id) => person(id)),
   relationships: [

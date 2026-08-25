@@ -22,7 +22,9 @@ const personProperties = {
   given_name: nullableString, family_name: nullableString,
   birth_date: { ...nullableString, description: "Use YYYY, YYYY-MM, or YYYY-MM-DD only when known." },
   death_date: { ...nullableString, description: "Use YYYY, YYYY-MM, or YYYY-MM-DD only when known." },
-  birth_place: nullableString, death_place: nullableString, biography: nullableString,
+  birth_place: nullableString, death_place: nullableString,
+  birth_city: nullableString, birth_country: nullableString, death_city: nullableString, death_country: nullableString,
+  biography: nullableString,
 };
 const personRequired = Object.keys(personProperties);
 
@@ -85,6 +87,10 @@ function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
     deathDate: args.death_date as string | null,
     birthPlace: args.birth_place as string | null,
     deathPlace: args.death_place as string | null,
+    birthCity: args.birth_city as string | null,
+    birthCountry: args.birth_country as string | null,
+    deathCity: args.death_city as string | null,
+    deathCountry: args.death_country as string | null,
     biography: args.biography as string | null,
     photoAttachmentId: null,
   };

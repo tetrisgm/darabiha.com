@@ -5,7 +5,7 @@ let initialized = false;
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS people (
     id TEXT PRIMARY KEY, display_name TEXT NOT NULL, given_name TEXT, family_name TEXT,
-    birth_date TEXT, death_date TEXT, birth_place TEXT, death_place TEXT, biography TEXT, photo_attachment_id TEXT,
+    birth_date TEXT, death_date TEXT, birth_place TEXT, death_place TEXT, birth_city TEXT, birth_country TEXT, death_city TEXT, death_country TEXT, biography TEXT, photo_attachment_id TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS relationships (
@@ -33,6 +33,9 @@ const schemaStatements = [
 export async function ensureSchema() {
   if (initialized) return;
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
+  for (const column of ["birth_city", "birth_country", "death_city", "death_country"]) {
+    try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
+  }
   await env.DB.prepare("PRAGMA optimize").run();
   initialized = true;
 }
@@ -42,7 +45,8 @@ export async function readTree(): Promise<FamilyTree> {
   const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult] = await Promise.all([
     env.DB.prepare(`SELECT id, display_name AS displayName, given_name AS givenName,
       family_name AS familyName, birth_date AS birthDate, death_date AS deathDate,
-      birth_place AS birthPlace, death_place AS deathPlace, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
+      birth_place AS birthPlace, death_place AS deathPlace, birth_city AS birthCity, birth_country AS birthCountry,
+      death_city AS deathCity, death_country AS deathCountry, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
     env.DB.prepare(`SELECT id, from_person_id AS fromPersonId, to_person_id AS toPersonId,
       type FROM relationships ORDER BY created_at`).all<Relationship>(),
     env.DB.prepare(`SELECT id, title, body, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
@@ -90,7 +94,7 @@ function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   return {
     displayName, givenName: nullable(input.givenName), familyName: nullable(input.familyName),
     birthDate: nullable(input.birthDate), deathDate: nullable(input.deathDate),
-    birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), biography: nullable(input.biography), photoAttachmentId: nullable(input.photoAttachmentId),
+    birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), birthCity: nullable(input.birthCity), birthCountry: nullable(input.birthCountry), deathCity: nullable(input.deathCity), deathCountry: nullable(input.deathCountry), biography: nullable(input.biography), photoAttachmentId: nullable(input.photoAttachmentId),
   };
 }
 
@@ -101,16 +105,16 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
   if (proposal.kind === "add_person") {
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
     statements.push(env.DB.prepare(`INSERT INTO people
-      (id, display_name, given_name, family_name, birth_date, death_date, birth_place, death_place, biography, photo_attachment_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, display_name, given_name, family_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, biography, photo_attachment_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), person.displayName, person.givenName, person.familyName, person.birthDate,
-        person.deathDate, person.birthPlace, person.deathPlace, person.biography, person.photoAttachmentId, now, now));
+        person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, now));
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
     statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, given_name = ?, family_name = ?, birth_date = ?,
-      death_date = ?, birth_place = ?, death_place = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
+      death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
       .bind(person.displayName, person.givenName, person.familyName, person.birthDate, person.deathDate,
-        person.birthPlace, person.deathPlace, person.biography, person.photoAttachmentId, now, proposal.personId));
+        person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "add_relationship") {
     if (proposal.fromPersonId === proposal.toPersonId) throw new Error("A person cannot be related to themself.");
     if (!(["parent", "spouse"] as const).includes(proposal.relationshipType)) throw new Error("Unsupported relationship.");
