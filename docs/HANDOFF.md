@@ -2,6 +2,8 @@
 
 ## Current state
 
+- Commit `4c5df47` adds clickable person cards, relationship-aware detail dialogs, editor-only person editing, and private photo upload/public image delivery. Commit `90a4074` registers the Sites project in `.openai/hosting.json`.
+
 - Public GitHub repository: `https://github.com/tetrisgm/darabiha.com`.
 - The public tree is backed by D1. Uploaded evidence is stored privately in R2.
 - Family editors authenticate with Sign in with Apple and are allowlisted through the `EDITOR_EMAILS` runtime variable.
@@ -10,6 +12,8 @@
 - The current tree intentionally contains no invented family data.
 
 ## Deployment inputs still needed
+
+- Sites version creation is currently blocked because the newly issued short-lived source-repository credential is rejected by the bound Git endpoint (HTTP 403). No runtime secrets were changed.
 
 - An `OPENAI_API_KEY` created through the OpenAI Developers integration and saved as a Sites secret.
 - Apple web authentication values (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `AUTH_SESSION_SECRET`, and `PUBLIC_ORIGIN`).
