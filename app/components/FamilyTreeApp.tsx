@@ -50,13 +50,6 @@ function lifeLine(person: Person) {
 }
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
-function proposalLabel(proposal: ChangeProposal) {
-  if (proposal.kind === "add_person") return `Add ${proposal.person.displayName}`;
-  if (proposal.kind === "update_person") return `Update ${proposal.patch.displayName}`;
-  if (proposal.kind === "add_relationship") return `Record ${proposal.relationshipType} relationship`;
-  return `Save “${proposal.title}”`;
-}
-
 export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOutPath }: Props) {
   const [tree, setTree] = useState(initialTree);
   const [input, setInput] = useState("");
@@ -87,7 +80,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       const response = await fetch("/api/agent", { method: "POST", body: form });
       const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; error?: string };
       if (!response.ok) throw new Error(data.error || "request_failed");
-      setMessages([...nextMessages, { role: "assistant", text: data.reply || "I prepared that for review." }]);
+      setMessages([...nextMessages, { role: "assistant", text: data.proposals?.length ? `Done — I added ${data.proposals.length} updates to the family tree.` : (data.reply || "Done.") }]);
       if (data.proposals?.length) {
         const imported = data.proposals!.map((proposal) => ({ id: crypto.randomUUID(), proposal, state: "pending" as const }));
         setProposals((current) => [...current, ...imported]);
@@ -120,17 +113,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     } catch {
       setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "error" } : candidate));
     }
-  }
-
-  async function undoChange(item: PendingProposal) {
-    if (!item.appliedPersonId) return;
-    const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "remove", personId: item.appliedPersonId }) });
-    const data = await response.json() as { tree?: FamilyTree };
-    if (response.ok && data.tree) { setTree(data.tree); setProposals((current) => current.filter((candidate) => candidate.id !== item.id)); }
-  }
-
-  async function applyAll() {
-    for (const item of proposals.filter((candidate) => candidate.state === "pending")) await applyChange(item);
   }
 
   return (
@@ -184,26 +166,12 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
                   <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-white px-4 py-3 text-sm leading-6 shadow-sm">
-                    Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Tell me what you remember, or attach a document or photo. I’ll prepare changes for you to review.
+                    Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Tell me what you remember, or attach a document or photo. I’ll add it to the family tree.
                   </div>
                   {messages.map((message, index) => (
                     <div className={`chat-bubble ${message.role === "user" ? "is-user" : ""}`} key={`${message.role}-${index}`}>{message.text}</div>
                   ))}
-                  {busy && <div className="chat-bubble"><span className="agent-pulse" /> Reading the family record…</div>}
-                  {proposals.length > 0 && proposals.some((item) => item.state === "pending") && <button className="w-full rounded-full bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90" onClick={applyAll}>Apply all {proposals.filter((item) => item.state === "pending").length} changes</button>}
-                  {proposals.map((item) => (
-                    <div className="proposal-card" key={item.id}>
-                      <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--accent)]">Suggested change</p>
-                      {item.proposal.kind === "add_person" && item.state === "pending" ? <input className="modal-input mt-1 font-serif text-lg" value={item.proposal.person.displayName} aria-label="Person name" onChange={(event) => setProposals((current) => current.map((candidate) => candidate.id === item.id && candidate.proposal.kind === "add_person" ? { ...candidate, proposal: { ...candidate.proposal, person: { ...candidate.proposal.person, displayName: event.target.value } } } : candidate))} /> : <h3 className="mt-1 font-serif text-lg">{proposalLabel(item.proposal)}</h3>}
-                      <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{item.proposal.summary}</p>
-                      {item.proposal.kind === "add_person" && <div className="mt-3 rounded-xl bg-[var(--wash)] p-3 text-xs leading-5 text-[var(--muted)]"><p><strong>{item.proposal.person.birthDate || "Year unknown"}</strong>{item.proposal.person.birthCity || item.proposal.person.birthCountry ? ` · ${[item.proposal.person.birthCity, item.proposal.person.birthCountry].filter(Boolean).join(", ")}` : ""}</p>{item.proposal.person.biography && <p className="mt-1">{item.proposal.person.biography}</p>}</div>}
-                      {item.state === "pending" && <button className="mt-2 text-xs text-[var(--muted)] underline" onClick={() => setProposals((current) => current.filter((candidate) => candidate.id !== item.id))}>Dismiss</button>}
-                      {item.state === "applied" && item.appliedPersonId && <button className="mt-2 text-xs text-red-700 underline" onClick={() => undoChange(item)}>Undo and remove from tree</button>}
-                      <button className="mt-3 w-full rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white disabled:cursor-default disabled:opacity-50" disabled={item.state === "applying" || item.state === "applied"} onClick={() => applyChange(item)}>
-                        {item.state === "applied" ? "Added to the tree ✓" : item.state === "applying" ? "Applying…" : item.state === "error" ? "Try again" : "Review complete · apply"}
-                      </button>
-                    </div>
-                  ))}
+                  {busy && <div className="chat-bubble"><span className="agent-pulse" /> Thinking…</div>}
                   {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{error}</p>}
                 </div>
 
