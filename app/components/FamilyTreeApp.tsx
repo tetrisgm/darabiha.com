@@ -126,22 +126,26 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     <main className={`min-h-screen bg-[var(--paper)] text-[var(--ink)] ${chatCollapsed ? "chat-collapsed" : ""}`} data-build-id={BUILD_ID} data-version={VERSION}>
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
-      <div className="family-shell flex h-screen min-h-screen">
+      <header className="site-action-bar flex h-16 shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--paper)] px-6 sm:px-8">
+        <p className="text-base font-semibold tracking-[-.01em]">Darabiha</p>
+        <div className="relative flex items-center gap-2">
+          {!viewer.signedIn && <a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a>}
+          {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
+        </div>
+      </header>
+      <div className="family-shell flex h-[calc(100vh-4rem)] min-h-0">
         <aside className={`chat-sidebar flex min-h-0 flex-col border-b border-[var(--line)] bg-[var(--sidebar)] lg:border-b-0 lg:border-r ${chatCollapsed ? "is-collapsed" : ""}`} aria-label="Family chat">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
             <div className="workspace-header mb-5 flex items-center justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                <p className="truncate text-base font-semibold tracking-[-.01em]">Darabiha</p>
-              </div>
+              <span aria-hidden="true" />
               <div className="flex items-center gap-1">
                 <button className="sidebar-toggle" onClick={() => setChatCollapsed(true)} aria-label="Collapse family chat" title="Collapse family chat">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="2" /><path d="M7 3v14M11.5 7.5 9 10l2.5 2.5" /></svg>
                 </button>
-                {viewer.signedIn && <div className="relative"><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-9 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
               </div>
             </div>
             {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} signInPath={signInPath} />
+              <PublicArchiveChat signedIn={viewer.signedIn} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -171,13 +175,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           </div>
         </aside>
         <button className={`chat-edge-reveal ${chatCollapsed ? "is-visible" : ""}`} onClick={() => setChatCollapsed(false)} aria-label="Show family chat" title="Show family chat">›</button>
-        <section className="relative h-screen min-h-screen min-w-0 flex-1 overflow-hidden">
+        <section className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
-          <div className="relative h-full min-h-screen">
+          <div className="relative h-full min-h-0">
 
-            <h1 className="pointer-events-none absolute left-6 top-6 z-10 font-serif text-2xl tracking-[-0.02em] text-[var(--ink)] sm:left-10 sm:top-8 sm:text-3xl">Darabiha family tree</h1>
-
-            <div className="relative h-full min-h-[calc(100vh-5rem)] overflow-hidden bg-[#eef4f1]">
+            <div className="relative h-full min-h-0 overflow-hidden bg-[#eef4f1]">
               {tree.people.length ? <FamilyTreeCanvas tree={tree} onSelect={setSelectedPerson} /> : <EmptyTree canEdit={viewer.canEdit} />}
 
               {tree.stories.length > 0 && (
@@ -272,7 +274,7 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PublicArchiveChat({ signedIn, signInPath }: { signedIn: boolean; signInPath: string }) {
+function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
   const [question, setQuestion] = useState("");
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
@@ -286,7 +288,6 @@ function PublicArchiveChat({ signedIn, signInPath }: { signedIn: boolean; signIn
       <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto pb-5 text-center">
         <h3 className="mt-0 font-serif text-2xl">Find a person or story</h3>
         <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>
-        {!signedIn && <a className="mt-5 self-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white" href={signInPath}>&nbsp; Sign in with Apple</a>}
         <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">{signedIn ? "You're signed in, but this Apple account isn't authorized to edit this family tree." : "Sign in with Apple only when you want to edit this family tree. Browsing and asking questions are available without signing in."}</p>
         {reply && <p className="mt-5 rounded-2xl border border-[var(--line)] bg-white p-4 text-left text-sm leading-6">{reply}</p>}
       </div>
