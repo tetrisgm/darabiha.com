@@ -11,6 +11,12 @@ function cardDate(value: string | null) {
   return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
+export function clampScale(scale: number) { return Math.max(0.5, Math.min(3, scale)); }
+export function zoomView(view: { x: number; y: number; scale: number }, factor: number, cursor: { x: number; y: number }) {
+  const scale = clampScale(view.scale * factor);
+  return { scale, x: cursor.x - (cursor.x - view.x) * (scale / view.scale), y: cursor.y - (cursor.y - view.y) * (scale / view.scale) };
+}
+
 export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
   const { depth, groups } = buildGenerations(tree);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
@@ -38,10 +44,9 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
     const factor = event.deltaY > 0 ? .92 : 1.08;
     const rect = event.currentTarget.getBoundingClientRect();
     setView((current) => {
-      const nextScale = Math.max(.5, Math.min(3, current.scale * factor));
       const cx = event.clientX - rect.left - rect.width / 2;
       const cy = event.clientY - rect.top - rect.height / 2;
-      return { scale: nextScale, x: cx - (cx - current.x) * (nextScale / current.scale), y: cy - (cy - current.y) * (nextScale / current.scale) };
+      return zoomView(current, factor, { x: cx, y: cy });
     });
   };
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
