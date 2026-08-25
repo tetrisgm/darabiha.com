@@ -295,7 +295,7 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
         {reply && <p className="mt-5 rounded-2xl border border-[var(--line)] bg-white p-4 text-left text-sm leading-6">{reply}</p>}
       </div>
       <div className="border-t border-[var(--line)] pt-4">
-        <p className="mb-3 text-center text-xs leading-5 text-[var(--muted)]">Want to add or correct something? {signedIn ? "Your account is not on the editor list." : "Sign in with Apple as an invited editor."}</p>
+        <p className="mb-3 text-center text-xs leading-5 text-[var(--muted)]">{signedIn ? "Your account is not on the editor list." : "Sign in with Apple to edit the family tree."}</p>
         <div className="relative w-full rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
           <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(); } }} className="min-h-24 w-full resize-none bg-transparent px-2 py-1 pr-12 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Who are the children of…?" aria-label="Search the family archive" />
           <button onClick={ask} disabled={busy || !question.trim()} className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" aria-label="Search the family archive">↑</button>
