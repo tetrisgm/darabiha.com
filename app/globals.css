@@ -39,6 +39,8 @@ button { cursor: pointer; }
 .editor-composer textarea { position: relative; z-index: 1; min-height: 7rem; padding: .15rem .35rem; font-size: 1rem; line-height: 1.6; pointer-events: auto; }
 .editor-composer > div:last-child { margin-top: .75rem; }
 .composer-circle { display: inline-flex; height: 2.5rem; width: 2.5rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--ink); font-size: 1.35rem; line-height: 1; transition: 160ms ease; }
+.composer-file-button, .composer-folder-button { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--ink); padding: .6rem .85rem; font-size: .78rem; font-weight: 600; transition: 160ms ease; }
+.composer-file-button:hover, .composer-folder-button:hover { border-color: var(--accent); color: var(--accent); background: var(--wash); }
 .composer-circle:hover { border-color: var(--accent); color: var(--accent); background: var(--wash); }
 .composer-mic { font-size: .95rem; }
 .composer-mode { display: inline-flex; align-items: center; gap: .45rem; border: 1px solid var(--line); border-radius: 999px; padding: .6rem .85rem; color: var(--ink); font-size: .78rem; font-weight: 600; }
@@ -125,6 +127,9 @@ button { cursor: pointer; }
 .relationship-chip { border: 1px solid var(--line); border-radius: 999px; background: white; padding: .4rem .7rem; font-size: .75rem; }
 .relationship-chip:hover { border-color: var(--accent); color: var(--accent); }
 .person-modal-v2 { width: min(100%, 64rem); padding: 3.5rem; }
+.person-delete-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+.person-delete-button { color: #b42318; font-size: .85rem; font-weight: 600; }
+.person-delete-button:hover { text-decoration: underline; }
 .person-drawer-backdrop { position: fixed; inset: 0 auto 0 0; width: 430px; align-items: stretch; justify-content: flex-start; padding: 0; background: rgba(32, 40, 36, .12); }
 .person-drawer-backdrop .person-modal-v2 { height: 100%; max-height: none; width: min(100%, 30rem); border: 0; border-right: 1px solid var(--line); border-radius: 0 1.25rem 1.25rem 0; padding: 2.5rem; box-shadow: 18px 0 60px rgba(24, 39, 31, .18); animation: drawer-in 220ms ease-out both; }
 @keyframes drawer-in { from { opacity: .5; transform: translateX(-2rem); } to { opacity: 1; transform: translateX(0); } }
