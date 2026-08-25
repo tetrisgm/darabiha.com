@@ -10,8 +10,20 @@ const serif = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://darabiha.com"),
   title: "Darabiha · Our family tree",
   description: "A living record of the Darabi family, built together.",
+  openGraph: {
+    title: "Darabiha",
+    description: "A living record of the Darabi family.",
+    images: [{ url: "/og.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Darabiha",
+    description: "A living record of the Darabi family.",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

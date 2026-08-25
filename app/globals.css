@@ -56,6 +56,16 @@ button { cursor: pointer; }
 }
 .prompt-chip:hover { border-color: var(--accent); background: white; color: var(--accent); }
 
+.chat-bubble {
+  width: fit-content; max-width: 18rem; border: 1px solid var(--line); border-radius: 1rem 1rem 1rem .2rem;
+  background: white; padding: .75rem 1rem; font-size: .8125rem; line-height: 1.45rem; box-shadow: 0 5px 20px rgba(62,45,28,.04);
+}
+.chat-bubble.is-user { margin-left: auto; border: 0; border-radius: 1rem 1rem .2rem 1rem; background: var(--ink); color: white; }
+.proposal-card { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 1rem; background: rgba(255,255,255,.8); padding: 1rem; }
+.file-chip { max-width: 11rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 999px; background: var(--wash); padding: .35rem .65rem; font-size: .6875rem; color: var(--muted); }
+.agent-pulse { display: inline-block; width: .45rem; height: .45rem; margin-right: .3rem; border-radius: 999px; background: var(--accent); animation: pulse 1s ease-in-out infinite alternate; }
+@keyframes pulse { to { opacity: .25; transform: scale(.75); } }
+
 @media (max-width: 639px) {
   .person-card { width: min(12rem, 48%); gap: .6rem; padding: .7rem; }
   .person-avatar { height: 2.25rem; width: 2.25rem; font-size: 1rem; }
