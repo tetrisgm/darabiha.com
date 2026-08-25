@@ -252,7 +252,7 @@ function AccessPrompt({ signedIn, signInPath }: { signedIn: boolean; signInPath:
       <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-xl text-[var(--accent)] shadow-sm">✦</span>
       <h3 className="mt-5 font-serif text-2xl">{signedIn ? "Family editors only" : "Help build the tree"}</h3>
       <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{signedIn ? "You’re signed in, but this account is not on the family editor list." : "The tree is public. Adding or changing family history is reserved for invited editors."}</p>
-      {!signedIn && <a className="mt-5 inline-flex rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-white" href={signInPath}>Sign in with ChatGPT</a>}
+      {!signedIn && <a className="mt-5 inline-flex items-center gap-2 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white" href={signInPath}><span className="text-base" aria-hidden="true"></span> Sign in with Apple</a>}
     </div>
   );
 }

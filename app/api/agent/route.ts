@@ -150,7 +150,7 @@ export async function POST(request: Request) {
       input: [{ role: "user", content }] as never,
       tools: tools as never,
       parallel_tool_calls: false,
-      safety_identifier: `editor_${auth.user.userId}`,
+      safety_identifier: `editor_${auth.user.subject}`,
       store: false,
     });
     const proposals = response.output

@@ -4,7 +4,7 @@
 
 - Public GitHub repository: `https://github.com/tetrisgm/darabiha.com`.
 - The public tree is backed by D1. Uploaded evidence is stored privately in R2.
-- Family editors authenticate with ChatGPT and are allowlisted through the `EDITOR_EMAILS` runtime variable.
+- Family editors authenticate with Sign in with Apple and are allowlisted through the `EDITOR_EMAILS` runtime variable.
 - The sidebar uses the OpenAI Responses API with function tools. It creates reviewable proposals; a separate authenticated endpoint applies approved changes and records an audit entry.
 - Raw uploads are available only to allowlisted editors. The OpenAI key is server-side only.
 - The current tree intentionally contains no invented family data.
@@ -12,7 +12,9 @@
 ## Deployment inputs still needed
 
 - An `OPENAI_API_KEY` created through the OpenAI Developers integration and saved as a Sites secret.
-- The comma-separated ChatGPT account emails that may edit the tree, saved as `EDITOR_EMAILS`.
+- Apple web authentication values (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `AUTH_SESSION_SECRET`, and `PUBLIC_ORIGIN`).
+- The comma-separated Apple Account emails that may edit the tree, saved as `EDITOR_EMAILS`.
+- The Apple Services ID and `https://darabiha.com/api/auth/apple/callback` return URL still need to be registered in the Apple Developer console. The currently available browser is logged out of that console.
 - Public deployment approval after the resolved Sites access level is shown.
 
 ## Validation
