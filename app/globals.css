@@ -100,7 +100,8 @@ button { cursor: pointer; }
 
 .family-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; min-height: 100%; cursor: grab; touch-action:none; user-select:none; overscroll-behavior:none; }
 .family-canvas:active { cursor: grabbing; }
-.safari-tree-fallback { position:absolute; inset:0; pointer-events:none; opacity:.92; }
+.safari-tree-fallback { position:absolute; inset:0; pointer-events:auto; opacity:.92; touch-action:none; cursor:grab; }
+.safari-tree-fallback:active { cursor:grabbing; }
 .safari-tree-lines { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
 .safari-tree-lines line, .safari-tree-lines path { fill:none; stroke:#6f9cff; stroke-width:.35; opacity:.8; }
 .safari-tree-lines .spouse-link { stroke:#d6a75c; stroke-dasharray:1.2 1; stroke-width:.5; }
