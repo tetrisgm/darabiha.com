@@ -100,6 +100,7 @@ test("Safari gets a visible custom grab cursor and clickable-card cursor", async
 test("dragging the dedicated surface pans while a card remains clickable", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".family-canvas")).toHaveAttribute("data-interactive", "true");
+  await expect(page.locator(".family-canvas")).toBeVisible();
   const viewport = page.locator(".tree-viewport");
   const before = await viewport.getAttribute("style");
   const box = await page.locator(".family-canvas").boundingBox();
