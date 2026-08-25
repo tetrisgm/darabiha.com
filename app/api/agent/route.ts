@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { Buffer } from "node:buffer";
+import { strFromU8, unzipSync } from "fflate";
 import { requireEditor } from "../../authz";
 import { readTree, saveAttachment } from "../../../db/store";
 import type { ChangeProposal, Person } from "../../../lib/types";
@@ -12,6 +13,7 @@ const MAX_MESSAGE_CHARS = 8_000;
 const ALLOWED_TYPES = new Set([
   "application/pdf", "text/plain", "text/csv", "text/markdown",
   "text/html", "text/css", "text/javascript", "application/javascript", "application/json", "application/xml", "text/xml",
+  "application/zip", "application/x-zip-compressed",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "image/jpeg", "image/png", "image/webp", "image/gif",
@@ -127,12 +129,13 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const message = String(form.get("message") ?? "").trim().slice(0, MAX_MESSAGE_CHARS);
   const history = String(form.get("history") ?? "").slice(0, 16_000);
+  const manifest = String(form.get("file_manifest") ?? "").slice(0, 20_000);
   const files = form.getAll("files").filter((value): value is File => value instanceof File && value.size > 0);
   if (!message && files.length === 0) return Response.json({ error: "empty_message" }, { status: 400 });
   if (files.some((file) => file.size > MAX_FILE_BYTES) || files.reduce((sum, file) => sum + file.size, 0) > MAX_TOTAL_BYTES) {
     return Response.json({ error: "files_too_large" }, { status: 413 });
   }
-  if (files.some((file) => !ALLOWED_TYPES.has(file.type))) {
+  if (files.some((file) => !ALLOWED_TYPES.has(file.type) && !file.name.toLowerCase().endsWith(".zip"))) {
     return Response.json({ error: "unsupported_file_type" }, { status: 415 });
   }
 
@@ -140,9 +143,19 @@ export async function POST(request: Request) {
   const stored = await Promise.all(files.map((file) => saveAttachment(file, auth.user.email)));
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
-    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nCurrent tree JSON:\n${JSON.stringify(tree)}\n\nUploaded evidence IDs:\n${JSON.stringify(stored)}`,
+    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\nCurrent tree JSON:\n${JSON.stringify(tree)}\n\nUploaded evidence IDs:\n${JSON.stringify(stored)}`,
   }];
   for (const file of files) {
+    if (file.name.toLowerCase().endsWith(".zip")) {
+      try {
+        const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
+        for (const [path, bytes] of Object.entries(entries)) {
+          if (bytes.length > 2_000_000 || !/\.(html?|css|js(on)?|txt|md|csv|xml)$/i.test(path)) continue;
+          content.push({ type: "input_text", text: `Extracted from ${file.name}/${path}:\n${strFromU8(bytes).slice(0, 120_000)}` });
+        }
+      } catch { content.push({ type: "input_text", text: `The uploaded ZIP ${file.name} could not be unpacked; use its filename as evidence only.` }); }
+      continue;
+    }
     const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
     const dataUrl = `data:${file.type};base64,${base64}`;
     content.push(file.type.startsWith("image/")

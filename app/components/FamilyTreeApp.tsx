@@ -85,6 +85,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     const form = new FormData();
     form.set("message", text);
     form.set("history", JSON.stringify(messages.slice(-6)));
+    form.set("file_manifest", JSON.stringify(files.map((file) => ({ name: file.name, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name, size: file.size, type: file.type }))));
     files.forEach((file) => form.append("files", file));
     try {
       const response = await fetch("/api/agent", { method: "POST", body: form });
@@ -167,8 +168,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                   <div className="editor-composer rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Tell me what you remember…" aria-label="Message the family archivist" />
                     <div className="mt-2 flex items-center justify-between">
-                      <input ref={fileRef} className="sr-only" type="file" multiple accept=".html,.htm,.css,.js,.json,.xml,.pdf,.txt,.md,.csv,.docx,.xlsx,image/jpeg,image/png,image/webp,image/gif" onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
-                      <input ref={(node) => { folderRef.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="sr-only" type="file" multiple accept=".html,.htm,.css,.js,.json,.xml,.pdf,.txt,.md,.csv,.docx,.xlsx,image/jpeg,image/png,image/webp,image/gif" onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
+                      <input ref={fileRef} className="sr-only" type="file" multiple accept=".zip,.html,.htm,.css,.js,.json,.xml,.pdf,.txt,.md,.csv,.docx,.xlsx,image/jpeg,image/png,image/webp,image/gif" onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
+                      <input ref={(node) => { folderRef.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="sr-only" type="file" multiple accept=".zip,.html,.htm,.css,.js,.json,.xml,.pdf,.txt,.md,.csv,.docx,.xlsx,image/jpeg,image/png,image/webp,image/gif" onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
                       <div className="flex items-center gap-2"><button className="composer-file-button" onClick={() => fileRef.current?.click()} aria-label="Add files">＋ Add files</button><button className="composer-folder-button" onClick={() => folderRef.current?.click()} aria-label="Add a folder">Add folder</button></div>
                       <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
                     </div>
@@ -204,7 +205,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         </section>
 
       </div>
-      {selectedPerson && <PersonModalV2 person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => setSelectedPerson(null)} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+      {selectedPerson && <PersonModalV2 person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => { setSelectedPerson(null); setHighlightedIds([]); }} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
       {addingPerson && <AddPersonModal tree={tree} onClose={() => setAddingPerson(false)} onAdded={(next) => { setTree(next); setAddingPerson(false); }} />}
       <span className="build-version" aria-label={`Darabiha version ${VERSION}`}>Version {VERSION}</span>
     </main>
