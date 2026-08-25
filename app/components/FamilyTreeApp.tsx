@@ -289,8 +289,7 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
   }
   return (
     <div className="m-auto w-full max-w-sm text-center">
-      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-xl text-[var(--accent)] shadow-sm">✦</span>
-      <h3 className="mt-5 font-serif text-2xl">Find a person or story</h3>
+      <h3 className="mt-0 font-serif text-2xl">Find a person or story</h3>
       <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>
       <textarea value={question} onChange={(event) => setQuestion(event.target.value)} className="mt-5 min-h-24 w-full rounded-2xl border border-[var(--line)] bg-white p-3 text-left text-sm outline-none" placeholder="Who are the children of…?" />
       <button onClick={ask} disabled={busy || !question.trim()} className="mt-3 rounded-full bg-black px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{busy ? "Searching…" : "Search"}</button>
