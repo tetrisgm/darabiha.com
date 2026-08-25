@@ -82,6 +82,9 @@ button { cursor: pointer; }
 .person-modal .eyebrow { letter-spacing: .13em; }
 .relationship-chip { border: 1px solid var(--line); border-radius: 999px; background: white; padding: .4rem .7rem; font-size: .75rem; }
 .relationship-chip:hover { border-color: var(--accent); color: var(--accent); }
+.relationship-group { border-radius: 1rem; padding: .55rem; }
+.relationship-add { display: inline-flex; width: 1.6rem; height: 1.6rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: var(--wash); color: var(--ink); font-size: 1rem; line-height: 1; }
+.relationship-add:hover { border-color: var(--accent); color: var(--accent); }
 .modal-editor { display: grid; gap: .55rem; margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
 .modal-input { width: 100%; border: 1px solid var(--line); border-radius: .65rem; background: rgba(255,255,255,.7); padding: .6rem .7rem; font-size: .8rem; outline: none; }
 .modal-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
