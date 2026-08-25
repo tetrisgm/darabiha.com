@@ -75,6 +75,9 @@ button { cursor: pointer; }
 @media (max-width: 639px) { .person-modal { padding: 1.5rem; } .field-grid { grid-template-columns: 1fr; } }
 .person-modal-close { position: absolute; right: 1rem; top: .75rem; color: var(--muted); font-size: 1.75rem; line-height: 1; }
 .person-modal-avatar, .person-modal-photo { display: flex; height: 7rem; width: 7rem; align-items: center; justify-content: center; border-radius: 1.25rem; object-fit: cover; background: var(--wash); color: var(--accent); font-family: var(--font-serif), serif; font-size: 2.5rem; }
+.person-modal-photo-button { display:block; border:0; padding:0; border-radius:1.25rem; background:transparent; text-align:left; }
+.person-modal-photo-button:focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
+.avatar-upload-hint { display:block; margin-top:.25rem; font-family:ui-sans-serif,system-ui,sans-serif; font-size:.7rem; color:var(--muted); }
 .eyebrow { margin-bottom: .45rem; color: var(--accent); font-size: .65rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .modal-relationships { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
 .modal-relationships > div { min-height: 4rem; }
