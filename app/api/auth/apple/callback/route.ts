@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     const email = payload.email.toLowerCase();
     if (!invitedEmails().includes(email)) return Response.redirect(`${origin}/?auth_error=not_invited`, 303);
     const session = await createSession({ subject: payload.sub, email, displayName: email.split("@")[0] });
-    const response = Response.redirect(`${origin}${state.returnTo}`, 303);
+    const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
     response.headers.append("set-cookie", sessionCookie(session));
     return response;
   } catch (error) {
