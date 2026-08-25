@@ -126,16 +126,16 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     <main className={`min-h-screen bg-[var(--paper)] text-[var(--ink)] ${chatCollapsed ? "chat-collapsed" : ""}`} data-build-id={BUILD_ID} data-version={VERSION}>
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
-      <header className="site-action-bar flex h-16 shrink-0 items-center justify-between border-b border-[var(--line)] bg-[var(--paper)] px-6 sm:px-8">
+      <header className="site-action-bar absolute inset-x-0 top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8">
         <p className="text-base font-semibold tracking-[-.01em]">Darabiha</p>
         <div className="relative flex items-center gap-2">
-          {!viewer.signedIn && <a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a>}
+          {!viewer.signedIn && <><span className="text-sm text-[var(--muted)]">Sign in to edit</span><a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a></>}
           {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
         </div>
       </header>
-      <div className="family-shell flex h-[calc(100vh-4rem)] min-h-0">
+      <div className="family-shell flex h-screen min-h-0">
         <aside className={`chat-sidebar flex min-h-0 flex-col border-b border-[var(--line)] bg-[var(--sidebar)] lg:border-b-0 lg:border-r ${chatCollapsed ? "is-collapsed" : ""}`} aria-label="Family chat">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-24 sm:px-8">
             <div className="workspace-header mb-5 flex items-center justify-between">
               <span aria-hidden="true" />
               <div className="flex items-center gap-1">
@@ -290,7 +290,7 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
       <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto pb-5 text-center">
-        {!asked.length ? <><h3 className="mt-0 font-serif text-2xl">Find a person or story</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p><p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">{signedIn ? "You're signed in, but this Apple account isn't authorized to edit this family tree." : "Sign in with Apple only when you want to edit this family tree. Browsing and asking questions are available without signing in."}</p></> : <div className="public-chat-thread w-full text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Syncing…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
+        {!asked.length ? <><h3 className="mt-0 font-serif text-2xl">Find a person or story</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You're signed in, but this Apple account isn't authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Syncing…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
       </div>
       <div>
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
