@@ -2,6 +2,17 @@
 
 ## Current state
 
+### 2026-08-25 complete archive-management pass (Version 43)
+
+- Production is Version 43 (`BUILD_ID=e9c4d31`), Worker deployment `5e7520bb-47cc-4231-ad82-ca979abd7098`. `/api/version`, `/`, and the Apple authorization start route were verified after deployment.
+- The editor agent has complete create/read/update/delete tools for people, parent/spouse relationships, stories, and private attachments. Changes auto-apply in dependency order and are recorded in `change_log`; the chat reports the completed update count or a focused unresolved conflict rather than exposing proposal cards.
+- New material is reconciled against the current tree before insertion. Exact, compatible identity evidence updates the existing person; repeated records inside one import are merged; materially contradictory or multiply plausible same-name records produce a focused clarification with birth/place evidence. Existing records never block the rest of a multi-person import.
+- File import accepts individual files, recursive folder selections, and ZIP archives. ZIP traversal preserves nested paths and extracts supported HTML, CSS, JavaScript, JSON, text, Markdown, CSV, XML, GEDCOM, and image files. Embedded images are preserved individually in private R2 and may be assigned as portraits only when their evidence identifies a person. Limits are 50 MB per uploaded file and 100 MB per request, with bounded extraction (4 MB per entry, 30 MB selected data, 500 entries, one million text characters, and 40 model-visible images).
+- Person records support explicit male/female/unknown values; the UI no longer infers sex from a first name. Birth and death dates use labeled native date fields. The person drawer supports labeled in-place edits, portrait upload/removal, delete-with-confirmation, direct relationship removal, and per-section parent/spouse/child/sibling addition with name/year/place suggestions.
+- Timeline and map views are generated from the same public person/story fields as the tree. Selecting a timeline event or map location opens the same person record and focuses the tree when returning.
+- Validation: 13 Vitest tests pass across reconciliation, recursive ZIP limits, timeline/map generation, layout, and viewport math. All 24 live Playwright tests pass in Chromium and WebKit, including ZIP picker eligibility, drawer activation, sidebar behavior, pan/zoom, Safari’s custom cursor, and live deployment identity.
+- The temporary open-editor switch remains enabled at the owner’s request while the family tests imports. The Darabiha-specific Apple flow and allowlist implementation remain in place; `/api/auth/apple` returns the expected 302. Restore enforcement by setting `TEMPORARY_OPEN_EDITOR` to `false` only after the owner confirms the family’s Apple access is working.
+
 ### 2026-08-25 duplicate-person guard (Version 38)
 
 - Manual “Add a person” entry now checks normalized names against the existing tree before creating a record. An exact name match with compatible/unknown birth date updates the existing person; a same-name conflict with a different birth date asks whether to use the existing record or create a distinct person.
@@ -34,21 +45,20 @@
 - Public GitHub repository: `https://github.com/tetrisgm/darabiha.com`.
 - The public tree is backed by D1. Uploaded evidence is stored privately in R2.
 - Family editors authenticate with Sign in with Apple and are allowlisted through the `EDITOR_EMAILS` runtime variable.
-- The sidebar uses the OpenAI Responses API with function tools. It creates reviewable proposals; a separate authenticated endpoint applies approved changes and records an audit entry.
+- The sidebar uses the OpenAI Responses API with strict function tools. Authenticated editor changes auto-apply through a separate mutation endpoint and record audit entries.
 - Raw uploads are available only to allowlisted editors. The OpenAI key is server-side only.
-- The current tree intentionally contains no invented family data.
+- The current tree contains family-supplied and imported archive data; the agent is instructed never to invent missing facts.
 - Person records now include structured birth/death city and country fields alongside dates and legacy place text, making timeline and map views straightforward to add later. Person dialogs show these values and extended relatives.
 - Anonymous visitors can ask read-only questions through `/api/ask`; only allowlisted editors can use the mutation-capable archivist and apply reviewed proposals.
 - Direct Cloudflare deployment is live as Worker `darabiha-family`, routed on `darabiha.com/*`, with D1 database `darabiha-family` and R2 bucket `darabiha-family-files`. Live public checks: `/` and `/api/tree` return 200.
 - Current deployed version `c2149c09-3a5d-448d-95e1-ecfe8bf5b405`; anonymous `/api/ask` returns a grounded answer over HTTPS.
 
-## Deployment inputs still needed
+## Deployment inputs
 
 - The Sites connector was bypassed because its source endpoint rejected its own short-lived credentials. Cloudflare deployment is the active production path.
 
 - `OPENAI_API_KEY` is saved as a Cloudflare Worker secret.
-- Apple web authentication values (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `AUTH_SESSION_SECRET`, and `PUBLIC_ORIGIN`).
-- The comma-separated Apple Account emails that may edit the tree, saved as `EDITOR_EMAILS`.
+- Apple web authentication values and the editor allowlist are configured in the Worker. Secret values stay out of this repository and handoff.
 - Apple Sign in with Apple is configured for the Darabiha-specific App ID `com.darabiha.web` and Services ID `com.darabiha.family`; `https://darabiha.com/api/auth/apple/callback` is registered and the live start endpoint returns 302 to Apple.
 
 ## Validation
