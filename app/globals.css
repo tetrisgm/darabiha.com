@@ -33,7 +33,7 @@ button { cursor: pointer; }
 .workspace-header { min-height: 2.75rem; }
 .workspace-icon { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: .55rem; color: var(--muted); font-size: 1.35rem; line-height: 1; }
 .workspace-icon:hover { border-color: var(--line); background: var(--wash); color: var(--ink); }
-.editor-composer { min-height: 12rem; border-radius: 1.75rem !important; padding: 1.2rem !important; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
+.editor-composer { min-height: 12rem; margin-left: -.5rem; width: calc(100% + 1rem); border-radius: 1.75rem !important; padding: 1.2rem !important; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
 .editor-composer textarea { position: relative; z-index: 1; min-height: 7rem; padding: .15rem .35rem; font-size: 1rem; line-height: 1.6; pointer-events: auto; }
 .editor-composer > div:last-child { margin-top: .75rem; }
 .composer-circle { display: inline-flex; height: 2.5rem; width: 2.5rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--ink); font-size: 1.35rem; line-height: 1; transition: 160ms ease; }
@@ -46,7 +46,7 @@ button { cursor: pointer; }
 .chat-edge-reveal:hover { color: var(--accent); }
 .public-chat { position: relative; z-index: 1; margin-left: -1.5rem; width: calc(100% + 3rem); min-height: 0; }
 .public-chat-note { padding: 0 1.5rem; }
-.public-chat-composer { border-left: 0; border-right: 0; border-bottom: 0; border-radius: 1rem 1rem 0 0; }
+.public-chat-composer { margin-left: 1rem; width: calc(100% - 2rem); border-radius: 1.75rem; }
 @media (min-width: 640px) { .public-chat { margin-left: -2rem; width: calc(100% + 4rem); } .public-chat-note { padding: 0 2rem; } }
 
 .tree-grid {
