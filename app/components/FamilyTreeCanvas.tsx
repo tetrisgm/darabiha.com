@@ -28,6 +28,7 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
     return { x: 50 + (index - (group.length - 1) / 2) * 30, y: 28 + (depth.get(person.id) ?? 0) * 28 };
   };
   const begin = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button")) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     gesture.current = { x: event.clientX, y: event.clientY, view, moved: false };
   };
