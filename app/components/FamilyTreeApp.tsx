@@ -134,7 +134,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
           <div className="relative h-full min-h-[calc(100vh-5rem)]">
 
-            <h1 className="pointer-events-none absolute left-6 top-6 z-10 font-serif text-2xl tracking-[-0.02em] sm:left-10 sm:top-8 sm:text-3xl">Darabiha family tree</h1>
+            <h1 className="pointer-events-none absolute left-6 top-6 z-10 font-serif text-2xl tracking-[-0.02em] text-white sm:left-10 sm:top-8 sm:text-3xl">Darabiha family tree</h1>
 
             <div className="relative h-full min-h-[calc(100vh-5rem)] overflow-hidden bg-[#07090d]">
               {tree.people.length ? <FamilyTreeCanvas tree={tree} onSelect={setSelectedPerson} /> : <EmptyTree canEdit={viewer.canEdit} />}
@@ -230,8 +230,8 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="m-auto flex max-w-md flex-col items-center py-20 text-center">
       <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--wash)] font-serif text-2xl text-[var(--accent)]">D</span>
-      <h2 className="mt-5 font-serif text-3xl tracking-[-.025em]">The first branch starts here.</h2>
-      <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{canEdit ? "Tell the archivist about one family member to begin the record." : "The family is gathering names, dates, photographs, and stories for this living archive."}</p>
+      <h2 className="mt-5 font-serif text-3xl tracking-[-.025em] text-white">The first branch starts here.</h2>
+      <p className="mt-3 text-sm leading-6 text-slate-300">{canEdit ? "Tell the archivist about one family member to begin the record." : "The family is gathering names, dates, photographs, and stories for this living archive."}</p>
     </div>
   );
 }
