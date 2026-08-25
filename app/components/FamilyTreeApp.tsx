@@ -66,6 +66,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useMemo(() => generationGroups(tree), [tree]);
@@ -128,6 +129,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           </a>
         </div>
       </header>
+      {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <div className="grid min-h-[calc(100vh-5rem)] lg:grid-cols-[minmax(0,1fr)_390px]">
         <section className="relative overflow-hidden px-5 py-8 sm:px-8 lg:px-12 lg:py-10">

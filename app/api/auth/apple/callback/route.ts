@@ -24,6 +24,14 @@ function invitedEmails() {
   return (process.env.EDITOR_EMAILS || "").split(",").map((email) => email.trim().toLowerCase()).filter(Boolean);
 }
 
+async function nonceMatches(tokenNonce: unknown, expected: string) {
+  if (tokenNonce === expected) return true;
+  if (typeof tokenNonce !== "string") return false;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(expected));
+  const hashed = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return tokenNonce === hashed;
+}
+
 export async function POST(request: Request) {
   const clientId = process.env.APPLE_CLIENT_ID || "";
   const teamId = process.env.APPLE_TEAM_ID || "";
@@ -49,13 +57,13 @@ export async function POST(request: Request) {
         redirect_uri: `${origin}/api/auth/apple/callback`,
       }),
     });
-    const tokens = await tokenResponse.json() as { id_token?: string };
-    if (!tokenResponse.ok || !tokens.id_token) throw new Error("token_exchange_failed");
+    const tokens = await tokenResponse.json() as { id_token?: string; error?: string };
+    if (!tokenResponse.ok || !tokens.id_token) throw new Error(`token_exchange_failed:${tokens.error || tokenResponse.status}`);
     const { payload } = await jwtVerify(tokens.id_token, appleKeys, {
       issuer: "https://appleid.apple.com",
       audience: clientId,
     });
-    if (payload.nonce !== state.nonce || typeof payload.sub !== "string" || typeof payload.email !== "string") {
+    if (!(await nonceMatches(payload.nonce, state.nonce)) || typeof payload.sub !== "string" || typeof payload.email !== "string") {
       throw new Error("invalid_identity_token");
     }
     const email = payload.email.toLowerCase();
@@ -65,7 +73,9 @@ export async function POST(request: Request) {
     response.headers.append("set-cookie", sessionCookie(session));
     return response;
   } catch (error) {
-    console.warn("Apple sign-in failed", error instanceof Error ? error.message : "unknown error");
-    return Response.redirect(`${origin}/?auth_error=sign_in_failed`, 303);
+    const detail = error instanceof Error ? error.message : "unknown_error";
+    console.warn("Apple sign-in failed", detail);
+    const code = detail.startsWith("token_exchange_failed") ? "apple_token_exchange_failed" : detail === "invalid_identity_token" ? detail : "sign_in_failed";
+    return Response.redirect(`${origin}/?auth_error=${code}`, 303);
   }
 }
