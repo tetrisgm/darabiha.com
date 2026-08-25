@@ -66,6 +66,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [addingPerson, setAddingPerson] = useState(false);
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -140,9 +141,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Family tree</p>
                 <h1 className="max-w-2xl font-serif text-4xl leading-[1.05] tracking-[-0.035em] sm:text-5xl">A living record of where we come from.</h1>
               </div>
-              <span className="rounded-full border border-[var(--line)] bg-white/75 px-4 py-2 text-xs text-[var(--muted)]">
+              <div className="flex items-center gap-2"><span className="rounded-full border border-[var(--line)] bg-white/75 px-4 py-2 text-xs text-[var(--muted)]">
                 {tree.people.length} {tree.people.length === 1 ? "person" : "people"} · {tree.stories.length} {tree.stories.length === 1 ? "story" : "stories"}
-              </span>
+              </span>{viewer.canEdit && <button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add person</button>}</div>
             </div>
 
             <div className="relative min-h-[580px] overflow-hidden rounded-[2rem] border border-[#26363a] bg-[#08090b] shadow-[0_24px_80px_rgba(62,45,28,0.12)]">
@@ -227,8 +228,16 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         </aside>
       </div>
       {selectedPerson && <PersonModal person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => setSelectedPerson(null)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+      {addingPerson && <AddPersonModal onClose={() => setAddingPerson(false)} onAdded={(next) => { setTree(next); setAddingPerson(false); }} />}
     </main>
   );
+}
+
+function AddPersonModal({ onClose, onAdded }: { onClose: () => void; onAdded: (tree: FamilyTree) => void }) {
+  const [form, setForm] = useState({ displayName: "", birthDate: "", birthCity: "", birthCountry: "", deathDate: "", deathCity: "", deathCountry: "", biography: "" });
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  async function add() { if (!form.displayName.trim() || busy) return; setBusy(true); setError(""); try { const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "add", ...form }) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (!response.ok || !data.tree) throw new Error(data.error || "Could not add person"); onAdded(data.tree); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not add person"); } finally { setBusy(false); } }
+  return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button className="person-modal-close" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">New record</p><h2 className="font-serif text-3xl">Add a person</h2><p className="mt-2 text-sm text-[var(--muted)]">Enter what you know now. You can add relationships and more detail afterward.</p><div className="modal-editor"><input className="modal-input" autoFocus placeholder="Full name" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /><div className="grid grid-cols-2 gap-2">{(["birthDate", "birthCity", "birthCountry", "deathDate", "deathCity", "deathCountry"] as const).map((field) => <input className="modal-input" key={field} placeholder={field.replace(/([A-Z])/g, " $1")} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} />)}</div><textarea className="modal-input min-h-24" placeholder="Biography, memories, or notes" value={form.biography} onChange={(event) => setForm({ ...form, biography: event.target.value })} />{error && <p className="text-sm text-red-700">{error}</p>}<button className="rounded-full bg-[var(--ink)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !form.displayName.trim()} onClick={add}>{busy ? "Adding…" : "Add person"}</button></div></section></div>;
 }
 
 function PersonModal({ person, tree, canEdit, onClose, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onTreeChange: (tree: FamilyTree) => void }) {

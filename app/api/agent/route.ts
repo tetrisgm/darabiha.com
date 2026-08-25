@@ -11,6 +11,7 @@ const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
 const MAX_MESSAGE_CHARS = 8_000;
 const ALLOWED_TYPES = new Set([
   "application/pdf", "text/plain", "text/csv", "text/markdown",
+  "text/html",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "image/jpeg", "image/png", "image/webp", "image/gif",
@@ -153,10 +154,10 @@ export async function POST(request: Request) {
   try {
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5.4",
-      instructions: `You are the careful archivist for the public Darabi family tree. Extract only facts the editor states or that are legible in attached evidence. Never guess names, dates, places, identities, or relationships. If a request is ambiguous, ask one concise question and do not call a tool. Existing person IDs must be copied exactly from the supplied tree. A parent relationship is directional: from_person_id is the parent and to_person_id is the child. Changes are proposals reviewed by the editor, so use the proposal tools for every concrete change. You may propose several changes. Uploaded documents remain private evidence; attachment IDs may be linked to a story. Keep your prose warm, plain, and concise.`,
+      instructions: `You are the careful archivist for the public Darabi family tree. Treat each editor message and every attached file as a dataset to ingest, not as a single fact. Extract ALL distinct people, dates, city/country locations, biographies, stories, and relationships that are explicitly stated or legible. Never guess. For a rich message, call the proposal tools once for every distinct person and relationship; do not stop after the first proposal. Existing person IDs must be copied exactly from the supplied tree. A parent relationship is directional: from_person_id is the parent and to_person_id is the child. Changes are proposals reviewed by the editor, so use the proposal tools for every concrete change. You may propose many changes in one response. HTML files may contain an existing tree: interpret its structure and text, preserve all useful facts, and map it into people, relationships, and stories. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep your prose warm, plain, and concise.`,
       input: [{ role: "user", content }] as never,
       tools: tools as never,
-      parallel_tool_calls: false,
+      parallel_tool_calls: true,
       safety_identifier: `editor_${auth.user.subject}`,
       store: false,
     });
