@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Float, Html, Line, OrbitControls, Sparkles } from "@react-three/drei";
+import { Float, Line, OrbitControls, RoundedBox, Sparkles, Text } from "@react-three/drei";
 import { AdditiveBlending, Color, type Vector3 } from "three";
 import type { FamilyTree, Person } from "../../lib/types";
 
@@ -27,9 +27,11 @@ function layout(tree: FamilyTree) {
 
 function PersonOrb({ person, position, onSelect }: { person: Person; position: Vector3; onSelect: (person: Person) => void }) {
   return <Float speed={0} rotationIntensity={0} floatIntensity={0}><group position={position} onClick={(event) => { event.stopPropagation(); onSelect(person); }}>
-    <mesh><sphereGeometry args={[0.28, 24, 24]} /><meshStandardMaterial color="#f4efe5" emissive="#ff8b62" emissiveIntensity={1.2} /></mesh>
-    <mesh scale={1.8}><sphereGeometry args={[0.28, 16, 16]} /><meshBasicMaterial color="#ff805f" transparent opacity={0.12} blending={AdditiveBlending} /></mesh>
-    <Html center distanceFactor={8} position={[0, 0.58, 0]}><button className="three-person-label" onClick={(event) => { event.stopPropagation(); onSelect(person); }}><strong>{person.displayName}</strong><span>{person.birthDate || "Year unknown"}</span></button></Html>
+    <RoundedBox args={[2.05, 1.3, 0.08]} radius={0.12} smoothness={5}><meshStandardMaterial color="#17181c" roughness={0.38} metalness={0.08} emissive="#28344b" emissiveIntensity={0.28} /></RoundedBox>
+    <mesh position={[0, 0.28, 0.052]}><planeGeometry args={[1.82, 0.52]} /><meshBasicMaterial color="#242933" /></mesh>
+    <Text position={[-0.82, -0.02, 0.06]} anchorX="left" anchorY="middle" maxWidth={1.7} fontSize={0.16} color="#ffffff" outlineWidth={0.004} outlineColor="#000000">{person.displayName}</Text>
+    <Text position={[-0.82, -0.28, 0.06]} anchorX="left" anchorY="middle" maxWidth={1.7} fontSize={0.095} color="#aeb8c8">{person.birthDate || "Year unknown"}{person.birthCity ? `  ·  ${person.birthCity}` : ""}</Text>
+    <mesh scale={1.12}><boxGeometry args={[2.05, 1.3, 0.08]} /><meshBasicMaterial color="#5b8cff" transparent opacity={0.06} blending={AdditiveBlending} /></mesh>
   </group></Float>;
 }
 
