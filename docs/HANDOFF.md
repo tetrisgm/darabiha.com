@@ -2,6 +2,14 @@
 
 ## Current state
 
+### 2026-08-25 Safari cursor diagnosis and Version 6
+
+- Production is Version 6 (`BUILD_ID=825a006`), deployment `4f0a007d-acac-419c-8440-89a0169fd852`, commit `8d3f6ba`.
+- Versions 2–5 relied on Safari installing native `pointer`, `grab`, and `grabbing` cursors. Safari Web Inspector reported the correct computed values and Playwright WebKit passed, but real Safari on macOS continued to render an arrow. Those computed-style assertions were not a valid visual cursor test.
+- The tree now uses a Figma-style DOM cursor layer for fine pointers: the native cursor is hidden only inside the canvas, and an SVG open hand, closed hand, or pointing hand follows pointer events. Touch input is unaffected. Real Safari screenshots verified both the empty-canvas hand and clickable-card hand on Version 6.
+- Cursor hit testing is also simplified to one full-canvas interaction surface. The transformed viewport and SVG connectors cannot intercept pointer events; person cards are the only other targets. The obsolete 300 ms global post-drag click lockout was removed, so a card can be opened immediately after panning.
+- Production browser coverage now verifies the custom cursor is visible and switches modes, pointer capture pans the transformed viewport, a card opens after a pan, and the live deployment identity is uncached. All 14 Chromium/WebKit tests pass.
+
 ### 2026-08-25 production interaction pass
 
 - Current production deployment is `7db6d666-5907-49b9-8aea-97ce8074357e` on `https://darabiha.com`.
