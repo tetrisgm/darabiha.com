@@ -137,7 +137,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       </header>
       <div className="family-shell flex h-screen min-h-0">
         <aside className={`chat-sidebar flex min-h-0 flex-col border-b border-[var(--line)] bg-[var(--sidebar)] lg:border-b-0 lg:border-r ${chatCollapsed ? "is-collapsed" : ""}`} aria-label="Family chat">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-24 sm:px-8">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-6 sm:px-8">
             <div className="workspace-header mb-5 flex items-center justify-between">
               <span aria-hidden="true" />
               <div className="flex items-center gap-1">
