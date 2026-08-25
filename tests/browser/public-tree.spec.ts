@@ -27,7 +27,7 @@ test("canvas accepts wheel zoom without scrolling the document", async ({ page }
 test("canvas and cards expose distinct cursor affordances", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".family-canvas")).toHaveCSS("cursor", "grab");
-  await expect(page.locator(".tree-viewport")).toHaveCSS("cursor", "grab");
+  await expect(page.locator(".canvas-hit-surface")).toHaveCSS("cursor", "grab");
   await expect(page.locator(".tree-card").first()).toHaveCSS("cursor", "pointer");
 });
 
@@ -36,24 +36,39 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("4");
+  expect(version).toBe("5");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
   expect(response.headers()["cache-control"]).toContain("no-store");
 });
 
-test("hover state writes Safari-safe runtime cursor affordances", async ({ page }) => {
+test("Safari hit testing resolves to one grab surface or a clickable card", async ({ page }) => {
   await page.goto("/");
   const canvas = page.locator(".family-canvas");
   await canvas.hover({ position: { x: 20, y: 20 } });
-  await expect.poll(() => page.evaluate(() => document.documentElement.style.cursor)).toBe("grab");
+  expect(await page.evaluate(() => document.elementFromPoint(20, 20)?.classList.contains("canvas-hit-surface"))).toBe(true);
   expect(await page.evaluate(() => getComputedStyle(document.elementFromPoint(20, 20)!).cursor)).toBe("grab");
   await page.locator(".tree-card").first().hover();
-  await expect.poll(() => page.evaluate(() => document.documentElement.style.cursor)).toBe("pointer");
   const text = page.locator(".tree-card strong").first();
   const box = await text.boundingBox();
   expect(box).not.toBeNull();
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
   expect(await page.evaluate(({ x, y }) => getComputedStyle(document.elementFromPoint(x, y)!).cursor, { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 })).toBe("pointer");
+});
+
+test("dragging the dedicated surface pans while a card remains clickable", async ({ page }) => {
+  await page.goto("/");
+  const viewport = page.locator(".tree-viewport");
+  const before = await viewport.getAttribute("style");
+  await page.mouse.move(80, 180);
+  await page.mouse.down();
+  await page.mouse.move(180, 250, { steps: 4 });
+  await expect(page.locator(".family-canvas")).toHaveAttribute("data-panning", "true");
+  await expect(page.locator(".canvas-hit-surface")).toHaveCSS("cursor", "grabbing");
+  await page.mouse.up();
+  await expect(viewport).not.toHaveAttribute("style", before!);
+  await expect(page.locator(".family-canvas")).toHaveAttribute("data-panning", "false");
+  await page.locator(".tree-card").first().click();
+  await expect(page.getByRole("dialog")).toBeVisible();
 });
