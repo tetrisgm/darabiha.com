@@ -79,6 +79,8 @@ button { cursor: pointer; }
 .person-modal-photo-button { display:block; border:0; padding:0; border-radius:1.25rem; background:transparent; text-align:left; }
 .person-modal-photo-button:focus-visible { outline:3px solid var(--accent); outline-offset:4px; }
 .avatar-upload-hint { display:block; margin-top:.25rem; font-family:ui-sans-serif,system-ui,sans-serif; font-size:.7rem; color:var(--muted); }
+.person-photo-actions { display:flex; align-items:flex-end; gap:.75rem; }
+.photo-remove-button { border:0; background:transparent; color:#b42318; font-size:.75rem; text-decoration:underline; }
 .eyebrow { margin-bottom: .45rem; color: var(--accent); font-size: .65rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .modal-relationships { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
 .modal-relationships > div { min-height: 4rem; }
