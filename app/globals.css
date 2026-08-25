@@ -22,6 +22,8 @@ button, textarea { font: inherit; }
 button { cursor: pointer; }
 
 .family-shell { position: relative; isolation: isolate; }
+.site-action-bar { left: 430px; right: 0; transition: left 220ms ease; }
+.site-action-bar.is-chat-collapsed { left: 0; }
 .chat-sidebar { position: relative; z-index: 30; width: 430px; flex: 0 0 430px; overflow: hidden; transition: width 220ms ease, flex-basis 220ms ease, border-color 220ms ease; }
 .chat-sidebar.is-collapsed { width: 0; flex-basis: 0; border-color: transparent; padding: 0; }
 .chat-sidebar.is-collapsed > div { opacity: 0; pointer-events: none; }
@@ -45,13 +47,14 @@ button { cursor: pointer; }
 .chat-edge-reveal.is-visible { opacity: 1; pointer-events: auto; transform: translateY(-50%) translateX(0); }
 .chat-edge-reveal:hover { color: var(--accent); }
 .public-chat { position: relative; z-index: 1; margin-left: -1.5rem; width: calc(100% + 3rem); min-height: 0; }
+.public-chat > div:first-child { padding-inline: 1.5rem; }
 .public-chat-note { padding: 0 1.5rem; }
 .public-chat-composer { margin-left: 1rem; width: calc(100% - 2rem); border-radius: 1.75rem; }
 .public-chat-thread { max-width: 100%; padding: 0 .5rem; }
 .public-chat-user-bubble { margin: 0 0 2rem auto; width: fit-content; max-width: 88%; border-radius: 1.5rem; background: var(--ink); padding: .85rem 1.1rem; color: white; font-size: .95rem; line-height: 1.55; }
 .public-chat-syncing { display: flex; align-items: center; gap: .5rem; margin: 0 0 1.5rem; color: var(--muted); font-size: .9rem; }
 .public-chat-answer { margin: 0; white-space: pre-wrap; font-size: .95rem; line-height: 1.7; }
-@media (min-width: 640px) { .public-chat { margin-left: -2rem; width: calc(100% + 4rem); } .public-chat-note { padding: 0 2rem; } }
+@media (min-width: 640px) { .public-chat { margin-left: -2rem; width: calc(100% + 4rem); } .public-chat > div:first-child { padding-inline: 2rem; } .public-chat-note { padding: 0 2rem; } }
 
 .tree-grid {
   background-image: linear-gradient(to right, rgba(90,73,52,.055) 1px, transparent 1px), linear-gradient(to bottom, rgba(90,73,52,.055) 1px, transparent 1px);
