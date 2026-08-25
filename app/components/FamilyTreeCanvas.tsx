@@ -34,6 +34,7 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
   const [cursorMode, setCursorMode] = useState<CanvasCursorMode>("grab");
   const gesture = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
+  const zoomBy = (factor: number) => setView((current) => zoomView(current, factor, { x: 0, y: 0 }));
   const positionCursor = (event: React.PointerEvent<HTMLDivElement>) => {
     const cursor = cursorRef.current;
     if (!cursor || event.pointerType === "touch") return;
@@ -94,6 +95,11 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
   const parentGroups = [...new Set(tree.relationships.filter((link) => link.type === "parent").map((link) => link.toPersonId))].map((childId) => ({ child: tree.people.find((person) => person.id === childId), parents: tree.relationships.filter((link) => link.type === "parent" && link.toPersonId === childId).map((link) => tree.people.find((person) => person.id === link.fromPersonId)).filter(Boolean) as Person[] })).filter((group) => group.child && group.parents.length);
   return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} data-custom-cursor="true" data-interactive="true" data-panning={isPanning ? "true" : "false"} style={{ cursor: isPanning ? "grabbing" : "grab" }} onKeyDown={keyDown} onPointerEnter={positionCursor} onPointerLeave={hideCursor} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onWheel={zoom}>
     <div className="canvas-hit-surface" aria-hidden="true" style={{ cursor: isPanning ? "grabbing" : "grab" }} />
+    <div className="canvas-controls" role="group" aria-label="Canvas zoom controls">
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(0.9)} aria-label="Zoom out" title="Zoom out">−</button>
+      <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setView({ x: 0, y: 0, scale: 1 })} aria-label={`Reset zoom to 100 percent`} title="Reset zoom">{Math.round(view.scale * 100)}%</button>
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(1.1)} aria-label="Zoom in" title="Zoom in">＋</button>
+    </div>
     <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
       <svg className="tree-connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
         {tree.relationships.filter((link) => link.type === "spouse").map((link) => { const from = tree.people.find((person) => person.id === link.fromPersonId); const to = tree.people.find((person) => person.id === link.toPersonId); if (!from || !to) return null; const a = point(from); const b = point(to); return <line className="spouse-connector" key={link.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />; })}

@@ -3,9 +3,22 @@ import { expect, test } from "@playwright/test";
 test("public tree renders as an interactive canvas beside the archive chat", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".family-canvas")).toBeVisible();
+  await expect(page.locator(".chat-sidebar")).toBeVisible();
   await expect(page.locator(".tree-card")).toHaveCount(4);
   await expect(page.locator(".tree-connectors line")).not.toHaveCount(0);
   await expect(page.getByRole("link", { name: /Sign in with Apple/ })).toBeVisible();
+});
+
+test("chat sidebar collapses and returns from the left edge", async ({ page }) => {
+  await page.goto("/");
+  const sidebar = page.locator(".chat-sidebar");
+  await sidebar.getByRole("button", { name: "Collapse family chat" }).click();
+  await expect(sidebar).toHaveClass(/is-collapsed/);
+  await expect(page.locator(".chat-edge-reveal")).not.toHaveClass(/is-visible/);
+  await page.mouse.move(10, 300);
+  await expect(page.locator(".chat-edge-reveal")).toHaveClass(/is-visible/);
+  await page.locator(".chat-edge-reveal").click();
+  await expect(sidebar).not.toHaveClass(/is-collapsed/);
 });
 
 test("a person card opens a navigable record", async ({ page }) => {
@@ -24,6 +37,18 @@ test("canvas accepts wheel zoom without scrolling the document", async ({ page }
   await expect(page.locator("html")).toHaveCSS("overscroll-behavior", "none");
 });
 
+test("canvas zoom controls change and reset the zoom percentage", async ({ page }) => {
+  await page.goto("/");
+  const level = page.locator(".canvas-zoom-level");
+  await expect(level).toHaveText("100%");
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(level).toHaveText("110%");
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await expect(level).toHaveText("99%");
+  await level.click();
+  await expect(level).toHaveText("100%");
+});
+
 test("canvas and cards expose distinct cursor affordances", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".family-canvas")).toHaveAttribute("data-interactive", "true");
@@ -37,7 +62,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("7");
+  expect(version).toBe("8");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);

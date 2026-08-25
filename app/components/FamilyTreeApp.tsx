@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
@@ -67,10 +67,18 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [addingPerson, setAddingPerson] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [edgeReveal, setEdgeReveal] = useState(false);
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useMemo(() => generationGroups(tree), [tree]);
+  useEffect(() => {
+    if (!chatCollapsed) return;
+    const onPointerMove = (event: PointerEvent) => setEdgeReveal(event.clientX <= 28);
+    window.addEventListener("pointermove", onPointerMove);
+    return () => window.removeEventListener("pointermove", onPointerMove);
+  }, [chatCollapsed]);
 
   async function sendMessage() {
     const text = input.trim();
@@ -125,7 +133,46 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]" data-build-id={BUILD_ID} data-version={VERSION}>
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
-      <div className="grid h-screen min-h-screen lg:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="family-shell flex h-screen min-h-screen">
+        <aside className={`chat-sidebar flex min-h-0 flex-col border-b border-[var(--line)] bg-[var(--sidebar)] lg:border-b-0 lg:border-r ${chatCollapsed ? "is-collapsed" : ""}`} aria-label="Family chat">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="eyebrow mb-0">Family chat</span>
+              <button className="sidebar-toggle" onClick={() => setChatCollapsed(true)} aria-label="Collapse family chat" title="Collapse family chat">‹</button>
+            </div>
+            {!viewer.signedIn && <a className="mb-4 self-end rounded-full bg-black px-4 py-2 text-sm font-semibold text-white" href={signInPath}>&nbsp; Sign in with Apple</a>}
+            {viewer.signedIn && <div className="relative mb-3 flex justify-end"><button className="rounded-full px-3 py-1 text-2xl leading-none text-[var(--muted)] hover:bg-[var(--wash)]" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
+            {!viewer.canEdit ? (
+              <PublicArchiveChat signedIn={viewer.signedIn} />
+            ) : (
+              <>
+                <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+                  <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-white px-4 py-3 text-sm leading-6 shadow-sm">
+                    Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Tell me what you remember, or attach a document or photo. I’ll add it to the family tree.
+                  </div>
+                  {messages.map((message, index) => (
+                    <div className={`chat-bubble ${message.role === "user" ? "is-user" : ""}`} key={`${message.role}-${index}`}>{message.text}</div>
+                  ))}
+                  {busy && <div className="chat-bubble"><span className="agent-pulse" /> Thinking…</div>}
+                  {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{error}</p>}
+                </div>
+                <div className="pt-5">
+                  <button className="mb-4 rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add a person</button>
+                  {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
+                  <div className="rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
+                    <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Tell me what you remember…" aria-label="Message the family archivist" />
+                    <div className="mt-2 flex items-center justify-between">
+                      <input ref={fileRef} className="sr-only" type="file" multiple accept=".pdf,.txt,.md,.csv,.docx,.xlsx,image/jpeg,image/png,image/webp,image/gif" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
+                      <button className="flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium text-[var(--muted)] transition hover:bg-[var(--wash)]" onClick={() => fileRef.current?.click()}><span className="text-lg" aria-hidden="true">＋</span> Attach</button>
+                      <button className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </aside>
+        <button className={`chat-edge-reveal ${edgeReveal ? "is-visible" : ""}`} onClick={() => { setChatCollapsed(false); setEdgeReveal(false); }} aria-label="Show family chat" title="Show family chat">›</button>
         <section className="relative h-screen min-h-screen overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
           <div className="relative h-full min-h-screen">
@@ -152,41 +199,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           </div>
         </section>
 
-        <aside className="flex min-h-[640px] flex-col border-t border-[var(--line)] bg-[var(--sidebar)] lg:border-l lg:border-t-0">
-          <div className="flex flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
-            {!viewer.signedIn && <a className="mb-4 self-end rounded-full bg-black px-4 py-2 text-sm font-semibold text-white" href={signInPath}>&nbsp; Sign in with Apple</a>}
-            {viewer.signedIn && <div className="relative mb-3 flex justify-end"><button className="rounded-full px-3 py-1 text-2xl leading-none text-[var(--muted)] hover:bg-[var(--wash)]" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
-            {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} />
-            ) : (
-              <>
-                <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-                  <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-white px-4 py-3 text-sm leading-6 shadow-sm">
-                    Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Tell me what you remember, or attach a document or photo. I’ll add it to the family tree.
-                  </div>
-                  {messages.map((message, index) => (
-                    <div className={`chat-bubble ${message.role === "user" ? "is-user" : ""}`} key={`${message.role}-${index}`}>{message.text}</div>
-                  ))}
-                  {busy && <div className="chat-bubble"><span className="agent-pulse" /> Thinking…</div>}
-                  {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{error}</p>}
-                </div>
-
-                <div className="pt-5">
-                  <button className="mb-4 rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add a person</button>
-                  {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
-                  <div className="rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
-                    <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Tell me what you remember…" aria-label="Message the family archivist" />
-                    <div className="mt-2 flex items-center justify-between">
-                      <input ref={fileRef} className="sr-only" type="file" multiple accept=".pdf,.txt,.md,.csv,.docx,.xlsx,image/jpeg,image/png,image/webp,image/gif" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
-                      <button className="flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium text-[var(--muted)] transition hover:bg-[var(--wash)]" onClick={() => fileRef.current?.click()}><span className="text-lg" aria-hidden="true">＋</span> Attach</button>
-                      <button className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </aside>
       </div>
       {selectedPerson && <PersonModalV2 person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => setSelectedPerson(null)} onSelect={setSelectedPerson} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
       {addingPerson && <AddPersonModal onClose={() => setAddingPerson(false)} onAdded={(next) => { setTree(next); setAddingPerson(false); }} />}
