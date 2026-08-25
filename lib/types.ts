@@ -48,6 +48,7 @@ export type AddPersonProposal = {
   kind: "add_person";
   summary: string;
   person: Omit<Person, "id">;
+  relationshipHints?: Array<{ personName: string; relationshipType: "parent" | "spouse" }>;
 };
 
 export type UpdatePersonProposal = {

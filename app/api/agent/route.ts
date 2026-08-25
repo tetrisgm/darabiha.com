@@ -35,8 +35,8 @@ const tools = [
     description: "Propose adding one person to the public family tree. Never invent missing facts.",
     parameters: {
       type: "object", additionalProperties: false,
-      properties: { summary: { type: "string" }, ...personProperties },
-      required: ["summary", ...personRequired],
+      properties: { summary: { type: "string" }, ...personProperties, relationship_hints: { type: "array", items: { type: "object", additionalProperties: false, properties: { person_name: { type: "string" }, relationship_type: { type: "string", enum: ["parent", "spouse"] } }, required: ["person_name", "relationship_type"] } } },
+      required: ["summary", ...personRequired, "relationship_hints"],
     },
   },
   {
@@ -101,7 +101,7 @@ function proposalFromCall(call: ToolCall): ChangeProposal | null {
   let args: Record<string, unknown>;
   try { args = JSON.parse(call.arguments) as Record<string, unknown>; } catch { return null; }
   const summary = String(args.summary ?? "Suggested family-tree change");
-  if (call.name === "propose_add_person") return { kind: "add_person", summary, person: personFromArgs(args) };
+  if (call.name === "propose_add_person") return { kind: "add_person", summary, person: personFromArgs(args), relationshipHints: Array.isArray(args.relationship_hints) ? args.relationship_hints.map((hint) => ({ personName: String((hint as Record<string, unknown>).person_name ?? ""), relationshipType: (hint as Record<string, unknown>).relationship_type as "parent" | "spouse" })) : [] };
   if (call.name === "propose_update_person") return {
     kind: "update_person", summary, personId: String(args.person_id ?? ""), patch: personFromArgs(args),
   };
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
   try {
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5.4",
-      instructions: `You are the careful archivist for the public Darabi family tree. Treat each editor message and every attached file as a dataset to ingest, not as a single fact. Extract ALL distinct people, dates, city/country locations, biographies, stories, and relationships that are explicitly stated or legible. Never guess. For a rich message, call the proposal tools once for every distinct person and relationship; do not stop after the first proposal. Existing person IDs must be copied exactly from the supplied tree. A parent relationship is directional: from_person_id is the parent and to_person_id is the child. Changes are proposals reviewed by the editor, so use the proposal tools for every concrete change. You may propose many changes in one response. HTML files may contain an existing tree: interpret its structure and text, preserve all useful facts, and map it into people, relationships, and stories. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep your prose warm, plain, and concise.`,
+      instructions: `You are the careful archivist for the public Darabi family tree. Treat each editor message and every attached file as a dataset to ingest, not as a single fact. Extract ALL distinct people, dates, city/country locations, biographies, stories, and relationships that are explicitly stated or legible. Never guess. For a rich message, call the proposal tools once for every distinct person and relationship; do not stop after the first proposal. When adding a person, put every explicitly stated relationship to another named person in relationship_hints using that person's exact display name; this lets the importer connect newly added family members as they arrive. Existing person IDs must be copied exactly from the supplied tree. A parent relationship is directional: from_person_id is the parent and to_person_id is the child. Changes are proposals reviewed by the editor, so use the proposal tools for every concrete change. You may propose many changes in one response. HTML files may contain an existing tree: interpret its structure and text, preserve all useful facts, and map it into people, relationships, and stories. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep your prose warm, plain, and concise.`,
       input: [{ role: "user", content }] as never,
       tools: tools as never,
       parallel_tool_calls: true,

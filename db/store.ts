@@ -102,12 +102,14 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
   await ensureSchema();
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
+  let addedPersonId: string | null = null;
   if (proposal.kind === "add_person") {
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
+    const personId = crypto.randomUUID(); addedPersonId = personId;
     statements.push(env.DB.prepare(`INSERT INTO people
       (id, display_name, given_name, family_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, biography, photo_attachment_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(crypto.randomUUID(), person.displayName, person.givenName, person.familyName, person.birthDate,
+      .bind(personId, person.displayName, person.givenName, person.familyName, person.birthDate,
         person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, now));
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
@@ -132,7 +134,17 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
   statements.push(env.DB.prepare(`INSERT INTO change_log
     (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), actorEmail, proposal.kind, proposal.summary, JSON.stringify(proposal), now));
-  await env.DB.batch(statements);
+    await env.DB.batch(statements);
+    if (proposal.kind === "add_person" && proposal.relationshipHints?.length) {
+      for (const hint of proposal.relationshipHints) {
+        const related = await env.DB.prepare("SELECT id FROM people WHERE lower(display_name) = lower(?) LIMIT 1").bind(hint.personName.trim()).first<{ id: string }>();
+        if (related && addedPersonId && related.id !== addedPersonId) {
+          const from = hint.relationshipType === "parent" ? related.id : addedPersonId;
+          const to = hint.relationshipType === "parent" ? addedPersonId : related.id;
+          await env.DB.prepare("INSERT OR IGNORE INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)").bind(crypto.randomUUID(), from, to, hint.relationshipType, now).run();
+        }
+      }
+    }
   return readTree();
 }
 

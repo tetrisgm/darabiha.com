@@ -67,6 +67,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [addingPerson, setAddingPerson] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -136,13 +137,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <header className="flex h-20 items-center justify-between border-b border-[var(--line)] px-5 sm:px-8 lg:px-12">
         <Link className="font-serif text-xl tracking-[-0.02em]" href="/">Darabiha</Link>
-        <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
-          <span className="hidden sm:inline">The Darabi family archive</span>
-          <span className="h-1 w-1 rounded-full bg-[var(--accent)]" />
-          <a className="rounded-full border border-[var(--line)] bg-white px-4 py-2 font-medium text-[var(--ink)] shadow-sm transition hover:border-[var(--accent)]" href={viewer.signedIn ? signOutPath : signInPath}>
-            {viewer.signedIn ? "Sign out" : "Family sign in"}
-          </a>
-        </div>
+        {!viewer.signedIn && <a className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a>}
       </header>
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
@@ -181,17 +176,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         </section>
 
         <aside className="flex min-h-[640px] flex-col border-t border-[var(--line)] bg-[var(--sidebar)] lg:border-l lg:border-t-0">
-          <div className="border-b border-[var(--line)] px-6 py-6 sm:px-8">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent)]">Archive</p>
-                <h2 className="mt-1 font-serif text-2xl tracking-[-0.025em]">{viewer.canEdit ? "Add to the record" : "Search the archive"}</h2>
-              </div>
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] text-sm text-white">✦</span>
-            </div>
-          </div>
-
           <div className="flex flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
+            {viewer.signedIn && <div className="relative mb-3 flex justify-end"><button className="rounded-full px-3 py-1 text-2xl leading-none text-[var(--muted)] hover:bg-[var(--wash)]" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
             {!viewer.canEdit ? (
               <PublicArchiveChat signedIn={viewer.signedIn} />
             ) : (

@@ -26,7 +26,7 @@ function layout(tree: FamilyTree) {
 }
 
 function PersonOrb({ person, position, onSelect }: { person: Person; position: Vector3; onSelect: (person: Person) => void }) {
-  return <Float speed={1.4} rotationIntensity={0.12} floatIntensity={0.18}><group position={position} onClick={(event) => { event.stopPropagation(); onSelect(person); }}>
+  return <Float speed={0} rotationIntensity={0} floatIntensity={0}><group position={position} onClick={(event) => { event.stopPropagation(); onSelect(person); }}>
     <mesh><sphereGeometry args={[0.28, 24, 24]} /><meshStandardMaterial color="#f4efe5" emissive="#ff8b62" emissiveIntensity={1.2} /></mesh>
     <mesh scale={1.8}><sphereGeometry args={[0.28, 16, 16]} /><meshBasicMaterial color="#ff805f" transparent opacity={0.12} blending={AdditiveBlending} /></mesh>
     <Html center distanceFactor={8} position={[0, 0.58, 0]}><button className="three-person-label" onClick={(event) => { event.stopPropagation(); onSelect(person); }}><strong>{person.displayName}</strong><span>{person.birthDate || "Year unknown"}</span></button></Html>
@@ -41,5 +41,5 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
     <Sparkles count={65} scale={[16, 10, 8]} size={1.5} speed={0.18} color="#7d8cff" />
     {tree.relationships.map((link) => { const from = positions.get(link.fromPersonId); const to = positions.get(link.toPersonId); if (!from || !to) return null; const mid: Vector3 = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2 + 0.18, (from[2] + to[2]) / 2 + 0.4] as Vector3; return <group key={link.id}><Line points={[from, mid, to]} color={link.type === "spouse" ? "#8b5cf6" : "#147ef5"} lineWidth={1.2} transparent opacity={0.72} /><Line points={[from, mid, to]} color={link.type === "spouse" ? "#8b5cf6" : "#147ef5"} lineWidth={5} transparent opacity={0.07} blending={AdditiveBlending} /></group>; })}
     {[...positions.entries()].map(([id, position]) => { const person = tree.people.find((candidate) => candidate.id === id); return person ? <PersonOrb key={id} person={person} position={position} onSelect={onSelect} /> : null; })}
-    <OrbitControls enablePan={false} minDistance={7} maxDistance={18} autoRotate autoRotateSpeed={0.18} /></Canvas></div>;
+    <OrbitControls enablePan={false} minDistance={7} maxDistance={18} autoRotate={false} /></Canvas></div>;
 }
