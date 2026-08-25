@@ -124,11 +124,13 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <div className="grid min-h-[calc(100vh-5rem)] lg:grid-cols-[minmax(0,1fr)_390px]">
-        <section className="relative overflow-hidden px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
-          <div className="absolute inset-0 tree-grid opacity-45" aria-hidden="true" />
-          <div className="relative mx-auto max-w-5xl">
+        <section className="relative min-h-[calc(100vh-5rem)] overflow-hidden">
+          <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
+          <div className="relative h-full min-h-[calc(100vh-5rem)]">
 
-            <div className="relative min-h-[580px] overflow-hidden rounded-[2rem] border border-[#26363a] bg-[#08090b] shadow-[0_24px_80px_rgba(62,45,28,0.12)]">
+            <h1 className="pointer-events-none absolute left-6 top-6 z-10 font-serif text-2xl tracking-[-0.02em] sm:left-10 sm:top-8 sm:text-3xl">Darabiha family tree</h1>
+
+            <div className="relative h-full min-h-[calc(100vh-5rem)] overflow-hidden bg-[#07090d]">
               {tree.people.length ? <FamilyTreeCanvas tree={tree} onSelect={setSelectedPerson} /> : <EmptyTree canEdit={viewer.canEdit} />}
 
               {tree.stories.length > 0 && (
