@@ -19,7 +19,7 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
   const point = (person: Person) => {
     const group = groups.get(depth.get(person.id) ?? 0) ?? [];
     const index = group.findIndex((item) => item.id === person.id);
-    return { x: 50 + (index - (group.length - 1) / 2) * 18, y: 28 + (depth.get(person.id) ?? 0) * 28 };
+    return { x: 50 + (index - (group.length - 1) / 2) * 26, y: 28 + (depth.get(person.id) ?? 0) * 28 };
   };
   const begin = (event: React.PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
