@@ -81,6 +81,7 @@ button { cursor: pointer; }
 }
 .person-card:hover { transform: translateY(-2px); border-color: var(--accent); }
 .person-card.is-active { border-color: color-mix(in srgb, var(--accent) 55%, white); }
+.tree-card.is-highlighted { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 24%, transparent), 0 18px 40px rgba(0,113,227,.2); }
 .person-avatar {
   display: flex; height: 2.75rem; width: 2.75rem; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 999px;
   background: var(--wash); color: var(--accent); font-family: var(--font-serif), serif; font-size: 1.25rem;
@@ -124,9 +125,8 @@ button { cursor: pointer; }
 .relationship-chip { border: 1px solid var(--line); border-radius: 999px; background: white; padding: .4rem .7rem; font-size: .75rem; }
 .relationship-chip:hover { border-color: var(--accent); color: var(--accent); }
 .person-modal-v2 { width: min(100%, 64rem); padding: 3.5rem; }
-.person-drawer-backdrop { position: fixed; inset: 0 0 0 430px; align-items: stretch; justify-content: flex-start; padding: 0; background: rgba(32, 40, 36, .12); }
+.person-drawer-backdrop { position: fixed; inset: 0 auto 0 0; width: 430px; align-items: stretch; justify-content: flex-start; padding: 0; background: rgba(32, 40, 36, .12); }
 .person-drawer-backdrop .person-modal-v2 { height: 100%; max-height: none; width: min(100%, 30rem); border: 0; border-right: 1px solid var(--line); border-radius: 0 1.25rem 1.25rem 0; padding: 2.5rem; box-shadow: 18px 0 60px rgba(24, 39, 31, .18); animation: drawer-in 220ms ease-out both; }
-.chat-collapsed .person-drawer-backdrop { left: 0; }
 @keyframes drawer-in { from { opacity: .5; transform: translateX(-2rem); } to { opacity: 1; transform: translateX(0); } }
 .person-modal-hero { display:flex; gap:1.5rem; align-items:center; }
 .person-title-row, .relationship-heading, .editor-actions { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }

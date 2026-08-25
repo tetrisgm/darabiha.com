@@ -65,6 +65,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [addingPerson, setAddingPerson] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
@@ -145,7 +146,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
               </div>
             </div>
             {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} />
+              <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); if (people[0]) setSelectedPerson(people[0]); }} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -180,7 +181,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="relative h-full min-h-0">
 
             <div className="relative h-full min-h-0 overflow-hidden bg-[#eef4f1]">
-              {tree.people.length ? <FamilyTreeCanvas tree={tree} onSelect={setSelectedPerson} /> : <EmptyTree canEdit={viewer.canEdit} />}
+              {tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />}
 
               {tree.stories.length > 0 && (
                 <div className="mt-auto w-full border-t border-[var(--line)] pt-5">
@@ -200,7 +201,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         </section>
 
       </div>
-      {selectedPerson && <PersonModalV2 person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => setSelectedPerson(null)} onSelect={setSelectedPerson} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+      {selectedPerson && <PersonModalV2 person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => setSelectedPerson(null)} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
       {addingPerson && <AddPersonModal onClose={() => setAddingPerson(false)} onAdded={(next) => { setTree(next); setAddingPerson(false); }} />}
       <span className="build-version" aria-label={`Darabiha version ${VERSION}`}>Version {VERSION}</span>
     </main>
@@ -274,7 +275,7 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
+function PublicArchiveChat({ signedIn, tree, onPeopleMentioned }: { signedIn: boolean; tree: FamilyTree; onPeopleMentioned: (people: Person[]) => void }) {
   const [question, setQuestion] = useState("");
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
@@ -285,12 +286,12 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
     setAsked((current) => [...current, text]);
     setQuestion("");
     setBusy(true); setReply("");
-    try { const response = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text }) }); const data = await response.json() as { reply?: string; error?: string }; setReply(response.ok ? data.reply || "No answer recorded." : "The archivist could not answer right now."); } finally { setBusy(false); }
+    try { const response = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text }) }); const data = await response.json() as { reply?: string; error?: string }; const answer = response.ok ? data.reply || "No answer recorded." : "The archivist could not answer right now."; setReply(answer); onPeopleMentioned(tree.people.filter((person) => answer.toLocaleLowerCase().includes(person.displayName.toLocaleLowerCase()))); } finally { setBusy(false); }
   }
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
       <div className={`flex flex-1 flex-col items-center overflow-y-auto pb-5 text-center ${asked.length ? "justify-start" : "justify-center"}`}>
-        {!asked.length ? <><h3 className="mt-0 font-serif text-2xl">Find a person or story</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You're signed in, but this Apple account isn't authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
+        {!asked.length ? <><h3 className="mt-0 font-serif text-2xl">The Darabiha family tree</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Explore our family history, ask about the people and relationships in the tree, and discover the stories recorded here.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
       </div>
       <div>
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">

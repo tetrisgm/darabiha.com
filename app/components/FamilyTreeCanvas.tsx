@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildGenerations } from "../../lib/tree-layout";
 
@@ -34,7 +34,7 @@ function CanvasCursor({ mode, cursorRef }: { mode: CanvasCursorMode; cursorRef: 
   </span>;
 }
 
-export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPersonId }: { tree: FamilyTree; onSelect: (person: Person) => void; highlightedIds?: string[]; focusPersonId?: string }) {
   const { depth, groups } = buildGenerations(tree);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
@@ -42,12 +42,22 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
   const gesture = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
   const zoomBy = (factor: number) => setView((current) => zoomView(current, factor, { x: 0, y: 0 }));
-  const centerOn = (person: Person) => {
+  const point = (person: Person) => {
+    const group = groups.get(depth.get(person.id) ?? 0) ?? [];
+    const index = group.findIndex((item) => item.id === person.id);
+    return { x: 50 + (index - (group.length - 1) / 2) * 30, y: 28 + (depth.get(person.id) ?? 0) * 28 };
+  };
+  const centerOn = (person: Person, animate = true) => {
     const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
     if (!rect) return;
     const p = point(person);
-    setView((current) => ({ ...current, x: -((p.x - 50) / 100) * rect.width * current.scale, y: -((p.y - 50) / 100) * rect.height * current.scale }));
+    const target = { x: -((p.x - 50) / 100) * rect.width * view.scale, y: -((p.y - 50) / 100) * rect.height * view.scale };
+    if (!animate) { setView((current) => ({ ...current, ...target })); return; }
+    const start = view; const started = performance.now();
+    const tick = (now: number) => { const progress = Math.min(1, (now - started) / 360); const eased = 1 - (1 - progress) ** 3; setView((current) => ({ ...current, x: start.x + (target.x - start.x) * eased, y: start.y + (target.y - start.y) * eased })); if (progress < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
   };
+  useEffect(() => { const person = focusPersonId ? tree.people.find((candidate) => candidate.id === focusPersonId) : undefined; if (person) centerOn(person); }, [focusPersonId]);
   const positionCursor = (event: React.PointerEvent<HTMLDivElement>) => {
     const cursor = cursorRef.current;
     if (!cursor || event.pointerType === "touch") return;
@@ -63,11 +73,6 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
   };
   const hideCursor = () => {
     if (cursorRef.current && !gesture.current) cursorRef.current.dataset.visible = "false";
-  };
-  const point = (person: Person) => {
-    const group = groups.get(depth.get(person.id) ?? 0) ?? [];
-    const index = group.findIndex((item) => item.id === person.id);
-    return { x: 50 + (index - (group.length - 1) / 2) * 30, y: 28 + (depth.get(person.id) ?? 0) * 28 };
   };
   const begin = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
@@ -122,7 +127,7 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
         {tree.relationships.filter((link) => link.type === "spouse").map((link) => { const from = tree.people.find((person) => person.id === link.fromPersonId); const to = tree.people.find((person) => person.id === link.toPersonId); if (!from || !to) return null; const a = point(from); const b = point(to); return <line className="spouse-connector" key={link.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />; })}
         {parentGroups.map(({ child, parents }) => { if (!child) return null; const childPoint = point(child); const parentPoints = parents.map(point); const left = Math.min(...parentPoints.map((item) => item.x)); const right = Math.max(...parentPoints.map((item) => item.x)); const junctionY = childPoint.y - 14; return <g className="parent-connector" key={child.id}><line x1={left} y1={parentPoints[0].y} x2={right} y2={parentPoints[0].y} /><line x1={(left + right) / 2} y1={parentPoints[0].y} x2={(left + right) / 2} y2={junctionY} /><line x1={left} y1={junctionY} x2={right} y2={junctionY} /><line x1={childPoint.x} y1={junctionY} x2={childPoint.x} y2={childPoint.y} /></g>; })}
       </svg>
-      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className="tree-card" style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
     </div>
     <CanvasCursor mode={cursorMode} cursorRef={cursorRef} />
   </div>;
