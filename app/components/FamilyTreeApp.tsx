@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
@@ -140,9 +140,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                 {viewer.signedIn && <div className="relative"><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-9 z-10 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</div>}
               </div>
             </div>
-            {!viewer.signedIn && <a className="mb-4 self-end rounded-full bg-black px-4 py-2 text-sm font-semibold text-white" href={signInPath}>&nbsp; Sign in with Apple</a>}
             {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} />
+              <PublicArchiveChat signedIn={viewer.signedIn} signInPath={signInPath} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -273,7 +272,7 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
+function PublicArchiveChat({ signedIn, signInPath }: { signedIn: boolean; signInPath: string }) {
   const [question, setQuestion] = useState("");
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
@@ -287,6 +286,7 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
       <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto pb-5 text-center">
         <h3 className="mt-0 font-serif text-2xl">Find a person or story</h3>
         <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>
+        {!signedIn && <a className="mt-5 self-center rounded-full bg-black px-4 py-2 text-sm font-semibold text-white" href={signInPath}>&nbsp; Sign in with Apple</a>}
         <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">{signedIn ? "You're signed in, but this Apple account isn't authorized to edit this family tree." : "Sign in with Apple only when you want to edit this family tree. Browsing and asking questions are available without signing in."}</p>
         {reply && <p className="mt-5 rounded-2xl border border-[var(--line)] bg-white p-4 text-left text-sm leading-6">{reply}</p>}
       </div>
