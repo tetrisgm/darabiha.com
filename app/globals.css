@@ -132,6 +132,8 @@ button { cursor: pointer; }
 .person-title-row, .relationship-heading, .editor-actions { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
 .edit-pencil { border:1px solid var(--line); border-radius:999px; width:2.25rem; height:2.25rem; color:var(--muted); }
 .edit-pencil:hover, .relationship-add:hover { color:var(--accent); border-color:var(--accent); }
+.edit-button { border:1px solid var(--line); border-radius:999px; padding:.45rem .8rem; color:var(--ink); font-size:.8rem; font-weight:600; }
+.edit-button:hover { border-color:var(--accent); color:var(--accent); }
 .person-life-line { margin-top:.35rem; color:var(--muted); }
 .person-facts { display:grid; grid-template-columns:1fr 1fr; gap:2rem; margin-top:2rem; border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:1.25rem 0; color:var(--muted); }
 .person-facts p { margin-top:.3rem; line-height:1.5; }
