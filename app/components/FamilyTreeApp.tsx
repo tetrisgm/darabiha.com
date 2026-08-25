@@ -168,13 +168,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                 </div>
 
                 <div className="pt-5">
-                  {!messages.length && (
-                    <div className="mb-4 flex flex-wrap gap-2">
-                      {["Add a relative", "Record a marriage", "Attach a photo", "Tell a family story"].map((prompt) => (
-                        <button className="prompt-chip" key={prompt} onClick={() => { setInput(prompt); inputRef.current?.focus(); }}>{prompt}</button>
-                      ))}
-                    </div>
-                  )}
                   {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
                   <div className="rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Tell me what you remember…" aria-label="Message the family archivist" />
