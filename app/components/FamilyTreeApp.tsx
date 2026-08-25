@@ -46,7 +46,13 @@ function generationGroups(tree: FamilyTree): Person[][] {
 
 function lifeLine(person: Person) {
   if (!person.birthDate && !person.deathDate) return "Dates not recorded";
-  return `${person.birthDate ?? "?"} – ${person.deathDate ?? "present"}`;
+  return `${formatDate(person.birthDate) ?? "?"} – ${formatDate(person.deathDate) ?? "present"}`;
+}
+function formatDate(value: string | null) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+  return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 

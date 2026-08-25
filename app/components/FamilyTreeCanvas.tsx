@@ -29,7 +29,7 @@ function displayDate(value: string | null) {
   if (!value) return null;
   const parts = value.split("-").map(Number);
   if (parts.length === 3 && parts.every(Number.isFinite)) {
-    return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])));
+    return new Intl.DateTimeFormat("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])));
   }
   return value;
 }
