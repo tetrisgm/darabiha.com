@@ -12,10 +12,7 @@ function cardDate(value: string | null) {
 }
 
 function genderGlyph(person: Person) {
-  const given = (person.givenName || person.displayName.split(/\s+/)[0] || "").toLocaleLowerCase();
-  const female = new Set(["jila", "parissima", "parisa", "maryam", "sara", "fatemeh", "zahra"]);
-  const male = new Set(["ramine", "nasser", "ali", "reza", "mehdi", "hamid", "hassan"]);
-  return female.has(given) ? "♀" : male.has(given) ? "♂" : "•";
+  return person.gender === "female" ? "♀" : person.gender === "male" ? "♂" : "•";
 }
 
 export function clampScale(scale: number) { return Math.max(0.5, Math.min(3, scale)); }

@@ -1,6 +1,7 @@
 import { getAppleUser, type AppleUser } from "./apple-auth";
 
-// TEMPORARY TEST MODE: set false to restore Apple sign-in and the editor allowlist.
+// TEMPORARY TEST MODE: keep this isolated so Apple enforcement can be restored in one change
+// after the family finishes testing archive imports.
 export const TEMPORARY_OPEN_EDITOR = true;
 const temporaryEditor: AppleUser = { subject: "temporary-open-editor", email: "temporary-open-editor@darabiha.com", displayName: "Temporary editor" };
 

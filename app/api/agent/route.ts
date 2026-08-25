@@ -1,8 +1,9 @@
 import OpenAI from "openai";
 import { Buffer } from "node:buffer";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8 } from "fflate";
 import { requireEditor } from "../../authz";
-import { readTree, saveAttachment } from "../../../db/store";
+import { listAttachments, readTree, saveAttachment } from "../../../db/store";
+import { extractArchiveEntries } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
 import type { AgentConflict, ChangeProposal, Person } from "../../../lib/types";
 
@@ -12,16 +13,20 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRY_BYTES = 4 * 1024 * 1024;
 const MAX_ARCHIVE_EXTRACTED_BYTES = 30 * 1024 * 1024;
+const MAX_ARCHIVE_TEXT_CHARS = 1_000_000;
+const MAX_ARCHIVE_IMAGES = 40;
 const MAX_MESSAGE_CHARS = 8_000;
 const nullableString = { type: ["string", "null"] } as const;
 const personProperties = {
   display_name: { type: "string", description: "The person's public display name." },
+  gender: { type: ["string", "null"], enum: ["male", "female", null], description: "Record only when the source states or unambiguously identifies it; otherwise null." },
   given_name: nullableString, family_name: nullableString,
   birth_date: { ...nullableString, description: "Use YYYY, YYYY-MM, or YYYY-MM-DD only when known." },
   death_date: { ...nullableString, description: "Use YYYY, YYYY-MM, or YYYY-MM-DD only when known." },
   birth_place: nullableString, death_place: nullableString,
   birth_city: nullableString, birth_country: nullableString, death_city: nullableString, death_country: nullableString,
   biography: nullableString,
+  photo_attachment_id: { ...nullableString, description: "Use an uploaded image attachment ID only when the evidence clearly identifies the pictured person." },
 };
 const personRequired = Object.keys(personProperties);
 
@@ -50,11 +55,13 @@ const tools = [
     parameters: {
       type: "object", additionalProperties: false,
       properties: {
-        summary: { type: "string" }, from_person_id: { type: "string", description: "Parent for parent relationships; either spouse for spouse relationships." },
-        to_person_id: { type: "string", description: "Child for parent relationships; the other spouse for spouse relationships." },
+        summary: { type: "string" }, from_person_id: { ...nullableString, description: "Exact existing ID, or null when this person is being created in the same response." },
+        to_person_id: { ...nullableString, description: "Exact existing ID, or null when this person is being created in the same response." },
+        from_person_name: { ...nullableString, description: "Exact display name used to resolve a newly created person when no ID exists." },
+        to_person_name: { ...nullableString, description: "Exact display name used to resolve a newly created person when no ID exists." },
         relationship_type: { type: "string", enum: ["parent", "spouse"] },
       },
-      required: ["summary", "from_person_id", "to_person_id", "relationship_type"],
+      required: ["summary", "from_person_id", "to_person_id", "from_person_name", "to_person_name", "relationship_type"],
     },
   },
   {
@@ -113,6 +120,15 @@ const tools = [
     },
   },
   {
+    type: "function", name: "propose_delete_attachment", strict: true,
+    description: "Permanently delete private uploaded evidence only when the editor explicitly asks. Links from stories and portraits are removed too.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { summary: { type: "string" }, attachment_id: { type: "string" } },
+      required: ["summary", "attachment_id"],
+    },
+  },
+  {
     type: "function", name: "request_clarification", strict: true,
     description: "Ask one focused question only when plausible identities or contradictory facts cannot be resolved from the current tree, conversation, and evidence.",
     parameters: {
@@ -132,6 +148,7 @@ type ToolCall = { type: "function_call"; name: string; arguments: string };
 function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
   return {
     displayName: String(args.display_name ?? ""),
+    gender: args.gender as "male" | "female" | null,
     givenName: args.given_name as string | null,
     familyName: args.family_name as string | null,
     birthDate: args.birth_date as string | null,
@@ -143,7 +160,7 @@ function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
     deathCity: args.death_city as string | null,
     deathCountry: args.death_country as string | null,
     biography: args.biography as string | null,
-    photoAttachmentId: null,
+    photoAttachmentId: args.photo_attachment_id as string | null,
   };
 }
 
@@ -157,7 +174,8 @@ function proposalFromCall(call: ToolCall): ChangeProposal | null {
   };
   if (call.name === "propose_add_relationship") return {
     kind: "add_relationship", summary, fromPersonId: String(args.from_person_id ?? ""),
-    toPersonId: String(args.to_person_id ?? ""), relationshipType: args.relationship_type as "parent" | "spouse",
+    toPersonId: String(args.to_person_id ?? ""), fromPersonName: args.from_person_name as string | null,
+    toPersonName: args.to_person_name as string | null, relationshipType: args.relationship_type as "parent" | "spouse",
   };
   if (call.name === "propose_add_story") return {
     kind: "add_story", summary, title: String(args.title ?? "Family story"), body: String(args.body ?? ""),
@@ -174,6 +192,7 @@ function proposalFromCall(call: ToolCall): ChangeProposal | null {
     attachmentIds: Array.isArray(args.attachment_ids) ? args.attachment_ids.map(String) : [],
   };
   if (call.name === "propose_delete_story") return { kind: "delete_story", summary, storyId: String(args.story_id ?? "") };
+  if (call.name === "propose_delete_attachment") return { kind: "delete_attachment", summary, attachmentId: String(args.attachment_id ?? "") };
   return null;
 }
 
@@ -205,25 +224,33 @@ export async function POST(request: Request) {
   if (files.some((file) => file.size > MAX_FILE_BYTES) || files.reduce((sum, file) => sum + file.size, 0) > MAX_TOTAL_BYTES) {
     return Response.json({ error: "files_too_large" }, { status: 413 });
   }
-  const tree = await readTree();
+  const [tree, existingAttachments] = await Promise.all([readTree(), listAttachments()]);
   const stored = await Promise.all(files.map((file) => saveAttachment(file, auth.user.email)));
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
-    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\nCurrent tree JSON:\n${JSON.stringify(tree)}\n\nUploaded evidence IDs:\n${JSON.stringify(stored)}`,
+    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\nCurrent tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,
   }];
   for (const file of files) {
     if (file.name.toLowerCase().endsWith(".zip")) {
       try {
-        const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
-        let extractedBytes = 0;
-        for (const [path, bytes] of Object.entries(entries)) {
-          if (bytes.length > MAX_ARCHIVE_ENTRY_BYTES || extractedBytes + bytes.length > MAX_ARCHIVE_EXTRACTED_BYTES) continue;
-          extractedBytes += bytes.length;
-          if (/\.(html?|css|js(on)?|txt|md|csv|xml|ged)$/i.test(path)) {
-            content.push({ type: "input_text", text: `Extracted from ${file.name}/${path}:\n${strFromU8(bytes).slice(0, 120_000)}` });
-          } else if (/\.(jpe?g|png|webp|gif)$/i.test(path)) {
+        const entries = extractArchiveEntries(new Uint8Array(await file.arrayBuffer()), { entryBytes: MAX_ARCHIVE_ENTRY_BYTES, totalBytes: MAX_ARCHIVE_EXTRACTED_BYTES, entries: 500 });
+        let textChars = 0;
+        let imageCount = 0;
+        for (const { path, bytes, kind } of entries) {
+          if (kind === "text") {
+            const remaining = MAX_ARCHIVE_TEXT_CHARS - textChars;
+            if (remaining <= 0) continue;
+            const extracted = strFromU8(bytes).slice(0, Math.min(120_000, remaining));
+            textChars += extracted.length;
+            content.push({ type: "input_text", text: `Extracted from ${file.name}/${path}:\n${extracted}` });
+          } else {
+            if (imageCount >= MAX_ARCHIVE_IMAGES) continue;
+            imageCount += 1;
             const extension = path.split(".").pop()?.toLowerCase();
             const mime = extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension}`;
+            const embedded = await saveAttachment(new File([bytes], path, { type: mime }), auth.user.email);
+            stored.push(embedded);
+            content.push({ type: "input_text", text: `Embedded image ${file.name}/${path} was preserved as attachment ID ${embedded.id}. Use that ID as a portrait only if the archive explicitly links this image to a person.` });
             content.push({ type: "input_image", image_url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`, detail: "high" });
           }
         }
@@ -248,7 +275,7 @@ export async function POST(request: Request) {
 
 Past data must never block new information. Reconcile incoming people against the current tree using normalized names, dates, places, biography, parents, spouses, children, and sibling context. When one existing record clearly matches, update it instead of creating a duplicate. When the editor explicitly identifies an accidental duplicate, consolidate useful facts into the canonical person and delete the duplicate. Resolve harmless formatting, capitalization, empty-field, and more-complete-value differences yourself. Ask a clarification question only when evidence supports multiple plausible people or contains a material contradiction you cannot resolve. Do not ask for confirmation for routine high-confidence changes.
 
-For a rich message or multi-file upload, call tools once for every distinct person, relationship, and story; do not stop after the first item. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person, relationship, and story IDs must be copied exactly from the supplied tree. A parent relationship is directional: from_person_id is the parent and to_person_id is the child. Preserve every existing field not changed by the editor. Use delete tools only for an explicit request or an unambiguous duplicate. Every summary must include enough disambiguating context for same-name relatives. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep prose warm, direct, and concise.`,
+For a rich message or multi-file upload, call tools once for every distinct person, relationship, and story; do not stop after the first item. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person, relationship, and story IDs must be copied exactly from the supplied tree. For people created in this same response, set the relationship ID to null and provide their exact display name so the server can resolve it after creation. A parent relationship is directional: from_person_id/from_person_name is the parent and to_person_id/to_person_name is the child. Preserve every existing field not changed by the editor. Use delete tools only for an explicit request or an unambiguous duplicate. Every summary must include enough disambiguating context for same-name relatives. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep prose warm, direct, and concise.`,
       input: [{ role: "user", content }] as never,
       tools: tools as never,
       parallel_tool_calls: true,

@@ -1,6 +1,7 @@
 export type Person = {
   id: string;
   displayName: string;
+  gender?: "male" | "female" | null;
   givenName: string | null;
   familyName: string | null;
   birthDate: string | null;
@@ -29,6 +30,7 @@ export type Story = {
   date: string | null;
   place: string | null;
   personIds: string[];
+  attachmentIds?: string[];
 };
 
 export type Attachment = {
@@ -63,6 +65,8 @@ export type AddRelationshipProposal = {
   summary: string;
   fromPersonId: string;
   toPersonId: string;
+  fromPersonName?: string | null;
+  toPersonName?: string | null;
   relationshipType: "parent" | "spouse";
 };
 
@@ -107,6 +111,12 @@ export type DeleteStoryProposal = {
   storyId: string;
 };
 
+export type DeleteAttachmentProposal = {
+  kind: "delete_attachment";
+  summary: string;
+  attachmentId: string;
+};
+
 export type AgentConflict = {
   question: string;
   reason: string;
@@ -122,4 +132,5 @@ export type ChangeProposal =
   | DeleteRelationshipProposal
   | AddStoryProposal
   | UpdateStoryProposal
-  | DeleteStoryProposal;
+  | DeleteStoryProposal
+  | DeleteAttachmentProposal;

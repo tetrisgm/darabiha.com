@@ -3,6 +3,7 @@ import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core
 export const people = sqliteTable("people", {
   id: text("id").primaryKey(),
   displayName: text("display_name").notNull(),
+  gender: text("gender", { enum: ["male", "female"] }),
   givenName: text("given_name"), familyName: text("family_name"),
   birthDate: text("birth_date"), deathDate: text("death_date"),
   birthPlace: text("birth_place"), deathPlace: text("death_place"), birthCity: text("birth_city"), birthCountry: text("birth_country"), deathCity: text("death_city"), deathCountry: text("death_country"), biography: text("biography"), photoAttachmentId: text("photo_attachment_id"),

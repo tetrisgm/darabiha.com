@@ -2,7 +2,7 @@ import { requireEditor } from "../../authz";
 import { applyProposal } from "../../../db/store";
 import type { ChangeProposal } from "../../../lib/types";
 
-const allowedKinds = new Set(["add_person", "update_person", "delete_person", "add_relationship", "delete_relationship", "add_story", "update_story", "delete_story"]);
+const allowedKinds = new Set(["add_person", "update_person", "delete_person", "add_relationship", "delete_relationship", "add_story", "update_story", "delete_story", "delete_attachment"]);
 
 export async function POST(request: Request) {
   const auth = await requireEditor();

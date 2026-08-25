@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         const value = body[key];
         return typeof value === "string" && value.trim() ? value.trim() : null;
       };
-      return Response.json({ ok: true, tree: await applyProposal({ kind: "add_person", summary: "Added a family member", person: { displayName, givenName: null, familyName: null, birthDate: text("birthDate"), deathDate: text("deathDate"), birthPlace: null, deathPlace: null, birthCity: text("birthCity"), birthCountry: text("birthCountry"), deathCity: text("deathCity"), deathCountry: text("deathCountry"), biography: text("biography"), photoAttachmentId: null } }, auth.user.email) });
+      return Response.json({ ok: true, tree: await applyProposal({ kind: "add_person", summary: "Added a family member", person: { displayName, gender: body.gender === "male" || body.gender === "female" ? body.gender : null, givenName: null, familyName: null, birthDate: text("birthDate"), deathDate: text("deathDate"), birthPlace: null, deathPlace: null, birthCity: text("birthCity"), birthCountry: text("birthCountry"), deathCity: text("deathCity"), deathCountry: text("deathCountry"), biography: text("biography"), photoAttachmentId: null } }, auth.user.email) });
     }
     if (action === "relationship") {
       const relationshipType = body.relationshipType === "spouse" ? "spouse" : "parent";

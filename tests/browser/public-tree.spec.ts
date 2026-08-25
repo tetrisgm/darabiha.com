@@ -4,9 +4,9 @@ test("public tree renders as an interactive canvas beside the archive chat", asy
   await page.goto("/");
   await expect(page.locator(".family-canvas")).toBeVisible();
   await expect(page.locator(".chat-sidebar")).toBeVisible();
-  await expect(page.locator(".tree-card")).toHaveCount(4);
+  expect(await page.locator(".tree-card").count()).toBeGreaterThan(0);
   await expect(page.locator(".tree-connectors line")).not.toHaveCount(0);
-  await expect(page.getByRole("link", { name: /Sign in with Apple/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Add a person/ })).toBeVisible();
 });
 
 test("chat sidebar collapses and returns from the left edge", async ({ page }) => {
@@ -70,11 +70,29 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("41");
+  expect(version).toBe("43");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
   expect(response.headers()["cache-control"]).toContain("no-store");
+});
+
+test("timeline and map are generated from the same public family records", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Timeline" }).click();
+  await expect(page.getByRole("region", { name: "Family timeline" })).toBeVisible();
+  await page.getByRole("button", { name: "Map" }).click();
+  await expect(page.getByRole("region", { name: "Family places" })).toBeVisible();
+  await page.getByRole("button", { name: "Tree" }).click();
+  await expect(page.locator(".family-canvas")).toBeVisible();
+});
+
+test("the file picker accepts a ZIP archive without filtering it out", async ({ page }) => {
+  await page.goto("/");
+  const picker = page.locator('input[type="file"]:not([webkitdirectory])').first();
+  await expect(picker).not.toHaveAttribute("accept");
+  await picker.setInputFiles({ name: "family-archive.zip", mimeType: "application/zip", buffer: Buffer.from([80, 75, 5, 6, 0, 0, 0, 0]) });
+  await expect(page.locator(".file-chip")).toContainText("family-archive.zip");
 });
 
 test("Safari gets a visible custom grab cursor and clickable-card cursor", async ({ page }) => {

@@ -4,7 +4,7 @@ import type { Attachment, ChangeProposal, FamilyTree, Person, Relationship, Stor
 let initialized = false;
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS people (
-    id TEXT PRIMARY KEY, display_name TEXT NOT NULL, given_name TEXT, family_name TEXT,
+    id TEXT PRIMARY KEY, display_name TEXT NOT NULL, gender TEXT CHECK(gender IN ('male', 'female')), given_name TEXT, family_name TEXT,
     birth_date TEXT, death_date TEXT, birth_place TEXT, death_place TEXT, birth_city TEXT, birth_country TEXT, death_city TEXT, death_country TEXT, biography TEXT, photo_attachment_id TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
@@ -33,7 +33,7 @@ const schemaStatements = [
 export async function ensureSchema() {
   if (initialized) return;
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
-  for (const column of ["birth_city", "birth_country", "death_city", "death_country"]) {
+  for (const column of ["birth_city", "birth_country", "death_city", "death_country", "gender"]) {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
   await env.DB.prepare("PRAGMA optimize").run();
@@ -42,8 +42,8 @@ export async function ensureSchema() {
 
 export async function readTree(): Promise<FamilyTree> {
   await ensureSchema();
-  const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult] = await Promise.all([
-    env.DB.prepare(`SELECT id, display_name AS displayName, given_name AS givenName,
+  const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult, storyAttachmentsResult] = await Promise.all([
+    env.DB.prepare(`SELECT id, display_name AS displayName, gender, given_name AS givenName,
       family_name AS familyName, birth_date AS birthDate, death_date AS deathDate,
       birth_place AS birthPlace, death_place AS deathPlace, birth_city AS birthCity, birth_country AS birthCountry,
       death_city AS deathCity, death_country AS deathCountry, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
@@ -51,13 +51,16 @@ export async function readTree(): Promise<FamilyTree> {
       type FROM relationships ORDER BY created_at`).all<Relationship>(),
     env.DB.prepare(`SELECT id, title, body, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
     env.DB.prepare(`SELECT story_id AS storyId, person_id AS personId FROM story_people`).all<{ storyId: string; personId: string }>(),
+    env.DB.prepare(`SELECT story_id AS storyId, attachment_id AS attachmentId FROM story_attachments`).all<{ storyId: string; attachmentId: string }>(),
   ]);
   const links = new Map<string, string[]>();
   for (const row of storyPeopleResult.results) links.set(row.storyId, [...(links.get(row.storyId) ?? []), row.personId]);
+  const attachmentLinks = new Map<string, string[]>();
+  for (const row of storyAttachmentsResult.results) attachmentLinks.set(row.storyId, [...(attachmentLinks.get(row.storyId) ?? []), row.attachmentId]);
   return {
     people: peopleResult.results,
     relationships: relationshipsResult.results,
-    stories: storiesResult.results.map((story) => ({ ...story, personIds: links.get(story.id) ?? [] })),
+    stories: storiesResult.results.map((story) => ({ ...story, personIds: links.get(story.id) ?? [], attachmentIds: attachmentLinks.get(story.id) ?? [] })),
   };
 }
 
@@ -70,9 +73,13 @@ export async function saveAttachment(file: File, actorEmail: string): Promise<At
     customMetadata: { filename: file.name },
   });
   const now = new Date().toISOString();
-  await env.DB.prepare(`INSERT INTO attachments
-    (id, object_key, filename, content_type, size, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, objectKey, file.name, file.type || "application/octet-stream", file.size, actorEmail, now).run();
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO attachments
+      (id, object_key, filename, content_type, size, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .bind(id, objectKey, file.name, file.type || "application/octet-stream", file.size, actorEmail, now),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "upload_attachment", `Uploaded ${file.name}`, JSON.stringify({ attachmentId: id, filename: file.name, contentType: file.type || "application/octet-stream", size: file.size }), now),
+  ]);
   return { id, filename: file.name, contentType: file.type || "application/octet-stream", size: file.size };
 }
 
@@ -85,6 +92,12 @@ export async function readAttachment(id: string) {
   return object ? { metadata, object } : null;
 }
 
+export async function listAttachments(): Promise<Attachment[]> {
+  await ensureSchema();
+  const result = await env.DB.prepare("SELECT id, filename, content_type AS contentType, size FROM attachments ORDER BY created_at DESC").all<Attachment>();
+  return result.results;
+}
+
 function nullable(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -92,7 +105,7 @@ function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   const displayName = typeof input.displayName === "string" ? input.displayName.trim() : "";
   if (!displayName) throw new Error("A person needs a display name.");
   return {
-    displayName, givenName: nullable(input.givenName), familyName: nullable(input.familyName),
+    displayName, gender: input.gender === "male" || input.gender === "female" ? input.gender : null, givenName: nullable(input.givenName), familyName: nullable(input.familyName),
     birthDate: nullable(input.birthDate), deathDate: nullable(input.deathDate),
     birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), birthCity: nullable(input.birthCity), birthCountry: nullable(input.birthCountry), deathCity: nullable(input.deathCity), deathCountry: nullable(input.deathCountry), biography: nullable(input.biography), photoAttachmentId: nullable(input.photoAttachmentId),
   };
@@ -103,19 +116,20 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
   let addedPersonId: string | null = null;
+  let deletedObjectKey: string | null = null;
   if (proposal.kind === "add_person") {
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
     const personId = crypto.randomUUID(); addedPersonId = personId;
     statements.push(env.DB.prepare(`INSERT INTO people
-      (id, display_name, given_name, family_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, biography, photo_attachment_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(personId, person.displayName, person.givenName, person.familyName, person.birthDate,
+      (id, display_name, gender, given_name, family_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, biography, photo_attachment_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(personId, person.displayName, person.gender, person.givenName, person.familyName, person.birthDate,
         person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, now));
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
-    statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, given_name = ?, family_name = ?, birth_date = ?,
+    statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, birth_date = ?,
       death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
-      .bind(person.displayName, person.givenName, person.familyName, person.birthDate, person.deathDate,
+      .bind(person.displayName, person.gender, person.givenName, person.familyName, person.birthDate, person.deathDate,
         person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "delete_person") {
     statements.push(
@@ -124,11 +138,24 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       env.DB.prepare("DELETE FROM people WHERE id = ?").bind(proposal.personId),
     );
   } else if (proposal.kind === "add_relationship") {
-    if (proposal.fromPersonId === proposal.toPersonId) throw new Error("A person cannot be related to themself.");
+    const resolvePersonId = async (id: string, name?: string | null) => {
+      if (id) {
+        const record = await env.DB.prepare("SELECT id FROM people WHERE id = ?").bind(id).first<{ id: string }>();
+        if (!record) throw new Error("A referenced person no longer exists.");
+        return record.id;
+      }
+      if (!name?.trim()) throw new Error("A relationship needs two people.");
+      const matches = await env.DB.prepare("SELECT id FROM people WHERE lower(display_name) = lower(?)").bind(name.trim()).all<{ id: string }>();
+      if (matches.results.length !== 1) throw new Error(matches.results.length ? `More than one person is named ${name}.` : `${name} is not in the tree yet.`);
+      return matches.results[0].id;
+    };
+    const fromPersonId = await resolvePersonId(proposal.fromPersonId, proposal.fromPersonName);
+    const toPersonId = await resolvePersonId(proposal.toPersonId, proposal.toPersonName);
+    if (fromPersonId === toPersonId) throw new Error("A person cannot be related to themself.");
     if (!(["parent", "spouse"] as const).includes(proposal.relationshipType)) throw new Error("Unsupported relationship.");
-    statements.push(env.DB.prepare(`INSERT INTO relationships
+    statements.push(env.DB.prepare(`INSERT OR IGNORE INTO relationships
       (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)`)
-      .bind(crypto.randomUUID(), proposal.fromPersonId, proposal.toPersonId, proposal.relationshipType, now));
+      .bind(crypto.randomUUID(), fromPersonId, toPersonId, proposal.relationshipType, now));
   } else if (proposal.kind === "delete_relationship") {
     statements.push(env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(proposal.relationshipId));
   } else if (proposal.kind === "add_story") {
@@ -153,11 +180,21 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       env.DB.prepare("DELETE FROM story_attachments WHERE story_id = ?").bind(proposal.storyId),
       env.DB.prepare("DELETE FROM stories WHERE id = ?").bind(proposal.storyId),
     );
+  } else if (proposal.kind === "delete_attachment") {
+    const attachment = await env.DB.prepare("SELECT object_key AS objectKey FROM attachments WHERE id = ?").bind(proposal.attachmentId).first<{ objectKey: string }>();
+    if (!attachment) throw new Error("That attachment no longer exists.");
+    deletedObjectKey = attachment.objectKey;
+    statements.push(
+      env.DB.prepare("UPDATE people SET photo_attachment_id = NULL, updated_at = ? WHERE photo_attachment_id = ?").bind(now, proposal.attachmentId),
+      env.DB.prepare("DELETE FROM story_attachments WHERE attachment_id = ?").bind(proposal.attachmentId),
+      env.DB.prepare("DELETE FROM attachments WHERE id = ?").bind(proposal.attachmentId),
+    );
   }
   statements.push(env.DB.prepare(`INSERT INTO change_log
     (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), actorEmail, proposal.kind, proposal.summary, JSON.stringify(proposal), now));
     await env.DB.batch(statements);
+    if (deletedObjectKey) await env.FILES.delete(deletedObjectKey);
     if (proposal.kind === "add_person" && proposal.relationshipHints?.length) {
       for (const hint of proposal.relationshipHints) {
         const related = await env.DB.prepare("SELECT id FROM people WHERE lower(display_name) = lower(?) LIMIT 1").bind(hint.personName.trim()).first<{ id: string }>();
@@ -172,7 +209,10 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
 }
 
 export async function updatePerson(personId: string, patch: Record<string, unknown>, actorEmail: string) {
-  return applyProposal({ kind: "update_person", summary: "Updated person details", personId, patch: personValues(patch) }, actorEmail);
+  const current = (await readTree()).people.find((person) => person.id === personId);
+  if (!current) throw new Error("That person is no longer in the tree.");
+  const merged = Object.fromEntries(Object.keys(current).filter((key) => key !== "id").map((key) => [key, Object.prototype.hasOwnProperty.call(patch, key) ? patch[key] : current[key as keyof Person]]));
+  return applyProposal({ kind: "update_person", summary: "Updated person details", personId, patch: personValues(merged) }, actorEmail);
 }
 
 export async function addRelationship(fromPersonId: string, toPersonId: string, relationshipType: "parent" | "spouse", actorEmail: string) {
@@ -191,8 +231,11 @@ export async function removeRelationship(relationshipId: string, actorEmail: str
 export async function attachPersonPhoto(personId: string, file: File, actorEmail: string) {
   const attachment = await saveAttachment(file, actorEmail);
   await ensureSchema();
-  await env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ?")
-    .bind(attachment.id, new Date().toISOString(), personId).run();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ?").bind(attachment.id, now, personId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "attach_person_photo", "Updated a family portrait", JSON.stringify({ personId, attachmentId: attachment.id }), now),
+  ]);
   return readTree();
 }
 

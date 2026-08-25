@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
+import { TimelineView, WorldMapView } from "./ArchiveViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { BUILD_ID, VERSION } from "../../lib/build";
 
@@ -16,6 +17,14 @@ type Props = {
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type PendingProposal = { id: string; proposal: ChangeProposal; state: "pending" | "applying" | "applied" | "error"; appliedPersonId?: string };
+
+function proposalRank(proposal: ChangeProposal) {
+  if (proposal.kind === "add_person") return 0;
+  if (proposal.kind === "update_person") return 1;
+  if (proposal.kind === "add_relationship") return 2;
+  if (proposal.kind === "add_story" || proposal.kind === "update_story") return 3;
+  return 4;
+}
 
 function generationGroups(tree: FamilyTree): Person[][] {
   if (!tree.people.length) return [];
@@ -70,6 +79,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [addingPerson, setAddingPerson] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [viewMode, setViewMode] = useState<"tree" | "timeline" | "map">("tree");
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -91,16 +101,28 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       const response = await fetch("/api/agent", { method: "POST", body: form });
       const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; conflicts?: AgentConflict[]; error?: string };
       if (!response.ok) throw new Error(data.error || "request_failed");
-      const applied = data.proposals?.length ? `Done — I applied ${data.proposals.length} ${data.proposals.length === 1 ? "update" : "updates"} to the family tree.` : "";
-      const questions = data.conflicts?.map((conflict) => `${conflict.question}\n${conflict.evidence.join(" · ")}`).join("\n\n") || "";
-      setMessages([...nextMessages, { role: "assistant", text: [applied, questions || (!applied ? data.reply : "")].filter(Boolean).join("\n\n") || "Done." }]);
+      let latestTree = tree;
+      let appliedCount = 0;
+      const failures: string[] = [];
       if (data.proposals?.length) {
-        const imported = data.proposals!.map((proposal) => ({ id: crypto.randomUUID(), proposal, state: "pending" as const }));
+        const imported = [...data.proposals].sort((left, right) => proposalRank(left) - proposalRank(right)).map((proposal) => ({ id: crypto.randomUUID(), proposal, state: "pending" as const }));
         setProposals((current) => [...current, ...imported]);
-        for (const item of imported) await applyChange(item);
+        for (const item of imported) {
+          const result = await applyChange(item);
+          if (result.tree) { latestTree = result.tree; appliedCount += 1; }
+          else failures.push(result.error || item.proposal.summary);
+        }
       }
+      const applied = appliedCount ? `Done — I applied ${appliedCount} ${appliedCount === 1 ? "update" : "updates"} to the family tree.` : "";
+      const failed = failures.length ? `${failures.length} ${failures.length === 1 ? "change needs" : "changes need"} another look: ${failures.join("; ")}` : "";
+      const questions = data.conflicts?.map((conflict) => `${conflict.question}\n${conflict.evidence.join(" · ")}`).join("\n\n") || "";
+      const assistantText = [applied, failed, questions || (!applied && !failed ? data.reply : "")].filter(Boolean).join("\n\n") || "Done.";
+      setMessages([...nextMessages, { role: "assistant", text: assistantText }]);
+      const mentioned = latestTree.people.filter((person) => assistantText.toLocaleLowerCase().includes(person.displayName.toLocaleLowerCase()));
+      if (mentioned.length) { setHighlightedIds(mentioned.map((person) => person.id)); setViewMode("tree"); }
       setFiles([]);
       if (fileRef.current) fileRef.current.value = "";
+      if (folderRef.current) folderRef.current.value = "";
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "request_failed";
       const friendly = code === "openai_not_configured"
@@ -112,7 +134,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     } finally { setBusy(false); }
   }
 
-  async function applyChange(item: PendingProposal) {
+  async function applyChange(item: PendingProposal): Promise<{ tree?: FamilyTree; error?: string }> {
     setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "applying" } : candidate));
     try {
       const response = await fetch("/api/changes", {
@@ -123,8 +145,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       setTree(data.tree);
       const appliedPersonId = item.proposal.kind === "add_person" ? data.tree.people.find((person) => person.displayName === item.proposal.person.displayName)?.id : undefined;
       setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "applied", appliedPersonId } : candidate));
-    } catch {
+      return { tree: data.tree };
+    } catch (error) {
       setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "error" } : candidate));
+      return { error: error instanceof Error ? error.message : "Change failed" };
     }
   }
 
@@ -134,6 +158,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
       <header className={`site-action-bar absolute top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8 ${chatCollapsed ? "is-chat-collapsed" : ""}`}>
         <p className="text-base font-semibold tracking-[-.01em]">Darabiha</p>
+        <nav className="archive-view-switcher" aria-label="Archive view">{(["tree", "timeline", "map"] as const).map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</nav>
         <div className="relative flex items-center gap-4">
           {signInEnabled && !viewer.signedIn && <><span className="text-sm text-[var(--muted)]">Sign in to edit</span><a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a></>}
           {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
@@ -151,7 +176,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
               </div>
             </div>
             {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); if (people[0]) setSelectedPerson(people[0]); }} />
+              <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); setViewMode("tree"); }} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -187,27 +212,15 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="relative h-full min-h-0">
 
             <div className="relative h-full min-h-0 overflow-hidden bg-[#eef4f1]">
-              {tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />}
-
-              {tree.stories.length > 0 && (
-                <div className="mt-auto w-full border-t border-[var(--line)] pt-5">
-                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Recent family stories</p>
-                  <div className="flex gap-3 overflow-x-auto pb-2">
-                    {tree.stories.slice(0, 4).map((story) => (
-                      <article className="min-w-56 rounded-xl bg-[var(--wash)] p-4" key={story.id}>
-                        <h3 className="font-serif text-lg">{story.title}</h3>
-                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted)]">{story.body}</p>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {viewMode === "tree" && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
+              {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
+              {viewMode === "map" && <WorldMapView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
             </div>
           </div>
         </section>
 
       </div>
-      {selectedPerson && <PersonModalV2 person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => { setSelectedPerson(null); setHighlightedIds([]); }} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+      {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => { setSelectedPerson(null); setHighlightedIds([]); }} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
       {addingPerson && <AddPersonModal tree={tree} onClose={() => setAddingPerson(false)} onAdded={(next) => { setTree(next); setAddingPerson(false); }} />}
       <span className="build-version" aria-label={`Darabiha version ${VERSION}`}>Version {VERSION}</span>
     </main>
@@ -215,14 +228,20 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 }
 
 function AddPersonModal({ tree, onClose, onAdded }: { tree: FamilyTree; onClose: () => void; onAdded: (tree: FamilyTree) => void }) {
-  const [form, setForm] = useState({ displayName: "", birthDate: "", birthCity: "", birthCountry: "", deathDate: "", deathCity: "", deathCountry: "", biography: "" });
-  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const [form, setForm] = useState({ displayName: "", gender: "" as "" | "male" | "female", birthDate: "", birthCity: "", birthCountry: "", deathDate: "", deathCity: "", deathCountry: "", biography: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [duplicate, setDuplicate] = useState<Person | null>(null);
   const normalized = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
   const candidate = () => tree.people.find((person) => normalized(person.displayName) === normalized(form.displayName));
   async function save(action: "add" | "update", personId?: string) { setBusy(true); setError(""); try { const body = action === "add" ? { action, ...form } : { action, personId, patch: form }; const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (!response.ok || !data.tree) throw new Error(data.error || "Could not save person"); onAdded(data.tree); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save person"); } finally { setBusy(false); } }
   async function add() { if (!form.displayName.trim() || busy) return; const match = candidate(); if (match) { const sameDate = !form.birthDate || !match.birthDate || form.birthDate === match.birthDate; if (sameDate) { await save("update", match.id); return; } setDuplicate(match); return; } await save("add"); }
-  return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}><button className="person-modal-close" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">New record</p><h2 className="font-serif text-3xl">Add a person</h2><p className="mt-2 text-sm text-[var(--muted)]">Enter what you know now. We’ll check the family tree before creating a new record.</p>{duplicate && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6"><strong>{duplicate.displayName}</strong> is already in the tree, born {duplicate.birthDate || "with no recorded birth date"}. Is this the same person?<div className="mt-3 flex flex-wrap gap-2"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white" onClick={() => save("update", duplicate.id)}>Use existing person</button><button className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-xs font-semibold" onClick={() => { setDuplicate(null); save("add"); }}>Create new person</button></div></div>}<div className="modal-editor"><input className="modal-input" autoFocus placeholder="Full name" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /><div className="grid grid-cols-2 gap-2">{(["birthDate", "birthCity", "birthCountry", "deathDate", "deathCity", "deathCountry"] as const).map((field) => <input className="modal-input" key={field} placeholder={field.replace(/([A-Z])/g, " $1")} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} />)}</div><textarea className="modal-input min-h-24" placeholder="Biography, memories, or notes" value={form.biography} onChange={(event) => setForm({ ...form, biography: event.target.value })} />{error && <p className="text-sm text-red-700">{error}</p>}<button className="rounded-full bg-[var(--ink)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !form.displayName.trim()} onClick={add}>{busy ? "Checking…" : "Add person"}</button></div></section></div>;
+  const input = (label: string, field: keyof typeof form, type = "text") => <label className="person-editor-field"><span>{label}</span><input className="modal-input" type={type} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>;
+  return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" aria-labelledby="add-person-title" onClick={(event) => event.stopPropagation()}>
+    <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">New record</p><h2 id="add-person-title" className="font-serif text-3xl">Add a person</h2><p className="mt-2 text-sm text-[var(--muted)]">Enter what you know now. We’ll check the family tree before creating a new record.</p>
+    {duplicate && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6"><strong>{duplicate.displayName}</strong> is already in the tree, born {duplicate.birthDate || "with no recorded birth date"}. Is this the same person?<div className="mt-3 flex flex-wrap gap-2"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white" onClick={() => save("update", duplicate.id)}>Use existing person</button><button className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-xs font-semibold" onClick={() => { setDuplicate(null); save("add"); }}>Create new person</button></div></div>}
+    <div className="modal-editor person-editor-grid">{input("Full name", "displayName")}<label className="person-editor-field"><span>Sex</span><select className="modal-input" value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as typeof form.gender })}><option value="">Not recorded</option><option value="female">Female</option><option value="male">Male</option></select></label>{input("Birth date", "birthDate", "date")}{input("Birth city", "birthCity")}{input("Birth country", "birthCountry")}{input("Death date", "deathDate", "date")}{input("Death city", "deathCity")}{input("Death country", "deathCountry")}<label className="person-editor-field person-editor-wide"><span>Biography, memories, or notes</span><textarea className="modal-input min-h-24" value={form.biography} onChange={(event) => setForm({ ...form, biography: event.target.value })} /></label>{error && <p className="text-sm text-red-700">{error}</p>}<button className="rounded-full bg-[var(--ink)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !form.displayName.trim()} onClick={add}>{busy ? "Checking…" : "Add person"}</button></div>
+  </section></div>;
 }
 
 function PersonModal({ person, tree, canEdit, onClose, onSelect, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
@@ -250,27 +269,53 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  const [relativeId, setRelativeId] = useState("");
-  const [relativeType, setRelativeType] = useState<"parent" | "child" | "spouse">("parent");
+  const [relationEditor, setRelationEditor] = useState<string | null>(null);
+  const [relativeQuery, setRelativeQuery] = useState("");
+  const [relativeChoice, setRelativeChoice] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
-  const [form, setForm] = useState(() => ({ displayName: person.displayName, birthDate: person.birthDate ?? "", deathDate: person.deathDate ?? "", birthCity: person.birthCity ?? "", birthCountry: person.birthCountry ?? "", deathCity: person.deathCity ?? "", deathCountry: person.deathCountry ?? "", biography: person.biography ?? "" }));
+  const [form, setForm] = useState(() => ({ displayName: person.displayName, gender: person.gender ?? "" as "" | "male" | "female", birthDate: person.birthDate ?? "", deathDate: person.deathDate ?? "", birthCity: person.birthCity ?? "", birthCountry: person.birthCountry ?? "", deathCity: person.deathCity ?? "", deathCountry: person.deathCountry ?? "", biography: person.biography ?? "" }));
   const buckets = relatedPeople(tree, person.id);
   const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
   async function post(body: Record<string, unknown>) { const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (!response.ok || !data.tree) throw new Error(data.error || "Request failed"); onTreeChange(data.tree); return data.tree; }
   async function save() { setSaving(true); try { await post({ action: "update", personId: person.id, patch: form }); setEditing(false); setNotice("Saved"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save"); } finally { setSaving(false); } }
-  async function addRelationship() { if (!relativeId) return; try { await post({ action: "relationship", fromPersonId: relativeType === "child" ? relativeId : person.id, toPersonId: relativeType === "child" ? person.id : relativeId, relationshipType: relativeType === "child" ? "parent" : relativeType }); setRelativeId(""); setNotice("Relationship added"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add relationship"); } }
   async function removeRelationship(id: string) { try { await post({ action: "remove_relationship", relationshipId: id }); setNotice("Relationship removed"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove relationship"); } }
   async function deletePerson() { if (!window.confirm(`Remove ${person.displayName} and their family-tree connections? This cannot be undone.`)) return; setSaving(true); try { await post({ action: "remove", personId: person.id }); onClose(); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove person"); } finally { setSaving(false); } }
+  async function addRelative(label: string) {
+    if (!relativeQuery.trim() || saving) return;
+    setSaving(true); setNotice("");
+    try {
+      let relative = tree.people.find((candidate) => candidate.id === relativeChoice);
+      if (!relative) {
+        const exact = tree.people.filter((candidate) => candidate.displayName.localeCompare(relativeQuery.trim(), undefined, { sensitivity: "base" }) === 0 && candidate.id !== person.id);
+        if (exact.length > 1) throw new Error("Choose the correct matching person from the suggestions.");
+        relative = exact[0];
+      }
+      if (!relative) {
+        const before = new Set(tree.people.map((candidate) => candidate.id));
+        const next = await post({ action: "add", displayName: relativeQuery.trim() });
+        relative = next.people.find((candidate) => !before.has(candidate.id));
+      }
+      if (!relative) throw new Error("Could not identify that person.");
+      const links = label === "Parents" ? [{ fromPersonId: relative.id, toPersonId: person.id }]
+        : label === "Children" ? [{ fromPersonId: person.id, toPersonId: relative.id }]
+        : label === "Spouse" ? [{ fromPersonId: person.id, toPersonId: relative.id, relationshipType: "spouse" }]
+        : buckets.parents.map((parent) => ({ fromPersonId: parent.id, toPersonId: relative!.id }));
+      if (!links.length) throw new Error("Add a parent first so this sibling can share the correct parents.");
+      for (const link of links) await post({ action: "relationship", relationshipType: "parent", ...link });
+      setRelationEditor(null); setRelativeQuery(""); setRelativeChoice(""); setNotice(`${label.replace(/s$/, "")} added`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add relative"); }
+    finally { setSaving(false); }
+  }
   const relation = (other: Person, label: string) => tree.relationships.find((link) => (label === "Spouse" && link.type === "spouse" && ((link.fromPersonId === person.id && link.toPersonId === other.id) || (link.toPersonId === person.id && link.fromPersonId === other.id))) || (label === "Parents" && link.type === "parent" && link.fromPersonId === other.id && link.toPersonId === person.id) || (label === "Children" && link.type === "parent" && link.fromPersonId === person.id && link.toPersonId === other.id));
-  const field = (label: string, key: keyof typeof form, placeholder = "") => <label className="person-editor-field"><span>{label}</span><input className="modal-input" value={form[key]} placeholder={placeholder} onChange={(event) => update(key, event.target.value)} /></label>;
+  const field = (label: string, key: keyof typeof form, type = "text") => <label className="person-editor-field"><span>{label}</span><input className="modal-input" type={type} value={form[key]} onChange={(event) => update(key, event.target.value)} /></label>;
   return <div className="person-modal-backdrop person-drawer-backdrop" role="presentation" onClick={onClose}><section className="person-modal person-modal-v2" role="dialog" aria-modal="true" aria-labelledby="person-modal-title" onClick={(event) => event.stopPropagation()}>
     <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button>
     <input ref={photoRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; const body = new FormData(); body.set("personId", person.id); body.set("photo", file); const response = await fetch("/api/people", { method: "POST", body }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (response.ok && data.tree) { onTreeChange(data.tree); setNotice("Photo updated"); } else setNotice(data.error || "Could not upload photo"); event.target.value = ""; }} />
     <div className="person-modal-hero"><button type="button" className="person-modal-photo-button" onClick={() => canEdit && photoRef.current?.click()} aria-label={canEdit ? "Change portrait" : "Portrait"}>{person.photoAttachmentId ? <img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <span className="person-modal-avatar">{person.displayName.slice(0, 1).toUpperCase()}</span>}</button><div><p className="eyebrow">Family member</p><div className="person-title-row"><h2 id="person-modal-title" className="font-serif text-4xl">{person.displayName}</h2>{canEdit && <button className="edit-button" onClick={() => setEditing((value) => !value)} aria-label={editing ? "Close editor" : "Edit person"}>{editing ? "Done" : "Edit"}</button>}</div><p className="person-life-line">{lifeLine(person)}</p></div></div>
     <div className="person-facts"><div><span className="eyebrow">Born</span><p>{person.birthDate ? `Born ${formatDate(person.birthDate)}` : "Birth date not recorded"}{locationLine(person.birthCity, person.birthCountry, person.birthPlace) ? ` in ${locationLine(person.birthCity, person.birthCountry, person.birthPlace)}` : ""}</p></div><div><span className="eyebrow">Died</span><p>{person.deathDate ? `Died ${formatDate(person.deathDate)}` : "Still living / unknown"}{locationLine(person.deathCity, person.deathCountry, person.deathPlace) ? ` in ${locationLine(person.deathCity, person.deathCountry, person.deathPlace)}` : ""}</p></div></div>
     {person.biography && <p className="person-biography">{person.biography}</p>}
-    <div className="modal-relationships">{([['Parents', buckets.parents], ['Spouse', buckets.spouses], ['Children', buckets.children], ['Siblings', buckets.siblings]] as [string, Person[]][]).map(([label, people]) => <div className="relationship-group" key={label}><div className="relationship-heading"><p className="eyebrow">{label}</p></div><div className="relationship-chips">{people.map((relative) => <span className="relationship-chip-wrap" key={relative.id}><button className="relationship-chip" onClick={() => onSelect(relative)}>{relative.displayName}{relative.birthDate ? ` · ${relative.birthDate.slice(0, 4)}` : ""}{locationLine(relative.birthCity, relative.birthCountry, relative.birthPlace) ? ` · ${locationLine(relative.birthCity, relative.birthCountry, relative.birthPlace)}` : ""}</button>{canEdit && relation(relative, label) && <button className="relationship-remove" onClick={() => removeRelationship(relation(relative, label)!.id)} aria-label={`Remove ${relative.displayName}`}>×</button>}</span>)}</div></div>)}</div>
-    {canEdit && editing && <div className="modal-editor person-editor-grid">{field("Name", "displayName")}{field("Birth date", "birthDate", "MM/DD/YYYY")}{field("Birth city", "birthCity")}{field("Birth country", "birthCountry")}{field("Death date", "deathDate", "MM/DD/YYYY")}{field("Death city", "deathCity")}{field("Death country", "deathCountry")}<label className="person-editor-field person-editor-wide"><span>Biography</span><textarea className="modal-input" value={form.biography} onChange={(event) => update("biography", event.target.value)} /></label><div className="editor-actions"><button className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-white" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save changes"}</button>{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove photo"); } }}>Remove portrait</button>}</div></div>}
+    <div className="modal-relationships">{([['Parents', buckets.parents], ['Spouse', buckets.spouses], ['Children', buckets.children], ['Siblings', buckets.siblings]] as [string, Person[]][]).map(([label, people]) => <div className="relationship-group" key={label}><div className="relationship-heading"><p className="eyebrow">{label}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => { setRelationEditor(relationEditor === label ? null : label); setRelativeQuery(""); setRelativeChoice(""); }} aria-label={`Add ${label.toLocaleLowerCase()}`}>＋</button>}</div><div className="relationship-chips">{people.map((relative) => <span className="relationship-chip-wrap" key={relative.id}><button className="relationship-chip" onClick={() => onSelect(relative)}>{relative.displayName}{relative.birthDate ? ` · ${relative.birthDate.slice(0, 4)}` : ""}{locationLine(relative.birthCity, relative.birthCountry, relative.birthPlace) ? ` · ${locationLine(relative.birthCity, relative.birthCountry, relative.birthPlace)}` : ""}</button>{canEdit && relation(relative, label) && <button className="relationship-remove" onClick={() => removeRelationship(relation(relative, label)!.id)} aria-label={`Remove ${relative.displayName}`}>×</button>}</span>)}</div>{relationEditor === label && <div className="relative-picker"><input className="modal-input" value={relativeQuery} autoFocus placeholder={`Find or create a ${label.toLocaleLowerCase().replace(/s$/, "")}`} onChange={(event) => { setRelativeQuery(event.target.value); setRelativeChoice(""); }} />{relativeQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && candidate.displayName.toLocaleLowerCase().includes(relativeQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={() => { setRelativeChoice(candidate.id); setRelativeQuery(candidate.displayName); }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}{locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace) ? ` · ${locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace)}` : ""}</span></button>)}</div>}<button type="button" className="relative-add-button" disabled={!relativeQuery.trim() || saving} onClick={() => addRelative(label)}>{relativeChoice ? "Add selected person" : "Use this name"}</button></div>}</div>)}</div>
+    {canEdit && editing && <div className="modal-editor person-editor-grid">{field("Name", "displayName")}<label className="person-editor-field"><span>Sex</span><select className="modal-input" value={form.gender} onChange={(event) => update("gender", event.target.value)}><option value="">Not recorded</option><option value="female">Female</option><option value="male">Male</option></select></label>{field("Birth date", "birthDate", "date")}{field("Birth city", "birthCity")}{field("Birth country", "birthCountry")}{field("Death date", "deathDate", "date")}{field("Death city", "deathCity")}{field("Death country", "deathCountry")}<label className="person-editor-field person-editor-wide"><span>Biography</span><textarea className="modal-input" value={form.biography} onChange={(event) => update("biography", event.target.value)} /></label><div className="editor-actions"><button className="rounded-full bg-[var(--ink)] px-5 py-2.5 text-sm font-semibold text-white" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save changes"}</button>{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove photo"); } }}>Remove portrait</button>}</div></div>}
     {notice && <p className="modal-notice" role="status">{notice}</p>}
     {canEdit && <div className="person-delete-footer"><button className="person-delete-button" disabled={saving} onClick={deletePerson}>Delete person</button></div>}
   </section></div>;
