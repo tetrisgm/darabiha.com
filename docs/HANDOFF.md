@@ -2,6 +2,11 @@
 
 ## Current state
 
+### 2026-08-25 duplicate-person guard (Version 38)
+
+- Manual “Add a person” entry now checks normalized names against the existing tree before creating a record. An exact name match with compatible/unknown birth date updates the existing person; a same-name conflict with a different birth date asks whether to use the existing record or create a distinct person.
+- New manual records retain entered birth/death dates, city/country values, and biography. Production identity is Version 38 (`BUILD_ID=f8a2b3c`), verified at `/api/version` after deployment.
+
 ### Temporary open-editor test mode (2026-08-25)
 
 - `app/authz.ts` has `TEMPORARY_OPEN_EDITOR = true` so unauthenticated visitors can use the full editor and mutation APIs while Apple sign-in is unavailable for testing.
