@@ -156,6 +156,15 @@ export async function addRelationship(fromPersonId: string, toPersonId: string, 
   return applyProposal({ kind: "add_relationship", summary: "Added a family relationship", fromPersonId, toPersonId, relationshipType }, actorEmail);
 }
 
+export async function removeRelationship(relationshipId: string, actorEmail: string) {
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(relationshipId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "remove_relationship", "Removed a family relationship", JSON.stringify({ relationshipId }), now),
+  ]);
+  return readTree();
+}
+
 export async function attachPersonPhoto(personId: string, file: File, actorEmail: string) {
   const attachment = await saveAttachment(file, actorEmail);
   await ensureSchema();
