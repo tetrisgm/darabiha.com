@@ -118,6 +118,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     }
   }
 
+  async function applyAll() {
+    for (const item of proposals.filter((candidate) => candidate.state === "pending")) await applyChange(item);
+  }
+
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
       <header className="flex h-20 items-center justify-between border-b border-[var(--line)] px-5 sm:px-8 lg:px-12">
@@ -190,11 +194,14 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                     <div className={`chat-bubble ${message.role === "user" ? "is-user" : ""}`} key={`${message.role}-${index}`}>{message.text}</div>
                   ))}
                   {busy && <div className="chat-bubble"><span className="agent-pulse" /> Reading the family record…</div>}
+                  {proposals.length > 0 && proposals.some((item) => item.state === "pending") && <button className="w-full rounded-full bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90" onClick={applyAll}>Apply all {proposals.filter((item) => item.state === "pending").length} changes</button>}
                   {proposals.map((item) => (
                     <div className="proposal-card" key={item.id}>
                       <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-[var(--accent)]">Suggested change</p>
-                      <h3 className="mt-1 font-serif text-lg">{proposalLabel(item.proposal)}</h3>
+                      {item.proposal.kind === "add_person" && item.state === "pending" ? <input className="modal-input mt-1 font-serif text-lg" value={item.proposal.person.displayName} aria-label="Person name" onChange={(event) => setProposals((current) => current.map((candidate) => candidate.id === item.id && candidate.proposal.kind === "add_person" ? { ...candidate, proposal: { ...candidate.proposal, person: { ...candidate.proposal.person, displayName: event.target.value } } } : candidate))} /> : <h3 className="mt-1 font-serif text-lg">{proposalLabel(item.proposal)}</h3>}
                       <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{item.proposal.summary}</p>
+                      {item.proposal.kind === "add_person" && <div className="mt-3 rounded-xl bg-[var(--wash)] p-3 text-xs leading-5 text-[var(--muted)]"><p><strong>{item.proposal.person.birthDate || "Year unknown"}</strong>{item.proposal.person.birthCity || item.proposal.person.birthCountry ? ` · ${[item.proposal.person.birthCity, item.proposal.person.birthCountry].filter(Boolean).join(", ")}` : ""}</p>{item.proposal.person.biography && <p className="mt-1">{item.proposal.person.biography}</p>}</div>}
+                      {item.state === "pending" && <button className="mt-2 text-xs text-[var(--muted)] underline" onClick={() => setProposals((current) => current.filter((candidate) => candidate.id !== item.id))}>Dismiss</button>}
                       <button className="mt-3 w-full rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white disabled:cursor-default disabled:opacity-50" disabled={item.state === "applying" || item.state === "applied"} onClick={() => applyChange(item)}>
                         {item.state === "applied" ? "Added to the tree ✓" : item.state === "applying" ? "Applying…" : item.state === "error" ? "Try again" : "Review complete · apply"}
                       </button>
