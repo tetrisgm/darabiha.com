@@ -36,9 +36,18 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("2");
+  expect(version).toBe("3");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
   expect(response.headers()["cache-control"]).toContain("no-store");
+});
+
+test("hover state writes Safari-safe runtime cursor affordances", async ({ page }) => {
+  await page.goto("/");
+  const canvas = page.locator(".family-canvas");
+  await canvas.hover({ position: { x: 20, y: 20 } });
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.cursor)).toBe("grab");
+  await page.locator(".tree-card").first().hover();
+  await expect.poll(() => page.evaluate(() => document.documentElement.style.cursor)).toBe("pointer");
 });
