@@ -173,7 +173,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           </div>
         </aside>
         <button className={`chat-edge-reveal ${edgeReveal ? "is-visible" : ""}`} onClick={() => { setChatCollapsed(false); setEdgeReveal(false); }} aria-label="Show family chat" title="Show family chat">›</button>
-        <section className="relative h-screen min-h-screen overflow-hidden">
+        <section className="relative h-screen min-h-screen min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
           <div className="relative h-full min-h-screen">
 
