@@ -9,6 +9,7 @@
   --line: #d2d2d7;
   --accent: #0071e3;
 }
+html, body { overscroll-behavior: none; }
 
 @theme inline {
   --font-sans: var(--font-sans);
@@ -97,11 +98,12 @@ button { cursor: pointer; }
   .person-avatar { height: 2.25rem; width: 2.25rem; font-size: 1rem; }
 }
 
-.family-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; min-height: 100%; cursor: grab; touch-action:none; user-select:none; }
+.family-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; min-height: 100%; cursor: grab; touch-action:none; user-select:none; overscroll-behavior:none; }
 .family-canvas:active { cursor: grabbing; }
 .safari-tree-fallback { position:absolute; inset:0; pointer-events:none; opacity:.92; }
 .safari-tree-lines { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
 .safari-tree-lines line, .safari-tree-lines path { fill:none; stroke:#6f9cff; stroke-width:.35; opacity:.8; }
+.safari-tree-lines .spouse-link { stroke:#d6a75c; stroke-dasharray:1.2 1; stroke-width:.5; }
 .safari-tree-card { position:absolute; display:flex; width:clamp(10rem,18vw,15rem); min-height:5rem; transform:translate(-50%,-50%); flex-direction:column; justify-content:center; border:1px solid rgba(156,180,235,.45); border-radius:1rem; background:rgba(48,56,75,.96); padding:1rem; color:#fff; box-shadow:0 14px 40px rgba(0,0,0,.3); pointer-events:auto; text-align:left; }
 .safari-tree-card span { margin-top:.35rem; color:#c5d0e8; font-size:.75rem; }
 .safari-tree-card { cursor:pointer; }
