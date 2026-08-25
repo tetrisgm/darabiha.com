@@ -5,7 +5,7 @@ let initialized = false;
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS people (
     id TEXT PRIMARY KEY, display_name TEXT NOT NULL, given_name TEXT, family_name TEXT,
-    birth_date TEXT, death_date TEXT, birth_place TEXT, death_place TEXT, biography TEXT,
+    birth_date TEXT, death_date TEXT, birth_place TEXT, death_place TEXT, biography TEXT, photo_attachment_id TEXT,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS relationships (
@@ -42,7 +42,7 @@ export async function readTree(): Promise<FamilyTree> {
   const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult] = await Promise.all([
     env.DB.prepare(`SELECT id, display_name AS displayName, given_name AS givenName,
       family_name AS familyName, birth_date AS birthDate, death_date AS deathDate,
-      birth_place AS birthPlace, death_place AS deathPlace, biography FROM people ORDER BY display_name`).all<Person>(),
+      birth_place AS birthPlace, death_place AS deathPlace, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
     env.DB.prepare(`SELECT id, from_person_id AS fromPersonId, to_person_id AS toPersonId,
       type FROM relationships ORDER BY created_at`).all<Relationship>(),
     env.DB.prepare(`SELECT id, title, body, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
@@ -90,7 +90,7 @@ function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   return {
     displayName, givenName: nullable(input.givenName), familyName: nullable(input.familyName),
     birthDate: nullable(input.birthDate), deathDate: nullable(input.deathDate),
-    birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), biography: nullable(input.biography),
+    birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), biography: nullable(input.biography), photoAttachmentId: nullable(input.photoAttachmentId),
   };
 }
 
@@ -101,16 +101,16 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
   if (proposal.kind === "add_person") {
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
     statements.push(env.DB.prepare(`INSERT INTO people
-      (id, display_name, given_name, family_name, birth_date, death_date, birth_place, death_place, biography, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, display_name, given_name, family_name, birth_date, death_date, birth_place, death_place, biography, photo_attachment_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), person.displayName, person.givenName, person.familyName, person.birthDate,
-        person.deathDate, person.birthPlace, person.deathPlace, person.biography, now, now));
+        person.deathDate, person.birthPlace, person.deathPlace, person.biography, person.photoAttachmentId, now, now));
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
     statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, given_name = ?, family_name = ?, birth_date = ?,
-      death_date = ?, birth_place = ?, death_place = ?, biography = ?, updated_at = ? WHERE id = ?`)
+      death_date = ?, birth_place = ?, death_place = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
       .bind(person.displayName, person.givenName, person.familyName, person.birthDate, person.deathDate,
-        person.birthPlace, person.deathPlace, person.biography, now, proposal.personId));
+        person.birthPlace, person.deathPlace, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "add_relationship") {
     if (proposal.fromPersonId === proposal.toPersonId) throw new Error("A person cannot be related to themself.");
     if (!(["parent", "spouse"] as const).includes(proposal.relationshipType)) throw new Error("Unsupported relationship.");
@@ -129,5 +129,21 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), actorEmail, proposal.kind, proposal.summary, JSON.stringify(proposal), now));
   await env.DB.batch(statements);
+  return readTree();
+}
+
+export async function updatePerson(personId: string, patch: Record<string, unknown>, actorEmail: string) {
+  return applyProposal({ kind: "update_person", summary: "Updated person details", personId, patch: personValues(patch) }, actorEmail);
+}
+
+export async function addRelationship(fromPersonId: string, toPersonId: string, relationshipType: "parent" | "spouse", actorEmail: string) {
+  return applyProposal({ kind: "add_relationship", summary: "Added a family relationship", fromPersonId, toPersonId, relationshipType }, actorEmail);
+}
+
+export async function attachPersonPhoto(personId: string, file: File, actorEmail: string) {
+  const attachment = await saveAttachment(file, actorEmail);
+  await ensureSchema();
+  await env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ?")
+    .bind(attachment.id, new Date().toISOString(), personId).run();
   return readTree();
 }

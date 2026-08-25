@@ -8,6 +8,7 @@ export type Person = {
   birthPlace: string | null;
   deathPlace: string | null;
   biography: string | null;
+  photoAttachmentId: string | null;
 };
 
 export type Relationship = {

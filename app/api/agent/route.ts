@@ -86,6 +86,7 @@ function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
     birthPlace: args.birth_place as string | null,
     deathPlace: args.death_place as string | null,
     biography: args.biography as string | null,
+    photoAttachmentId: null,
   };
 }
 

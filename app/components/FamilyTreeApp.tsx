@@ -62,6 +62,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [proposals, setProposals] = useState<PendingProposal[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const generations = useMemo(() => generationGroups(tree), [tree]);
@@ -143,7 +144,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
               {generations.length ? generations.map((generation, generationIndex) => (
                 <div className="tree-generation relative flex w-full flex-wrap justify-center gap-4 sm:gap-8" key={generationIndex}>
                   {generation.map((person) => (
-                    <button className="person-card" key={person.id} title={person.biography || person.displayName}>
+                    <button className="person-card" key={person.id} title={person.biography || person.displayName} onClick={() => setSelectedPerson(person)}>
                       <span className="person-avatar" aria-hidden="true">{person.displayName.slice(0, 1).toUpperCase()}</span>
                       <span className="min-w-0 text-left">
                         <span className="block truncate font-serif text-lg leading-tight">{person.displayName}</span>
@@ -232,8 +233,27 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           </div>
         </aside>
       </div>
+      {selectedPerson && <PersonModal person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => setSelectedPerson(null)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
     </main>
   );
+}
+
+function PersonModal({ person, tree, canEdit, onClose, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onTreeChange: (tree: FamilyTree) => void }) {
+  const [form, setForm] = useState({ displayName: person.displayName, birthDate: person.birthDate ?? "", deathDate: person.deathDate ?? "", birthPlace: person.birthPlace ?? "", deathPlace: person.deathPlace ?? "", biography: person.biography ?? "" });
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const parents = tree.relationships.filter((link) => link.type === "parent" && link.toPersonId === person.id).map((link) => tree.people.find((candidate) => candidate.id === link.fromPersonId)).filter(Boolean) as Person[];
+  const children = tree.relationships.filter((link) => link.type === "parent" && link.fromPersonId === person.id).map((link) => tree.people.find((candidate) => candidate.id === link.toPersonId)).filter(Boolean) as Person[];
+  const spouses = tree.relationships.filter((link) => link.type === "spouse" && (link.fromPersonId === person.id || link.toPersonId === person.id)).map((link) => tree.people.find((candidate) => candidate.id === (link.fromPersonId === person.id ? link.toPersonId : link.fromPersonId))).filter(Boolean) as Person[];
+  async function save() { setSaving(true); setNotice(""); const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "update", personId: person.id, patch: form }) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; setSaving(false); if (response.ok && data.tree) { onTreeChange(data.tree); setNotice("Saved"); } else setNotice(data.error || "Could not save"); }
+  return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" aria-labelledby="person-modal-title" onClick={(event) => event.stopPropagation()}>
+    <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button>
+    {person.photoAttachmentId ? <img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <div className="person-modal-avatar">{person.displayName.slice(0, 1).toUpperCase()}</div>}
+    <p className="eyebrow">Family member</p><h2 id="person-modal-title" className="font-serif text-3xl">{person.displayName}</h2><p className="mt-1 text-sm text-[var(--muted)]">{lifeLine(person)}</p>
+    {person.biography && <p className="mt-5 text-sm leading-6">{person.biography}</p>}
+    <div className="modal-relationships">{[["Parents", parents], ["Spouse", spouses], ["Children", children]].map(([label, people]) => (people as Person[]).length ? <div key={label as string}><p className="eyebrow">{label as string}</p><div className="flex flex-wrap gap-2">{(people as Person[]).map((relative) => <button className="relationship-chip" key={relative.id} onClick={() => { onClose(); setTimeout(() => document.querySelector(`[title=\"${CSS.escape(relative.displayName)}\"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 0); }}>{relative.displayName}</button>)}</div></div> : null)}</div>
+    {canEdit && <div className="modal-editor"><p className="eyebrow">Edit record</p>{(["displayName", "birthDate", "deathDate", "birthPlace", "deathPlace"] as const).map((field) => <input key={field} className="modal-input" value={form[field]} placeholder={field.replace(/([A-Z])/g, " $1")} onChange={(event) => setForm({ ...form, [field]: event.target.value })} />)}<textarea className="modal-input min-h-20" value={form.biography} placeholder="Biography or notes" onChange={(event) => setForm({ ...form, biography: event.target.value })} /><div className="flex items-center justify-between"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white disabled:opacity-50" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save changes"}</button>{notice && <span className="text-xs text-[var(--muted)]">{notice}</span>}</div></div>}
+  </section></div>;
 }
 
 function EmptyTree({ canEdit }: { canEdit: boolean }) {

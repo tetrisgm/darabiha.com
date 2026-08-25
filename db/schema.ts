@@ -5,7 +5,7 @@ export const people = sqliteTable("people", {
   displayName: text("display_name").notNull(),
   givenName: text("given_name"), familyName: text("family_name"),
   birthDate: text("birth_date"), deathDate: text("death_date"),
-  birthPlace: text("birth_place"), deathPlace: text("death_place"), biography: text("biography"),
+  birthPlace: text("birth_place"), deathPlace: text("death_place"), biography: text("biography"), photoAttachmentId: text("photo_attachment_id"),
   createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 });
 export const relationships = sqliteTable("relationships", {

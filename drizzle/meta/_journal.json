@@ -15,6 +15,13 @@
       "when": 1787647561304,
       "tag": "0001_sparkling_ultimates",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787649808285,
+      "tag": "0002_chilly_zodiak",
+      "breakpoints": true
     }
   ]
 }

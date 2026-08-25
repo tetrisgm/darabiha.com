@@ -66,6 +66,18 @@ button { cursor: pointer; }
 .agent-pulse { display: inline-block; width: .45rem; height: .45rem; margin-right: .3rem; border-radius: 999px; background: var(--accent); animation: pulse 1s ease-in-out infinite alternate; }
 @keyframes pulse { to { opacity: .25; transform: scale(.75); } }
 
+.person-modal-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(47,42,36,.42); padding: 1rem; }
+.person-modal { position: relative; max-height: min(88vh, 760px); width: min(100%, 30rem); overflow-y: auto; border: 1px solid var(--line); border-radius: 1.5rem; background: var(--paper); padding: 2rem; box-shadow: 0 24px 90px rgba(47,42,36,.25); }
+.person-modal-close { position: absolute; right: 1rem; top: .75rem; color: var(--muted); font-size: 1.75rem; line-height: 1; }
+.person-modal-avatar, .person-modal-photo { display: flex; height: 5rem; width: 5rem; align-items: center; justify-content: center; border-radius: 999px; object-fit: cover; background: var(--wash); color: var(--accent); font-family: var(--font-serif), serif; font-size: 2rem; }
+.eyebrow { margin-bottom: .45rem; color: var(--accent); font-size: .65rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+.modal-relationships { display: grid; gap: 1rem; margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
+.relationship-chip { border: 1px solid var(--line); border-radius: 999px; background: white; padding: .4rem .7rem; font-size: .75rem; }
+.relationship-chip:hover { border-color: var(--accent); color: var(--accent); }
+.modal-editor { display: grid; gap: .55rem; margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1.25rem; }
+.modal-input { width: 100%; border: 1px solid var(--line); border-radius: .65rem; background: rgba(255,255,255,.7); padding: .6rem .7rem; font-size: .8rem; outline: none; }
+.modal-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+
 @media (max-width: 639px) {
   .person-card { width: min(12rem, 48%); gap: .6rem; padding: .7rem; }
   .person-avatar { height: 2.25rem; width: 2.25rem; font-size: 1rem; }
