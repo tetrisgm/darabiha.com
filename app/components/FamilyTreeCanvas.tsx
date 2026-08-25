@@ -26,6 +26,13 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
     if (typeof document === "undefined") return;
     document.documentElement.style.setProperty("cursor", cursor, "important");
   };
+  const setHitTargetCursor = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | SVGElement;
+    const card = target.closest?.(".tree-card");
+    const cursor = card ? "pointer" : "grab";
+    target.style.setProperty("cursor", cursor, "important");
+    setHoverCursor(cursor);
+  };
   const point = (person: Person) => {
     const group = groups.get(depth.get(person.id) ?? 0) ?? [];
     const index = group.findIndex((item) => item.id === person.id);
@@ -63,7 +70,7 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
     else if (event.key === "0") setView({ x: 0, y: 0, scale: 1 });
   };
   const parentGroups = [...new Set(tree.relationships.filter((link) => link.type === "parent").map((link) => link.toPersonId))].map((childId) => ({ child: tree.people.find((person) => person.id === childId), parents: tree.relationships.filter((link) => link.type === "parent" && link.toPersonId === childId).map((link) => tree.people.find((person) => person.id === link.fromPersonId)).filter(Boolean) as Person[] })).filter((group) => group.child && group.parents.length);
-  return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} onMouseEnter={() => setHoverCursor("grab")} onMouseLeave={() => setHoverCursor("auto")} onKeyDown={keyDown} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onWheel={zoom}>
+  return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} onMouseEnter={() => setHoverCursor("grab")} onMouseLeave={() => setHoverCursor("auto")} onKeyDown={keyDown} onPointerDown={begin} onPointerMove={(event) => { setHitTargetCursor(event); move(event); }} onPointerUp={end} onPointerCancel={end} onWheel={zoom}>
     <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
       <svg className="tree-connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
         {tree.relationships.filter((link) => link.type === "spouse").map((link) => { const from = tree.people.find((person) => person.id === link.fromPersonId); const to = tree.people.find((person) => person.id === link.toPersonId); if (!from || !to) return null; const a = point(from); const b = point(to); return <line className="spouse-connector" key={link.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />; })}

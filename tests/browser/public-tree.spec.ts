@@ -36,7 +36,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("3");
+  expect(version).toBe("4");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
@@ -48,6 +48,12 @@ test("hover state writes Safari-safe runtime cursor affordances", async ({ page 
   const canvas = page.locator(".family-canvas");
   await canvas.hover({ position: { x: 20, y: 20 } });
   await expect.poll(() => page.evaluate(() => document.documentElement.style.cursor)).toBe("grab");
+  expect(await page.evaluate(() => getComputedStyle(document.elementFromPoint(20, 20)!).cursor)).toBe("grab");
   await page.locator(".tree-card").first().hover();
   await expect.poll(() => page.evaluate(() => document.documentElement.style.cursor)).toBe("pointer");
+  const text = page.locator(".tree-card strong").first();
+  const box = await text.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  expect(await page.evaluate(({ x, y }) => getComputedStyle(document.elementFromPoint(x, y)!).cursor, { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 })).toBe("pointer");
 });

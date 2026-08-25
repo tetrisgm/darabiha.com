@@ -125,6 +125,7 @@ button { cursor: pointer; }
 
 .family-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; min-height: 100%; cursor: -webkit-grab !important; cursor: grab !important; touch-action:none; user-select:none; overscroll-behavior:none; }
 .family-canvas .tree-viewport, .family-canvas .tree-connectors { cursor: -webkit-grab !important; cursor: grab !important; }
+.family-canvas .tree-connectors * { cursor: inherit !important; }
 .family-canvas .tree-card { cursor: pointer !important; }
 /* Safari can fall back to `auto` on nested text/image descendants unless the
    card's affordance is explicitly inherited at every pixel of the hit area. */
