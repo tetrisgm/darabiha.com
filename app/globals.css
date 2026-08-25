@@ -88,6 +88,29 @@ button { cursor: pointer; }
 .person-modal .eyebrow { letter-spacing: .13em; }
 .relationship-chip { border: 1px solid var(--line); border-radius: 999px; background: white; padding: .4rem .7rem; font-size: .75rem; }
 .relationship-chip:hover { border-color: var(--accent); color: var(--accent); }
+.person-modal-v2 { width: min(100%, 64rem); padding: 3.5rem; }
+.person-modal-hero { display:flex; gap:1.5rem; align-items:center; }
+.person-title-row, .relationship-heading, .editor-actions { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
+.edit-pencil { border:1px solid var(--line); border-radius:999px; width:2.25rem; height:2.25rem; color:var(--muted); }
+.edit-pencil:hover, .relationship-add:hover { color:var(--accent); border-color:var(--accent); }
+.person-life-line { margin-top:.35rem; color:var(--muted); }
+.person-facts { display:grid; grid-template-columns:1fr 1fr; gap:2rem; margin-top:2rem; border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:1.25rem 0; color:var(--muted); }
+.person-facts p { margin-top:.3rem; line-height:1.5; }
+.person-biography { margin-top:1.5rem; max-width:48rem; color:#3b3b3d; font-family:var(--font-serif),Georgia,serif; font-size:1.1rem; line-height:1.8; }
+.relationship-group { margin-top:1.4rem; }
+.relationship-add { border:1px solid var(--line); border-radius:999px; width:1.8rem; height:1.8rem; color:var(--muted); }
+.relationship-chips { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.5rem; }
+.relationship-chip-wrap { display:inline-flex; align-items:center; gap:.2rem; }
+.relationship-remove { color:#b42318; font-size:1.1rem; line-height:1; }
+.person-editor-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.person-editor-field { display:grid; gap:.3rem; color:var(--muted); font-size:.72rem; font-weight:600; }
+.person-editor-wide { grid-column:1/-1; }
+.person-editor-field .modal-input { margin-top:0; }
+.relationship-editor-v2 { margin-top:1.5rem; border-top:1px solid var(--line); padding-top:1.25rem; }
+.relationship-picker { display:grid; grid-template-columns:1fr auto auto; gap:.5rem; margin-top:.6rem; }
+.modal-notice { margin-top:1rem; color:var(--muted); font-size:.8rem; }
+.avatar-upload-hint { display:block; margin-top:.3rem; font-family:inherit; font-size:.65rem; }
+@media (max-width: 639px) { .person-modal-v2 { padding:2rem 1.25rem; } .person-facts, .person-editor-grid, .relationship-picker { grid-template-columns:1fr; } .person-modal-hero { align-items:flex-start; flex-direction:column; } }
 .relationship-group { border-radius: 1rem; padding: .55rem; }
 .relationship-add { display: inline-flex; width: 1.6rem; height: 1.6rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: var(--wash); color: var(--ink); font-size: 1rem; line-height: 1; }
 .relationship-add:hover { border-color: var(--accent); color: var(--accent); }
