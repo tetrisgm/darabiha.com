@@ -127,15 +127,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         <section className="relative overflow-hidden px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
           <div className="absolute inset-0 tree-grid opacity-45" aria-hidden="true" />
           <div className="relative mx-auto max-w-5xl">
-            <div className="mb-10 flex flex-wrap items-end justify-between gap-5">
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Family tree</p>
-                <h1 className="max-w-2xl font-serif text-4xl leading-[1.05] tracking-[-0.035em] sm:text-5xl">A living record of where we come from.</h1>
-              </div>
-              <div className="flex items-center gap-2"><span className="rounded-full border border-[var(--line)] bg-white/75 px-4 py-2 text-xs text-[var(--muted)]">
-                {tree.people.length} {tree.people.length === 1 ? "person" : "people"} · {tree.stories.length} {tree.stories.length === 1 ? "story" : "stories"}
-              </span>{viewer.canEdit && <button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add person</button>}</div>
-            </div>
+            {viewer.canEdit && <div className="mb-4 flex justify-end"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add person</button></div>}
 
             <div className="relative min-h-[580px] overflow-hidden rounded-[2rem] border border-[#26363a] bg-[#08090b] shadow-[0_24px_80px_rgba(62,45,28,0.12)]">
               {tree.people.length ? <FamilyTreeCanvas tree={tree} onSelect={setSelectedPerson} /> : <EmptyTree canEdit={viewer.canEdit} />}
