@@ -289,13 +289,13 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
   }
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
-      <div className="flex-1 overflow-y-auto pb-5 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto pb-5 text-center">
         <h3 className="mt-0 font-serif text-2xl">Find a person or story</h3>
         <p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>
+        <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">{signedIn ? "You're signed in, but this Apple account isn't authorized to edit this family tree." : "Sign in with Apple only when you want to edit this family tree. Browsing and asking questions are available without signing in."}</p>
         {reply && <p className="mt-5 rounded-2xl border border-[var(--line)] bg-white p-4 text-left text-sm leading-6">{reply}</p>}
       </div>
       <div>
-        <p className="public-chat-note mb-3 text-center text-xs leading-5 text-[var(--muted)]">{signedIn ? "Your account is not on the editor list." : "Sign in with Apple to edit the family tree."}</p>
         <div className="public-chat-composer relative w-full rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
           <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(); } }} className="min-h-24 w-full resize-none bg-transparent px-2 py-1 pr-12 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Who are the children of…?" aria-label="Search the family archive" />
           <button onClick={ask} disabled={busy || !question.trim()} className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" aria-label="Search the family archive">↑</button>
