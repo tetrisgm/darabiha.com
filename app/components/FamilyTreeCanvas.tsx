@@ -53,8 +53,12 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
     if (!cursor || event.pointerType === "touch") return;
     cursor.style.left = `${event.clientX}px`;
     cursor.style.top = `${event.clientY}px`;
-    cursor.dataset.visible = "true";
     const target = event.target as Element;
+    if (target.closest?.(".canvas-controls")) {
+      cursor.dataset.visible = "false";
+      return;
+    }
+    cursor.dataset.visible = "true";
     setCursorMode(gesture.current ? "grabbing" : target.closest?.(".tree-card") ? "pointer" : "grab");
   };
   const hideCursor = () => {
