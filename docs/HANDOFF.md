@@ -20,7 +20,8 @@
 - Apple web authentication values (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `AUTH_SESSION_SECRET`, and `PUBLIC_ORIGIN`).
 - The comma-separated Apple Account emails that may edit the tree, saved as `EDITOR_EMAILS`.
 - The Apple Services ID and `https://darabiha.com/api/auth/apple/callback` return URL still need to be registered in the Apple Developer console. The currently available browser is logged out of that console.
-- Apple Services ID/client ID registration remains the only auth setup blocker. The Apple Developer console currently requires an interactive Apple Account sign-in/2FA; once registered, set `APPLE_CLIENT_ID` and `APPLE_PRIVATE_KEY` as Worker secrets and redeploy.
+- Apple Sign in with Apple is configured for the Darabiha-specific App ID `com.darabiha.web` and Services ID `com.darabiha.family`; `https://darabiha.com/api/auth/apple/callback` is registered and the live start endpoint returns 302 to Apple.
+- `OPENAI_API_KEY` is still absent from the Worker runtime, so the archivist sidebar will report that it is not configured until an OpenAI API key is added as a Worker secret.
 
 ## Validation
 
