@@ -289,8 +289,8 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
   }
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
-      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto pb-5 text-center">
-        {!asked.length ? <><h3 className="mt-0 font-serif text-2xl">Find a person or story</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You're signed in, but this Apple account isn't authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Syncing…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
+      <div className={`flex flex-1 flex-col items-center overflow-y-auto pb-5 text-center ${asked.length ? "justify-start" : "justify-center"}`}>
+        {!asked.length ? <><h3 className="mt-0 font-serif text-2xl">Find a person or story</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Search the public archive by asking about people, relationships, dates, or stories.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You're signed in, but this Apple account isn't authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
       </div>
       <div>
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
