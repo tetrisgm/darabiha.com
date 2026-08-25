@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "darabiha-family",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-08-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "dist/client" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "darabiha-family",
+      "database_id": "e0577177-db86-4e15-8db6-d85323117fa9"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "darabiha-family-files" }
+  ],
+  "observability": { "enabled": true }
+}
