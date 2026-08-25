@@ -1,6 +1,11 @@
 import { getAppleUser, type AppleUser } from "./apple-auth";
 
+// TEMPORARY TEST MODE: set false to restore Apple sign-in and the editor allowlist.
+export const TEMPORARY_OPEN_EDITOR = true;
+const temporaryEditor: AppleUser = { subject: "temporary-open-editor", email: "temporary-open-editor@darabiha.com", displayName: "Temporary editor" };
+
 export function isEditor(user: AppleUser | null): boolean {
+  if (TEMPORARY_OPEN_EDITOR) return true;
   if (!user) return false;
   const configured = (process.env.EDITOR_EMAILS ?? "")
     .split(",")
@@ -19,6 +24,7 @@ export async function requireEditor(): Promise<
   { ok: true; user: AppleUser } | { ok: false; response: Response }
 > {
   const user = await getAppleUser();
+  if (TEMPORARY_OPEN_EDITOR) return { ok: true, user: user ?? temporaryEditor };
   if (!user) {
     return {
       ok: false,

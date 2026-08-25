@@ -11,6 +11,7 @@ type Props = {
   viewer: { signedIn: boolean; canEdit: boolean; displayName: string | null };
   signInPath: string;
   signOutPath: string;
+  signInEnabled: boolean;
 };
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
@@ -56,7 +57,7 @@ function formatDate(value: string | null) {
 }
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
-export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOutPath }: Props) {
+export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOutPath, signInEnabled }: Props) {
   const [tree, setTree] = useState(initialTree);
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -130,7 +131,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       <header className={`site-action-bar absolute top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8 ${chatCollapsed ? "is-chat-collapsed" : ""}`}>
         <p className="text-base font-semibold tracking-[-.01em]">Darabiha</p>
         <div className="relative flex items-center gap-4">
-          {!viewer.signedIn && <><span className="text-sm text-[var(--muted)]">Sign in to edit</span><a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a></>}
+          {signInEnabled && !viewer.signedIn && <><span className="text-sm text-[var(--muted)]">Sign in to edit</span><a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a></>}
           {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
         </div>
       </header>

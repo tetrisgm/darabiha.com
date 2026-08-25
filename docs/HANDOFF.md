@@ -2,6 +2,11 @@
 
 ## Current state
 
+### Temporary open-editor test mode (2026-08-25)
+
+- `app/authz.ts` has `TEMPORARY_OPEN_EDITOR = true` so unauthenticated visitors can use the full editor and mutation APIs while Apple sign-in is unavailable for testing.
+- The switch is intentionally isolated and documented; set it to `false` to restore Apple sign-in and the `EDITOR_EMAILS` allowlist. Do not leave this mode enabled for a public production launch.
+
 ### 2026-08-25 Safari cursor diagnosis and Version 6
 
 - Production is Version 6 (`BUILD_ID=825a006`), deployment `4f0a007d-acac-419c-8440-89a0169fd852`, commit `8d3f6ba`.

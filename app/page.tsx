@@ -1,6 +1,6 @@
 import FamilyTreeApp from "./components/FamilyTreeApp";
 import { appleSignInPath, appleSignOutPath, getAppleUser } from "./apple-auth";
-import { isEditor } from "./authz";
+import { isEditor, TEMPORARY_OPEN_EDITOR } from "./authz";
 import { readTree } from "../db/store";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +13,7 @@ export default async function Home() {
       viewer={{ signedIn: Boolean(user), canEdit: isEditor(user), displayName: user?.displayName ?? null }}
       signInPath={appleSignInPath("/")}
       signOutPath={appleSignOutPath("/")}
+      signInEnabled={!TEMPORARY_OPEN_EDITOR}
     />
   );
 }
