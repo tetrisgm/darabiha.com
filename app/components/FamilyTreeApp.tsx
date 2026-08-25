@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import type { ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
+import { BUILD_ID } from "../../lib/build";
 
 type Props = {
   initialTree: FamilyTree;
@@ -121,7 +122,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   }
 
   return (
-    <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
+    <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]" data-build-id={BUILD_ID}>
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <div className="grid h-screen min-h-screen lg:grid-cols-[minmax(0,1fr)_390px]">

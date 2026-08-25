@@ -30,3 +30,13 @@ test("canvas and cards expose distinct cursor affordances", async ({ page }) => 
   await expect(page.locator(".tree-viewport")).toHaveCSS("cursor", "grab");
   await expect(page.locator(".tree-card").first()).toHaveCSS("cursor", "pointer");
 });
+
+test("live page exposes an uncached deployment identity", async ({ page }) => {
+  await page.goto("/");
+  const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
+  expect(build).toMatch(/^[0-9a-f]{7,}$/);
+  const response = await page.request.get("/api/version");
+  expect(response.ok()).toBeTruthy();
+  expect((await response.json()).build).toBe(build);
+  expect(response.headers()["cache-control"]).toContain("no-store");
+});
