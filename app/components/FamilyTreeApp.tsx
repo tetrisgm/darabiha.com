@@ -131,7 +131,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
             <div className="workspace-header mb-5 flex items-center justify-between">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="min-w-0"><p className="truncate text-base font-semibold tracking-[-.01em]">Darabiha</p><button type="button" className="workspace-branch">family archive <span aria-hidden="true">⌄</span></button></div>
+                <p className="truncate text-base font-semibold tracking-[-.01em]">Darabiha</p>
               </div>
               <div className="flex items-center gap-1">
                 <button className="sidebar-toggle" onClick={() => setChatCollapsed(true)} aria-label="Collapse family chat" title="Collapse family chat">

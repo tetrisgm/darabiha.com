@@ -31,8 +31,6 @@ button { cursor: pointer; }
 .account-menu-button { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: .55rem; color: var(--muted); font-size: 1.25rem; line-height: 1; letter-spacing: .08em; }
 .account-menu-button:hover { border-color: var(--line); background: var(--wash); color: var(--ink); }
 .workspace-header { min-height: 2.75rem; }
-.workspace-branch { display: inline-flex; align-items: center; gap: .35rem; border: 0; padding: 0; color: var(--muted); font-size: .8rem; line-height: 1.15; }
-.workspace-branch:hover { color: var(--ink); }
 .workspace-icon { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: .55rem; color: var(--muted); font-size: 1.35rem; line-height: 1; }
 .workspace-icon:hover { border-color: var(--line); background: var(--wash); color: var(--ink); }
 .editor-composer { min-height: 12rem; border-radius: 1.75rem !important; padding: 1.2rem !important; box-shadow: 0 8px 24px rgba(0,0,0,.06); }
