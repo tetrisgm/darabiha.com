@@ -11,6 +11,13 @@ function cardDate(value: string | null) {
   return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
+function genderGlyph(person: Person) {
+  const given = (person.givenName || person.displayName.split(/\s+/)[0] || "").toLocaleLowerCase();
+  const female = new Set(["jila", "parissima", "parisa", "maryam", "sara", "fatemeh", "zahra"]);
+  const male = new Set(["ramine", "nasser", "ali", "reza", "mehdi", "hamid", "hassan"]);
+  return female.has(given) ? "♀" : male.has(given) ? "♂" : "•";
+}
+
 export function clampScale(scale: number) { return Math.max(0.5, Math.min(3, scale)); }
 export function zoomView(view: { x: number; y: number; scale: number }, factor: number, cursor: { x: number; y: number }) {
   const scale = clampScale(view.scale * factor);
@@ -35,6 +42,12 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
   const gesture = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
   const zoomBy = (factor: number) => setView((current) => zoomView(current, factor, { x: 0, y: 0 }));
+  const centerOn = (person: Person) => {
+    const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
+    if (!rect) return;
+    const p = point(person);
+    setView((current) => ({ ...current, x: -((p.x - 50) / 100) * rect.width * current.scale, y: -((p.y - 50) / 100) * rect.height * current.scale }));
+  };
   const positionCursor = (event: React.PointerEvent<HTMLDivElement>) => {
     const cursor = cursorRef.current;
     if (!cursor || event.pointerType === "touch") return;
@@ -105,7 +118,7 @@ export function FamilyTreeCanvas({ tree, onSelect }: { tree: FamilyTree; onSelec
         {tree.relationships.filter((link) => link.type === "spouse").map((link) => { const from = tree.people.find((person) => person.id === link.fromPersonId); const to = tree.people.find((person) => person.id === link.toPersonId); if (!from || !to) return null; const a = point(from); const b = point(to); return <line className="spouse-connector" key={link.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />; })}
         {parentGroups.map(({ child, parents }) => { if (!child) return null; const childPoint = point(child); const parentPoints = parents.map(point); const left = Math.min(...parentPoints.map((item) => item.x)); const right = Math.max(...parentPoints.map((item) => item.x)); const junctionY = childPoint.y - 14; return <g className="parent-connector" key={child.id}><line x1={left} y1={parentPoints[0].y} x2={right} y2={parentPoints[0].y} /><line x1={(left + right) / 2} y1={parentPoints[0].y} x2={(left + right) / 2} y2={junctionY} /><line x1={left} y1={junctionY} x2={right} y2={junctionY} /><line x1={childPoint.x} y1={junctionY} x2={childPoint.x} y2={childPoint.y} /></g>; })}
       </svg>
-      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); return <button className="tree-card" style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => onSelect(person)} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className="tree-card" style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
     </div>
     <CanvasCursor mode={cursorMode} cursorRef={cursorRef} />
   </div>;
