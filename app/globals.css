@@ -25,8 +25,11 @@ button { cursor: pointer; }
 .chat-sidebar { position: relative; z-index: 30; width: 390px; flex: 0 0 390px; overflow: hidden; transition: width 220ms ease, flex-basis 220ms ease, border-color 220ms ease; }
 .chat-sidebar.is-collapsed { width: 0; flex-basis: 0; border-color: transparent; padding: 0; }
 .chat-sidebar.is-collapsed > div { opacity: 0; pointer-events: none; }
-.sidebar-toggle { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 1.45rem; line-height: 1; transition: 160ms ease; }
+.sidebar-toggle { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: .55rem; color: var(--muted); line-height: 1; transition: 160ms ease; }
+.sidebar-toggle svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
 .sidebar-toggle:hover { border-color: var(--accent); color: var(--accent); background: var(--wash); }
+.account-menu-button { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: .55rem; color: var(--muted); font-size: 1.25rem; line-height: 1; letter-spacing: .08em; }
+.account-menu-button:hover { border-color: var(--line); background: var(--wash); color: var(--ink); }
 .chat-edge-reveal { position: fixed; left: 0; top: 50%; z-index: 40; display: flex; height: 4.5rem; width: 1.6rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-left: 0; border-radius: 0 .8rem .8rem 0; background: rgba(255,255,255,.94); color: var(--muted); font-size: 1.4rem; opacity: 0; pointer-events: none; transform: translateY(-50%) translateX(-.4rem); transition: opacity 160ms ease, transform 160ms ease, color 160ms ease; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
 .chat-edge-reveal.is-visible { opacity: 1; pointer-events: auto; transform: translateY(-50%) translateX(0); }
 .chat-edge-reveal:hover { color: var(--accent); }
