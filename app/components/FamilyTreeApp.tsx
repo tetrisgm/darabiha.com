@@ -136,9 +136,13 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       <div className="family-shell flex h-screen min-h-screen">
         <aside className={`chat-sidebar flex min-h-0 flex-col border-b border-[var(--line)] bg-[var(--sidebar)] lg:border-b-0 lg:border-r ${chatCollapsed ? "is-collapsed" : ""}`} aria-label="Family chat">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6 sm:px-8">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="eyebrow mb-0">Family chat</span>
+            <div className="workspace-header mb-5 flex items-center justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="workspace-mark" aria-hidden="true" />
+                <div className="min-w-0"><p className="truncate text-base font-semibold tracking-[-.01em]">Darabiha</p><button type="button" className="workspace-branch">family archive <span aria-hidden="true">⌄</span></button></div>
+              </div>
               <div className="flex items-center gap-1">
+                <button className="workspace-icon" aria-label="Activity" title="Activity">◷</button>
                 <button className="sidebar-toggle" onClick={() => setChatCollapsed(true)} aria-label="Collapse family chat" title="Collapse family chat">
                   <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="3" width="15" height="14" rx="2" /><path d="M7 3v14M11.5 7.5 9 10l2.5 2.5" /></svg>
                 </button>
@@ -163,12 +167,12 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                 <div className="pt-5">
                   <button className="mb-4 rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add a person</button>
                   {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
-                  <div className="rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
+                  <div className="editor-composer rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Tell me what you remember…" aria-label="Message the family archivist" />
                     <div className="mt-2 flex items-center justify-between">
                       <input ref={fileRef} className="sr-only" type="file" multiple accept=".pdf,.txt,.md,.csv,.docx,.xlsx,image/jpeg,image/png,image/webp,image/gif" onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
-                      <button className="flex h-9 items-center gap-2 rounded-full px-3 text-xs font-medium text-[var(--muted)] transition hover:bg-[var(--wash)]" onClick={() => fileRef.current?.click()}><span className="text-lg" aria-hidden="true">＋</span> Attach</button>
-                      <button className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
+                      <div className="flex items-center gap-2"><button className="composer-circle" onClick={() => fileRef.current?.click()} aria-label="Attach a document or photo"><span aria-hidden="true">＋</span></button><button className="composer-mode" type="button">Add to tree <span aria-hidden="true">⌄</span></button></div>
+                      <div className="flex items-center gap-2"><button className="composer-circle composer-mic" type="button" aria-label="Voice input">◉</button><button className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button></div>
                     </div>
                   </div>
                 </div>
@@ -296,7 +300,7 @@ function PublicArchiveChat({ signedIn }: { signedIn: boolean }) {
         {reply && <p className="mt-5 rounded-2xl border border-[var(--line)] bg-white p-4 text-left text-sm leading-6">{reply}</p>}
       </div>
       <div>
-        <div className="public-chat-composer relative w-full rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
+        <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
           <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(); } }} className="min-h-24 w-full resize-none bg-transparent px-2 py-1 pr-12 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Who are the children of…?" aria-label="Search the family archive" />
           <button onClick={ask} disabled={busy || !question.trim()} className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" aria-label="Search the family archive">↑</button>
         </div>

@@ -30,6 +30,18 @@ button { cursor: pointer; }
 .sidebar-toggle:hover { border-color: var(--accent); color: var(--accent); background: var(--wash); }
 .account-menu-button { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: .55rem; color: var(--muted); font-size: 1.25rem; line-height: 1; letter-spacing: .08em; }
 .account-menu-button:hover { border-color: var(--line); background: var(--wash); color: var(--ink); }
+.workspace-header { min-height: 2.75rem; }
+.workspace-mark { display: block; height: 1.65rem; width: 1.65rem; border-radius: .55rem .55rem .55rem .2rem; background: linear-gradient(145deg, #ff4f9a 8%, #ff6a3d 42%, #8b5cf6 70%, #16b8a6 100%); box-shadow: inset 0 -5px 8px rgba(255,255,255,.22); }
+.workspace-branch { display: inline-flex; align-items: center; gap: .35rem; border: 0; padding: 0; color: var(--muted); font-size: .8rem; line-height: 1.15; }
+.workspace-branch:hover { color: var(--ink); }
+.workspace-icon { display: inline-flex; height: 2rem; width: 2rem; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: .55rem; color: var(--muted); font-size: 1.35rem; line-height: 1; }
+.workspace-icon:hover { border-color: var(--line); background: var(--wash); color: var(--ink); }
+.editor-composer { min-height: 10.5rem; }
+.composer-circle { display: inline-flex; height: 2.5rem; width: 2.5rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: white; color: var(--ink); font-size: 1.35rem; line-height: 1; transition: 160ms ease; }
+.composer-circle:hover { border-color: var(--accent); color: var(--accent); background: var(--wash); }
+.composer-mic { font-size: .95rem; }
+.composer-mode { display: inline-flex; align-items: center; gap: .45rem; border: 1px solid var(--line); border-radius: 999px; padding: .6rem .85rem; color: var(--ink); font-size: .78rem; font-weight: 600; }
+.composer-mode:hover { border-color: var(--accent); color: var(--accent); }
 .chat-edge-reveal { position: fixed; left: 0; top: 50%; z-index: 40; display: flex; height: 4.5rem; width: 1.6rem; align-items: center; justify-content: center; border: 1px solid var(--line); border-left: 0; border-radius: 0 .8rem .8rem 0; background: rgba(255,255,255,.94); color: var(--muted); font-size: 1.4rem; opacity: 0; pointer-events: none; transform: translateY(-50%) translateX(-.4rem); transition: opacity 160ms ease, transform 160ms ease, color 160ms ease; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
 .chat-edge-reveal.is-visible { opacity: 1; pointer-events: auto; transform: translateY(-50%) translateX(0); }
 .chat-edge-reveal:hover { color: var(--accent); }
