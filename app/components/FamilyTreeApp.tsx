@@ -123,16 +123,12 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
   return (
     <main className="min-h-screen bg-[var(--paper)] text-[var(--ink)]">
-      <header className="relative z-30 flex h-20 items-center justify-between border-b border-[var(--line)] bg-[var(--paper)] px-5 sm:px-8 lg:px-12">
-        <Link className="font-serif text-xl tracking-[-0.02em]" href="/">Darabiha</Link>
-        {!viewer.signedIn && <a className="rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a>}
-      </header>
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
-      <div className="grid min-h-[calc(100vh-5rem)] lg:grid-cols-[minmax(0,1fr)_390px]">
-        <section className="relative min-h-[calc(100vh-5rem)] overflow-hidden">
+      <div className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_390px]">
+        <section className="relative min-h-screen overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
-          <div className="relative h-full min-h-[calc(100vh-5rem)]">
+          <div className="relative h-full min-h-screen">
 
             <h1 className="pointer-events-none absolute left-6 top-6 z-10 font-serif text-2xl tracking-[-0.02em] text-white sm:left-10 sm:top-8 sm:text-3xl">Darabiha family tree</h1>
 
