@@ -1,5 +1,5 @@
 import { requireEditor } from "../../authz";
-import { addRelationship, applyProposal, attachPersonPhoto, readTree, removePerson, removeRelationship, updatePerson } from "../../../db/store";
+import { addRelationship, applyProposal, attachPersonPhoto, readTree, removePerson, removePersonPhoto, removeRelationship, updatePerson } from "../../../db/store";
 
 export const runtime = "edge";
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     }
     if (action === "remove") return Response.json({ ok: true, tree: await removePerson(String(body.personId ?? ""), auth.user.email) });
     if (action === "remove_relationship") return Response.json({ ok: true, tree: await removeRelationship(String(body.relationshipId ?? ""), auth.user.email) });
+    if (action === "remove_photo") return Response.json({ ok: true, tree: await removePersonPhoto(String(body.personId ?? ""), auth.user.email) });
     if (action === "add") {
       const displayName = String(body.displayName ?? "").trim();
       if (!displayName) return Response.json({ error: "display_name_required" }, { status: 400 });

@@ -173,6 +173,16 @@ export async function attachPersonPhoto(personId: string, file: File, actorEmail
   return readTree();
 }
 
+export async function removePersonPhoto(personId: string, actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE people SET photo_attachment_id = NULL, updated_at = ? WHERE id = ?").bind(now, personId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "remove_person_photo", "Removed a family portrait", JSON.stringify({ personId }), now),
+  ]);
+  return readTree();
+}
+
 export async function removePerson(personId: string, actorEmail: string) {
   await ensureSchema();
   const now = new Date().toISOString();
