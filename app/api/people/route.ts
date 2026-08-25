@@ -31,7 +31,11 @@ export async function POST(request: Request) {
     if (action === "add") {
       const displayName = String(body.displayName ?? "").trim();
       if (!displayName) return Response.json({ error: "display_name_required" }, { status: 400 });
-      return Response.json({ ok: true, tree: await applyProposal({ kind: "add_person", summary: "Added a family member", person: { displayName, givenName: null, familyName: null, birthDate: null, deathDate: null, birthPlace: null, deathPlace: null, birthCity: null, birthCountry: null, deathCity: null, deathCountry: null, biography: null, photoAttachmentId: null } }, auth.user.email) });
+      const text = (key: string) => {
+        const value = body[key];
+        return typeof value === "string" && value.trim() ? value.trim() : null;
+      };
+      return Response.json({ ok: true, tree: await applyProposal({ kind: "add_person", summary: "Added a family member", person: { displayName, givenName: null, familyName: null, birthDate: text("birthDate"), deathDate: text("deathDate"), birthPlace: null, deathPlace: null, birthCity: text("birthCity"), birthCountry: text("birthCountry"), deathCity: text("deathCity"), deathCountry: text("deathCountry"), biography: text("biography"), photoAttachmentId: null } }, auth.user.email) });
     }
     if (action === "relationship") {
       const relationshipType = body.relationshipType === "spouse" ? "spouse" : "parent";
