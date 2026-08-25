@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { ChangeProposal, FamilyTree, Person } from "../../lib/types";
+import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { BUILD_ID, VERSION } from "../../lib/build";
@@ -89,9 +89,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     files.forEach((file) => form.append("files", file));
     try {
       const response = await fetch("/api/agent", { method: "POST", body: form });
-      const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; error?: string };
+      const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; conflicts?: AgentConflict[]; error?: string };
       if (!response.ok) throw new Error(data.error || "request_failed");
-      setMessages([...nextMessages, { role: "assistant", text: data.proposals?.length ? `Done — I added ${data.proposals.length} updates to the family tree.` : (data.reply || "Done.") }]);
+      const applied = data.proposals?.length ? `Done — I applied ${data.proposals.length} ${data.proposals.length === 1 ? "update" : "updates"} to the family tree.` : "";
+      const questions = data.conflicts?.map((conflict) => `${conflict.question}\n${conflict.evidence.join(" · ")}`).join("\n\n") || "";
+      setMessages([...nextMessages, { role: "assistant", text: [applied, questions || (!applied ? data.reply : "")].filter(Boolean).join("\n\n") || "Done." }]);
       if (data.proposals?.length) {
         const imported = data.proposals!.map((proposal) => ({ id: crypto.randomUUID(), proposal, state: "pending" as const }));
         setProposals((current) => [...current, ...imported]);
@@ -104,7 +106,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       const friendly = code === "openai_not_configured"
         ? "The archivist is ready, but the OpenAI key still needs to be connected."
         : code === "unsupported_file_type" ? "That file type is not supported yet. Try a PDF, image, text file, Word document, or spreadsheet."
-        : code === "files_too_large" ? "Those files are too large. Keep each file under 10 MB and the total under 20 MB."
+        : code === "files_too_large" ? "Those files are too large. Keep each file under 50 MB and the total under 100 MB."
         : "The archivist could not finish that request. Please try again.";
       setError(friendly);
     } finally { setBusy(false); }

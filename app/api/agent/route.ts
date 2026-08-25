@@ -3,22 +3,16 @@ import { Buffer } from "node:buffer";
 import { strFromU8, unzipSync } from "fflate";
 import { requireEditor } from "../../authz";
 import { readTree, saveAttachment } from "../../../db/store";
-import type { ChangeProposal, Person } from "../../../lib/types";
+import { reconcileProposals } from "../../../lib/agent-reconcile";
+import type { AgentConflict, ChangeProposal, Person } from "../../../lib/types";
 
 export const runtime = "edge";
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRY_BYTES = 4 * 1024 * 1024;
+const MAX_ARCHIVE_EXTRACTED_BYTES = 30 * 1024 * 1024;
 const MAX_MESSAGE_CHARS = 8_000;
-const ALLOWED_TYPES = new Set([
-  "application/pdf", "text/plain", "text/csv", "text/markdown",
-  "text/html", "text/css", "text/javascript", "application/javascript", "application/json", "application/xml", "text/xml",
-  "application/zip", "application/x-zip-compressed",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "image/jpeg", "image/png", "image/webp", "image/gif",
-]);
-
 const nullableString = { type: ["string", "null"] } as const;
 const personProperties = {
   display_name: { type: "string", description: "The person's public display name." },
@@ -77,6 +71,60 @@ const tools = [
       required: ["summary", "title", "body", "date", "place", "person_ids", "attachment_ids"],
     },
   },
+  {
+    type: "function", name: "propose_delete_person", strict: true,
+    description: "Delete a person only when the editor explicitly asks, or when evidence unambiguously proves this is an accidental duplicate. This also removes their relationships.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { summary: { type: "string" }, person_id: { type: "string" } },
+      required: ["summary", "person_id"],
+    },
+  },
+  {
+    type: "function", name: "propose_delete_relationship", strict: true,
+    description: "Remove one incorrect relationship using its exact relationship ID from the current tree.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { summary: { type: "string" }, relationship_id: { type: "string" } },
+      required: ["summary", "relationship_id"],
+    },
+  },
+  {
+    type: "function", name: "propose_update_story", strict: true,
+    description: "Replace a stored story while preserving every value that the editor did not change.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: {
+        summary: { type: "string" }, story_id: { type: "string" }, title: { type: "string" }, body: { type: "string" },
+        date: nullableString, place: nullableString,
+        person_ids: { type: "array", items: { type: "string" } },
+        attachment_ids: { type: "array", items: { type: "string" } },
+      },
+      required: ["summary", "story_id", "title", "body", "date", "place", "person_ids", "attachment_ids"],
+    },
+  },
+  {
+    type: "function", name: "propose_delete_story", strict: true,
+    description: "Delete a story only when the editor explicitly asks or evidence unambiguously proves it is a duplicate.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { summary: { type: "string" }, story_id: { type: "string" } },
+      required: ["summary", "story_id"],
+    },
+  },
+  {
+    type: "function", name: "request_clarification", strict: true,
+    description: "Ask one focused question only when plausible identities or contradictory facts cannot be resolved from the current tree, conversation, and evidence.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: {
+        question: { type: "string" }, reason: { type: "string" },
+        candidate_person_ids: { type: "array", items: { type: "string" } },
+        evidence: { type: "array", items: { type: "string" } },
+      },
+      required: ["question", "reason", "candidate_person_ids", "evidence"],
+    },
+  },
 ];
 
 type ToolCall = { type: "function_call"; name: string; arguments: string };
@@ -117,7 +165,29 @@ function proposalFromCall(call: ToolCall): ChangeProposal | null {
     personIds: Array.isArray(args.person_ids) ? args.person_ids.map(String) : [],
     attachmentIds: Array.isArray(args.attachment_ids) ? args.attachment_ids.map(String) : [],
   };
+  if (call.name === "propose_delete_person") return { kind: "delete_person", summary, personId: String(args.person_id ?? "") };
+  if (call.name === "propose_delete_relationship") return { kind: "delete_relationship", summary, relationshipId: String(args.relationship_id ?? "") };
+  if (call.name === "propose_update_story") return {
+    kind: "update_story", summary, storyId: String(args.story_id ?? ""), title: String(args.title ?? "Family story"), body: String(args.body ?? ""),
+    date: args.date as string | null, place: args.place as string | null,
+    personIds: Array.isArray(args.person_ids) ? args.person_ids.map(String) : [],
+    attachmentIds: Array.isArray(args.attachment_ids) ? args.attachment_ids.map(String) : [],
+  };
+  if (call.name === "propose_delete_story") return { kind: "delete_story", summary, storyId: String(args.story_id ?? "") };
   return null;
+}
+
+function conflictFromCall(call: ToolCall): AgentConflict | null {
+  if (call.name !== "request_clarification") return null;
+  try {
+    const args = JSON.parse(call.arguments) as Record<string, unknown>;
+    return {
+      question: String(args.question ?? "Could you clarify which person you mean?"),
+      reason: String(args.reason ?? "The records contain conflicting identity evidence."),
+      candidatePersonIds: Array.isArray(args.candidate_person_ids) ? args.candidate_person_ids.map(String) : [],
+      evidence: Array.isArray(args.evidence) ? args.evidence.map(String) : [],
+    };
+  } catch { return null; }
 }
 
 export async function POST(request: Request) {
@@ -135,10 +205,6 @@ export async function POST(request: Request) {
   if (files.some((file) => file.size > MAX_FILE_BYTES) || files.reduce((sum, file) => sum + file.size, 0) > MAX_TOTAL_BYTES) {
     return Response.json({ error: "files_too_large" }, { status: 413 });
   }
-  if (files.some((file) => !ALLOWED_TYPES.has(file.type) && !file.name.toLowerCase().endsWith(".zip"))) {
-    return Response.json({ error: "unsupported_file_type" }, { status: 415 });
-  }
-
   const tree = await readTree();
   const stored = await Promise.all(files.map((file) => saveAttachment(file, auth.user.email)));
   const content: Array<Record<string, unknown>> = [{
@@ -149,39 +215,59 @@ export async function POST(request: Request) {
     if (file.name.toLowerCase().endsWith(".zip")) {
       try {
         const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
+        let extractedBytes = 0;
         for (const [path, bytes] of Object.entries(entries)) {
-          if (bytes.length > 2_000_000 || !/\.(html?|css|js(on)?|txt|md|csv|xml)$/i.test(path)) continue;
-          content.push({ type: "input_text", text: `Extracted from ${file.name}/${path}:\n${strFromU8(bytes).slice(0, 120_000)}` });
+          if (bytes.length > MAX_ARCHIVE_ENTRY_BYTES || extractedBytes + bytes.length > MAX_ARCHIVE_EXTRACTED_BYTES) continue;
+          extractedBytes += bytes.length;
+          if (/\.(html?|css|js(on)?|txt|md|csv|xml|ged)$/i.test(path)) {
+            content.push({ type: "input_text", text: `Extracted from ${file.name}/${path}:\n${strFromU8(bytes).slice(0, 120_000)}` });
+          } else if (/\.(jpe?g|png|webp|gif)$/i.test(path)) {
+            const extension = path.split(".").pop()?.toLowerCase();
+            const mime = extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension}`;
+            content.push({ type: "input_image", image_url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`, detail: "high" });
+          }
         }
       } catch { content.push({ type: "input_text", text: `The uploaded ZIP ${file.name} could not be unpacked; use its filename as evidence only.` }); }
       continue;
     }
     const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-    const dataUrl = `data:${file.type};base64,${base64}`;
-    content.push(file.type.startsWith("image/")
+    const contentType = file.type || "application/octet-stream";
+    const dataUrl = `data:${contentType};base64,${base64}`;
+    content.push(contentType.startsWith("image/")
       ? { type: "input_image", image_url: dataUrl, detail: "high" }
-      : { type: "input_file", filename: file.name, file_data: dataUrl, detail: "high" });
+      : /\.(pdf|docx|xlsx|csv|txt|md|html?|json|xml)$/i.test(file.name)
+        ? { type: "input_file", filename: file.name, file_data: dataUrl, detail: "high" }
+        : { type: "input_text", text: `Uploaded evidence file ${file.name} (${contentType}, ${file.size} bytes) was preserved, but its binary format cannot be read directly.` });
   }
 
   const openai = new OpenAI({ apiKey });
   try {
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5.4",
-      instructions: `You are the careful archivist for the public Darabi family tree. Treat each editor message and every attached file or folder export as a dataset to ingest, not as a single fact. Extract ALL distinct people, dates, city/country locations, biographies, stories, and relationships that are explicitly stated or legible. Inspect HTML structure, visible text, embedded JSON, linked data, CSV rows, and document tables; CSS/JS are evidence only when they contain labels, data objects, or relationship metadata. Never guess. For a rich message or multi-file upload, call proposal tools once for every distinct person, relationship, and story; do not stop after the first proposal. Reconcile duplicate names against the current tree using dates, places, biography, and family context. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person IDs must be copied exactly from the supplied tree. A parent relationship is directional: from_person_id is the parent and to_person_id is the child. Every proposal summary must include enough disambiguating context (date/year, place, and relationship) for an editor to distinguish people with the same name. Use proposal tools for every concrete change. You may propose many changes in one response. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep your prose warm, plain, and concise.`,
+      instructions: `You are the careful archivist and data manager for the public Darabiha family tree. You have full create, read, update, and delete capability through the supplied tools. Treat each editor message and every attached file, recursive folder export, or ZIP as a dataset to ingest, not as a single fact. Extract ALL distinct people, dates, city/country locations, biographies, photographs, stories, and relationships that are explicitly stated or legible. Inspect HTML structure, visible text, GEDCOM, embedded JSON, linked data, CSV rows, document tables, and images; CSS/JS are evidence only when they contain labels, data objects, or relationship metadata. Never guess.
+
+Past data must never block new information. Reconcile incoming people against the current tree using normalized names, dates, places, biography, parents, spouses, children, and sibling context. When one existing record clearly matches, update it instead of creating a duplicate. When the editor explicitly identifies an accidental duplicate, consolidate useful facts into the canonical person and delete the duplicate. Resolve harmless formatting, capitalization, empty-field, and more-complete-value differences yourself. Ask a clarification question only when evidence supports multiple plausible people or contains a material contradiction you cannot resolve. Do not ask for confirmation for routine high-confidence changes.
+
+For a rich message or multi-file upload, call tools once for every distinct person, relationship, and story; do not stop after the first item. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person, relationship, and story IDs must be copied exactly from the supplied tree. A parent relationship is directional: from_person_id is the parent and to_person_id is the child. Preserve every existing field not changed by the editor. Use delete tools only for an explicit request or an unambiguous duplicate. Every summary must include enough disambiguating context for same-name relatives. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep prose warm, direct, and concise.`,
       input: [{ role: "user", content }] as never,
       tools: tools as never,
       parallel_tool_calls: true,
       safety_identifier: `editor_${auth.user.subject}`,
       store: false,
     });
-    const proposals = response.output
-      .filter((item): item is typeof item & ToolCall => item.type === "function_call")
+    const calls = response.output.filter((item): item is typeof item & ToolCall => item.type === "function_call");
+    const rawProposals = calls
       .map((item) => proposalFromCall(item))
       .filter((item): item is ChangeProposal => item !== null);
-    const reply = response.output_text.trim() || (proposals.length
-      ? `I prepared ${proposals.length === 1 ? "a change" : `${proposals.length} changes`} for your review.`
-      : "I need a little more detail before changing the tree.");
-    return Response.json({ reply, proposals, attachments: stored });
+    const explicitConflicts = calls.map((item) => conflictFromCall(item)).filter((item): item is AgentConflict => item !== null);
+    const reconciled = reconcileProposals(tree, rawProposals);
+    const conflicts = [...explicitConflicts, ...reconciled.conflicts];
+    const reply = response.output_text.trim() || (conflicts.length
+      ? conflicts.map((conflict) => conflict.question).join("\n\n")
+      : reconciled.proposals.length
+        ? `I found and applied ${reconciled.proposals.length === 1 ? "one update" : `${reconciled.proposals.length} updates`}.`
+        : "I could not find a concrete change to make yet.");
+    return Response.json({ reply, proposals: reconciled.proposals, conflicts, attachments: stored });
   } catch (error) {
     console.warn("Family archivist request failed", error instanceof Error ? error.message : "unknown error");
     return Response.json({ error: "agent_failed" }, { status: 502 });
