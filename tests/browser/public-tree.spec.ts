@@ -23,3 +23,10 @@ test("canvas accepts wheel zoom without scrolling the document", async ({ page }
   await expect(canvas).toHaveCSS("touch-action", "none");
   await expect(page.locator("html")).toHaveCSS("overscroll-behavior", "none");
 });
+
+test("canvas and cards expose distinct cursor affordances", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".family-canvas")).toHaveCSS("cursor", "grab");
+  await expect(page.locator(".tree-viewport")).toHaveCSS("cursor", "grab");
+  await expect(page.locator(".tree-card").first()).toHaveCSS("cursor", "pointer");
+});
