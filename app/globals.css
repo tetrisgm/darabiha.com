@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f5f1e8;
+  --sidebar: #eee8dc;
+  --wash: #f3eee4;
+  --ink: #2f2a24;
+  --muted: #7a7166;
+  --line: #d9d0c1;
+  --accent: #a25035;
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); font-family: var(--font-sans), Arial, sans-serif; }
+button, textarea { font: inherit; }
+button { cursor: pointer; }
+
+.tree-grid {
+  background-image: linear-gradient(to right, rgba(90,73,52,.055) 1px, transparent 1px), linear-gradient(to bottom, rgba(90,73,52,.055) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.control-button {
+  display: flex; height: 2.25rem; min-width: 2.25rem; align-items: center; justify-content: center;
+  border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.8); color: var(--muted); transition: 160ms ease;
+}
+.control-button:hover { border-color: var(--accent); color: var(--accent); }
+
+.tree-generation:not(:last-of-type)::after {
+  content: ""; position: absolute; left: 50%; top: calc(100% + 1px); width: 1px; height: 3.5rem; background: var(--line);
+}
+.tree-generation:first-of-type::before {
+  content: ""; position: absolute; left: 25%; right: 25%; top: 50%; height: 1px; z-index: -1; background: var(--line);
+}
+
+.person-card {
+  display: flex; width: min(15.5rem, 44%); align-items: center; gap: .85rem; border: 1px solid var(--line); border-radius: 1rem;
+  background: rgba(255,255,255,.92); padding: .85rem; box-shadow: 0 8px 28px rgba(62,45,28,.05); transition: 180ms ease;
+}
+.person-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.person-card.is-active { border-color: color-mix(in srgb, var(--accent) 55%, white); }
+.person-avatar {
+  display: flex; height: 2.75rem; width: 2.75rem; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 999px;
+  background: var(--wash); color: var(--accent); font-family: var(--font-serif), serif; font-size: 1.25rem;
+}
+.is-active .person-avatar { background: var(--accent); color: white; }
+
+.prompt-chip {
+  border: 1px solid var(--line); border-radius: 999px; background: transparent; padding: .5rem .75rem; color: var(--muted); font-size: .75rem; transition: 160ms ease;
+}
+.prompt-chip:hover { border-color: var(--accent); background: white; color: var(--accent); }
+
+@media (max-width: 639px) {
+  .person-card { width: min(12rem, 48%); gap: .6rem; padding: .7rem; }
+  .person-avatar { height: 2.25rem; width: 2.25rem; font-size: 1rem; }
+}
