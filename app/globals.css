@@ -67,7 +67,12 @@ button { cursor: pointer; }
 @keyframes pulse { to { opacity: .25; transform: scale(.75); } }
 
 .person-modal-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(47,42,36,.42); padding: 1rem; }
-.person-modal { position: relative; max-height: min(88vh, 760px); width: min(100%, 30rem); overflow-y: auto; border: 1px solid var(--line); border-radius: 1.5rem; background: var(--paper); padding: 2rem; box-shadow: 0 24px 90px rgba(47,42,36,.25); }
+.person-modal { position: relative; max-height: min(92vh, 900px); width: min(100%, 48rem); overflow-y: auto; border: 1px solid var(--line); border-radius: 1.5rem; background: var(--paper); padding: 2.5rem; box-shadow: 0 24px 90px rgba(47,42,36,.25); }
+.field-section { border-top: 1px solid var(--line); padding-top: 1rem; }
+.field-section-title { margin: 0 0 .6rem; color: var(--accent); font-size: .68rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.field-grid label, .field-group label { display: grid; gap: .35rem; color: var(--muted); font-size: .72rem; font-weight: 600; }
+@media (max-width: 639px) { .person-modal { padding: 1.5rem; } .field-grid { grid-template-columns: 1fr; } }
 .person-modal-close { position: absolute; right: 1rem; top: .75rem; color: var(--muted); font-size: 1.75rem; line-height: 1; }
 .person-modal-avatar, .person-modal-photo { display: flex; height: 5rem; width: 5rem; align-items: center; justify-content: center; border-radius: 999px; object-fit: cover; background: var(--wash); color: var(--accent); font-family: var(--font-serif), serif; font-size: 2rem; }
 .eyebrow { margin-bottom: .45rem; color: var(--accent); font-size: .65rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
