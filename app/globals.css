@@ -133,6 +133,7 @@ button { cursor: pointer; }
    than toggling a class in React) so Safari shows the closed hand immediately. */
 .family-canvas:active, .family-canvas:active .tree-viewport, .family-canvas:active .tree-connectors { cursor: -webkit-grabbing !important; cursor: grabbing !important; user-select: none; }
 .family-canvas img { -webkit-user-drag: none; user-select: none; }
+.build-version { position: fixed; left: .75rem; bottom: .55rem; z-index: 20; color: rgba(255,255,255,.52); font: 500 .65rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .03em; pointer-events: none; }
 .tree-viewport { position:absolute; inset:0; transform-origin:center; touch-action:none; }
 .tree-connectors { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
 .tree-connectors line, .tree-connectors path { fill:none; stroke-width:.45; }
