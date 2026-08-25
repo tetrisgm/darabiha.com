@@ -66,7 +66,7 @@ button { cursor: pointer; }
 .agent-pulse { display: inline-block; width: .45rem; height: .45rem; margin-right: .3rem; border-radius: 999px; background: var(--accent); animation: pulse 1s ease-in-out infinite alternate; }
 @keyframes pulse { to { opacity: .25; transform: scale(.75); } }
 
-.person-modal-backdrop { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(47,42,36,.42); padding: 1rem; }
+.person-modal-backdrop { position: fixed; inset: 0; z-index: 100; isolation: isolate; display: flex; align-items: center; justify-content: center; background: rgba(47,42,36,.42); padding: 1rem; }
 .person-modal { position: relative; max-height: min(92vh, 900px); width: min(100%, 48rem); overflow-y: auto; border: 1px solid var(--line); border-radius: 1.5rem; background: var(--paper); padding: 2.5rem; box-shadow: 0 24px 90px rgba(47,42,36,.25); }
 .field-section { border-top: 1px solid var(--line); padding-top: 1rem; }
 .field-section-title { margin: 0 0 .6rem; color: var(--accent); font-size: .68rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
@@ -88,7 +88,7 @@ button { cursor: pointer; }
   .person-avatar { height: 2.25rem; width: 2.25rem; font-size: 1rem; }
 }
 
-.family-canvas { position: absolute; inset: 0; min-height: 580px; }
+.family-canvas { position: absolute; inset: 0; z-index: 0; min-height: 580px; }
 .family-canvas canvas { display: block; }
 .three-person-label { display: flex; min-width: 118px; flex-direction: column; align-items: center; gap: 2px; border: 1px solid rgba(0,0,0,.12); border-radius: 999px; background: rgba(255,255,255,.82); padding: 8px 14px; color: #1d1d1f; font: 600 10px/1.2 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 8px 24px rgba(0,0,0,.08); backdrop-filter: blur(14px); transition: transform .2s ease, border-color .2s ease; }
 .three-person-label:hover { transform: scale(1.06); border-color: #0071e3; }
