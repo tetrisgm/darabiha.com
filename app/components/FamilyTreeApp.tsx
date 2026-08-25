@@ -181,7 +181,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                       <button className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
                     </div>
                   </div>
-                  <p className="mt-3 text-center text-[11px] leading-5 text-[var(--muted)]">Nothing changes until you review and apply it.</p>
+                  <p className="mt-3 text-center text-[11px] leading-5 text-[var(--muted)]">Changes are added automatically. You can edit or remove them from the tree.</p>
                 </div>
               </>
             )}
