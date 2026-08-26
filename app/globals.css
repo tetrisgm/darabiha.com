@@ -1,13 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #f5f5f7;
-  --sidebar: #f7f8f3;
-  --wash: #f0f0f2;
-  --ink: #1d1d1f;
-  --muted: #6e6e73;
-  --line: #d2d2d7;
-  --accent: #0071e3;
+  --paper: #faf8f3;
+  --sidebar: #f6f3ea;
+  --wash: #f1eee6;
+  --ink: #24211b;
+  --muted: #7d7669;
+  --line: #e2ddd0;
+  --accent: #43684f;
+  --parent-line: #8fa3bd;
+  --marriage-line: #c39a66;
+  --shadow-tint: 44, 38, 24;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 html, body { overscroll-behavior: none; }
 
@@ -455,3 +459,106 @@ button { cursor: pointer; }
 .fill-row-copy span { color:var(--muted); font-size:.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .fill-row-missing { color:#a05e18; font-size:.66rem; font-weight:600; text-align:right; flex:none; max-width:9rem; }
 .fill-row .fill-fields { padding:0 .9rem .8rem; border-top:1px dashed var(--line); margin-top:.1rem; padding-top:.7rem; }
+
+/* ============ design pass: editorial warmth, depth, and motion ============ */
+
+/* film grain on paper */
+.grain-overlay { position:fixed; inset:0; z-index:80; pointer-events:none; opacity:.028; mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* typographic foundations */
+body { font-family: var(--font-sans), "Avenir Next", sans-serif; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { text-wrap: balance; }
+.eyebrow { letter-spacing:.16em; font-size:.62rem; }
+.ped-copy > span, .fill-row-copy span, .outline-years, .tree-card-copy span, .person-facts, .fact-line { font-variant-numeric: tabular-nums; }
+.site-action-bar p.text-base { font-family: var(--font-serif), Georgia, serif; font-size:1.35rem; font-weight:600; letter-spacing:.01em; }
+
+/* floating island header */
+.site-action-bar { left:446px; right:16px; top:12px; height:3.4rem; border:1px solid rgba(0,0,0,.06); border-bottom:1px solid rgba(0,0,0,.06);
+  border-radius:1.1rem; background:rgba(252,250,245,.82); box-shadow:0 1px 2px rgba(var(--shadow-tint),.05), 0 14px 40px rgba(var(--shadow-tint),.09); }
+.site-action-bar.is-chat-collapsed { left:16px; }
+
+/* one motion language */
+button, .ped-card > button, .tree-search input, .relationship-chip, .focus-back { transition: transform .45s var(--ease), box-shadow .45s var(--ease), border-color .3s var(--ease), background-color .3s var(--ease), color .3s var(--ease); }
+button:active:not(:disabled) { transform: scale(.98); }
+:focus-visible { outline:2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset:2px; border-radius:.4rem; }
+
+/* connector recolor to the warm palette */
+.parent-connector { stroke: var(--parent-line); }
+.spouse-connector { stroke: var(--marriage-line); }
+.spouse-connector.is-ended { opacity:.45; stroke-dasharray:2 6; }
+.legend-swatch { border-top-color: var(--parent-line); }
+.legend-swatch.legend-marriage { border-top-color: var(--marriage-line); }
+.ped-lines path { stroke:#cabfa8; }
+
+/* canvas atmosphere */
+#viewport, .family-canvas { background: radial-gradient(circle at 50% 30%, #fdfcf8 0%, #f7f4ec 48%, #f1ede2 100%) !important; }
+
+/* silhouettes in the warm palette */
+.ped-male { background:#e5ebf1; color:#64798f; }
+.ped-female { background:#f3e6e8; color:#a2727e; }
+.ped-unknown { background:#eceae3; color:#a09a8c; }
+
+/* cards: hairline + diffused tinted shadow + lift */
+.tree-card, .ped-card button, .fill-row, .fill-card, .tree-search-results, .ped-popover {
+  border-color: rgba(0,0,0,.07); }
+.tree-card { background:rgba(255,254,250,.96); box-shadow:0 1px 2px rgba(var(--shadow-tint),.06), 0 16px 36px rgba(var(--shadow-tint),.1); }
+.tree-card:hover { box-shadow:0 2px 4px rgba(var(--shadow-tint),.07), 0 24px 52px rgba(var(--shadow-tint),.14); }
+.ped-card > button { background:#fffefb; box-shadow:0 1px 2px rgba(var(--shadow-tint),.05), 0 10px 28px rgba(var(--shadow-tint),.08); border-radius:.85rem; }
+.ped-card > button:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 45%, transparent); box-shadow:0 2px 4px rgba(var(--shadow-tint),.06), 0 18px 40px rgba(var(--shadow-tint),.13); }
+/* the focal card gets the double-bezel treatment */
+.ped-card.is-focal { padding:.4rem; border-radius:1.25rem; background:color-mix(in srgb, var(--accent) 8%, #f5f2ea);
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.7), 0 1px 2px rgba(var(--shadow-tint),.06), 0 18px 44px rgba(var(--shadow-tint),.12);
+  border:1px solid color-mix(in srgb, var(--accent) 22%, transparent); }
+.ped-card.is-focal > button { border:1px solid rgba(0,0,0,.05); border-radius:.9rem; background:#fffefb; }
+
+/* pedigree breathing room (the children column was cramped) */
+.ped-col { gap:.9rem; }
+.ped-group { display:flex; flex-direction:column; gap:.9rem; }
+.ped-card-md > button { padding:.62rem .8rem; }
+.ped-columns { gap:3.6rem; }
+.ped-col-label { margin-bottom:.35rem; }
+
+/* staggered entry: columns cascade in with a soft rise */
+@keyframes rise-in { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+  .ped-col-children { animation: rise-in .7s var(--ease) both .05s; }
+  .ped-col-focal { animation: rise-in .7s var(--ease) both .12s; }
+  .ped-col-parents { animation: rise-in .7s var(--ease) both .2s; }
+  .ped-col-grand { animation: rise-in .7s var(--ease) both .28s; }
+  .ped-lines { animation: rise-in .9s var(--ease) both .3s; }
+  .person-modal-v2 { animation: rise-in .5s var(--ease) both; }
+}
+
+/* skeleton loading instead of a blank pane */
+.family-canvas[aria-busy="true"] { position:relative; overflow:hidden; }
+.family-canvas[aria-busy="true"]::after { content:""; position:absolute; inset:0;
+  background-image:
+    linear-gradient(90deg, transparent 0%, rgba(255,255,255,.65) 50%, transparent 100%),
+    radial-gradient(closest-side, #efece3 98%, transparent) ,
+    radial-gradient(closest-side, #efece3 98%, transparent),
+    radial-gradient(closest-side, #efece3 98%, transparent);
+  background-size: 40% 100%, 240px 88px, 240px 88px, 240px 88px;
+  background-position: -40% 0, calc(50% - 300px) 42%, 50% 42%, calc(50% + 300px) 42%;
+  background-repeat:no-repeat;
+  animation: shimmer 1.6s var(--ease) infinite; }
+@keyframes shimmer { from { background-position:-40% 0, calc(50% - 300px) 42%, 50% 42%, calc(50% + 300px) 42%; } to { background-position:140% 0, calc(50% - 300px) 42%, 50% 42%, calc(50% + 300px) 42%; } }
+
+/* search + switcher refinement */
+.tree-search input { background:rgba(255,255,255,.72); border-color:rgba(0,0,0,.08); }
+.tree-search input:focus { background:white; }
+.archive-view-switcher { border-color:rgba(0,0,0,.06); background:rgba(255,255,255,.55); border-radius:.8rem; }
+.archive-view-switcher button.is-active { box-shadow:0 1px 4px rgba(var(--shadow-tint),.14); }
+
+/* drawer polish */
+.person-modal-v2 { border-right:1px solid rgba(0,0,0,.06); box-shadow:24px 0 80px rgba(var(--shadow-tint),.12); }
+.person-modal-v2 h2 { letter-spacing:-.01em; }
+.relationship-chip { background:#fffefb; border-color:rgba(0,0,0,.08); }
+.relationship-chip:hover { border-color:color-mix(in srgb, var(--accent) 45%, transparent); color:var(--accent); }
+
+/* profile prev/next */
+.person-nav { position:absolute; right:3.4rem; top:1rem; display:flex; gap:.25rem; z-index:2; }
+.person-nav button { height:2rem; width:2rem; border:1px solid rgba(0,0,0,.08); border-radius:999px; background:#fffefb;
+  color:var(--muted); font-size:1.05rem; line-height:1; display:flex; align-items:center; justify-content:center; }
+.person-nav button:hover { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 45%, transparent); }
+.fill-bio { color:var(--muted); font-size:.78rem; line-height:1.55; border-left:2px solid var(--line); padding-left:.7rem; }

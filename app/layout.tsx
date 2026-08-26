@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Inter } from "next/font/google";
+import { Cormorant_Garamond, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
-const sans = Inter({ variable: "--font-sans", subsets: ["latin"] });
+const sans = Plus_Jakarta_Sans({ variable: "--font-sans", subsets: ["latin"] });
 const serif = Cormorant_Garamond({
   variable: "--font-serif",
   subsets: ["latin"],
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className={`${sans.variable} ${serif.variable}`}>{children}</body>
+      <body className={`${sans.variable} ${serif.variable}`}><div className="grain-overlay" aria-hidden="true" />{children}</body>
     </html>
   );
 }

@@ -55,6 +55,50 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
+  const [focalId, setFocalId] = useState<string | null>(null);
+  const treeRef = useRef(initialTree ?? EMPTY_TREE);
+  useEffect(() => { treeRef.current = tree; }, [tree]);
+  const openPerson = (person: Person, push = true) => {
+    setFocalId(person.id);
+    setSelectedPerson(person);
+    setHighlightedIds([person.id]);
+    if (push && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("p") !== person.id) {
+      window.history.pushState({ personId: person.id }, "", `?p=${person.id}`);
+    }
+  };
+  const closePerson = () => {
+    setSelectedPerson(null);
+    setHighlightedIds([]);
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("p")) {
+      window.history.pushState({ personId: null }, "", window.location.pathname);
+    }
+  };
+  useEffect(() => {
+    const onPop = (event: PopStateEvent) => {
+      const fromState = (event.state as { personId?: string | null } | null)?.personId;
+      const id = fromState !== undefined ? fromState : new URLSearchParams(window.location.search).get("p");
+      if (id) {
+        const person = treeRef.current.people.find((candidate) => candidate.id === id);
+        if (person) { setFocalId(person.id); setSelectedPerson(person); setHighlightedIds([person.id]); }
+      } else {
+        setSelectedPerson(null);
+        setHighlightedIds([]);
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  useEffect(() => {
+    if (!treeLoaded) return;
+    const id = new URLSearchParams(window.location.search).get("p");
+    const person = id ? treeRef.current.people.find((candidate) => candidate.id === id) : undefined;
+    if (person) {
+      setFocalId(person.id);
+      setSelectedPerson(person);
+      setHighlightedIds([person.id]);
+      window.history.replaceState({ personId: person.id }, "", `?p=${person.id}`);
+    }
+  }, [treeLoaded]);
   const [addingPerson, setAddingPerson] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
@@ -71,40 +115,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const setViewMode = (mode: ViewMode) => {
     setViewModeState(mode);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
-  };
-  const [focalId, setFocalIdState] = useState<string | null>(null);
-  const [focalPast, setFocalPast] = useState<string[]>([]);
-  const [focalFuture, setFocalFuture] = useState<string[]>([]);
-  const setFocalId = (next: string | null) => {
-    setFocalIdState((previous) => {
-      if (previous && next && previous !== next) {
-        setFocalPast((past) => [...past.slice(-40), previous]);
-        setFocalFuture([]);
-      }
-      return next;
-    });
-  };
-  const focalBack = () => {
-    setFocalPast((past) => {
-      const previous = past[past.length - 1];
-      if (!previous) return past;
-      setFocalIdState((current) => {
-        if (current) setFocalFuture((future) => [...future, current]);
-        return previous;
-      });
-      return past.slice(0, -1);
-    });
-  };
-  const focalForward = () => {
-    setFocalFuture((future) => {
-      const next = future[future.length - 1];
-      if (!next) return future;
-      setFocalIdState((current) => {
-        if (current) setFocalPast((past) => [...past, current]);
-        return next;
-      });
-      return future.slice(0, -1);
-    });
   };
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -191,7 +201,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         <p className="text-base font-semibold tracking-[-.01em]">Darabiha</p>
         <nav className="archive-view-switcher" aria-label="Archive view">{VIEW_MODES.map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{VIEW_LABELS[mode]}</button>)}</nav>
         <div className="relative flex items-center gap-4">
-          <TreeSearch tree={tree} onPick={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); setSelectedPerson(person); }} />
+          <TreeSearch tree={tree} onPick={(person) => openPerson(person)} />
           {signInEnabled && !viewer.signedIn && <><span className="text-sm text-[var(--muted)]">Sign in to edit</span><a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a></>}
           {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
         </div>
@@ -245,10 +255,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
 
             <div className="relative h-full min-h-0 overflow-hidden bg-[#eef4f1]">
               {viewMode !== "timeline" && viewMode !== "map" && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
-              {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} canBack={focalPast.length > 0} canForward={focalFuture.length > 0} onBack={focalBack} onForward={focalForward} onPick={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); setSelectedPerson(person); }} onOpen={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
-              {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} />}
-              {viewMode === "fill" && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} />}
-              {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
+              {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} canBack canForward onBack={() => window.history.back()} onForward={() => window.history.forward()} onPick={(person) => openPerson(person)} onOpen={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
+              {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => openPerson(person)} />}
+              {viewMode === "fill" && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
+              {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
               {viewMode === "map" && <WorldMapView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
             </div>
@@ -256,7 +266,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         </section>
 
       </div>
-      {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={() => { setSelectedPerson(null); setHighlightedIds([]); }} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+      {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
       {addingPerson && <AddPersonModal tree={tree} onClose={() => setAddingPerson(false)} onAdded={(next) => { setTree(next); setAddingPerson(false); }} />}
       <span className="build-version" aria-label={`Darabiha version ${VERSION}`}>Version {VERSION}</span>
     </main>
@@ -274,6 +284,10 @@ function AddPersonModal({ tree, onClose, onAdded }: { tree: FamilyTree; onClose:
   async function add() { if (!form.displayName.trim() || busy) return; const match = candidate(); if (match) { const sameDate = !form.birthDate || !match.birthDate || form.birthDate === match.birthDate; if (sameDate) { await save("update", match.id); return; } setDuplicate(match); return; } await save("add"); }
   const input = (label: string, field: keyof typeof form, type = "text") => <label className="person-editor-field"><span>{label}</span><input className="modal-input" type={type} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>;
   return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" aria-labelledby="add-person-title" onClick={(event) => event.stopPropagation()}>
+    <div className="person-nav">
+      <button type="button" onClick={() => window.history.back()} aria-label="Previous person" title="Back">‹</button>
+      <button type="button" onClick={() => window.history.forward()} aria-label="Next person" title="Forward">›</button>
+    </div>
     <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">New record</p><h2 id="add-person-title" className="font-serif text-3xl">Add a person</h2><p className="mt-2 text-sm text-[var(--muted)]">Enter what you know now. We’ll check the family tree before creating a new record.</p>
     {duplicate && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6"><strong>{duplicate.displayName}</strong> is already in the tree, born {duplicate.birthDate || "with no recorded birth date"}. Is this the same person?<div className="mt-3 flex flex-wrap gap-2"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white" onClick={() => save("update", duplicate.id)}>Use existing person</button><button className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-xs font-semibold" onClick={() => { setDuplicate(null); save("add"); }}>Create new person</button></div></div>}
     <div className="modal-editor person-editor-grid">{input("Full name", "displayName")}<label className="person-editor-field"><span>Sex</span><select className="modal-input" value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as typeof form.gender })}><option value="">Not recorded</option><option value="female">Female</option><option value="male">Male</option></select></label>{input("Birth date", "birthDate", "date")}{input("Birth city", "birthCity")}{input("Birth country", "birthCountry")}{input("Death date", "deathDate", "date")}{input("Death city", "deathCity")}{input("Death country", "deathCountry")}<label className="person-editor-field person-editor-wide"><span>Biography, memories, or notes</span><textarea className="modal-input min-h-24" value={form.biography} onChange={(event) => setForm({ ...form, biography: event.target.value })} /></label>{error && <p className="text-sm text-red-700">{error}</p>}<button className="rounded-full bg-[var(--ink)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !form.displayName.trim()} onClick={add}>{busy ? "Checking…" : "Add person"}</button></div>

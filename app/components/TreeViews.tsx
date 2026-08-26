@@ -255,6 +255,14 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
+  const seedForm = (person: Person) => setForm({
+    displayName: person.displayName,
+    gender: person.gender ?? "",
+    birthDate: person.birthDate ?? "",
+    deathDate: person.deathDate ?? "",
+    birthCity: person.birthCity ?? "",
+    birthCountry: person.birthCountry ?? "",
+  });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const missingOf = (person: Person) => {
@@ -280,9 +288,18 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
     return parts.join(" · ") || "no recorded relatives";
   };
   const save = async (person: Person) => {
+    const current: Record<string, string> = {
+      displayName: person.displayName,
+      gender: person.gender ?? "",
+      birthDate: person.birthDate ?? "",
+      deathDate: person.deathDate ?? "",
+      birthCity: person.birthCity ?? "",
+      birthCountry: person.birthCountry ?? "",
+    };
     const patch: Record<string, string> = {};
-    for (const key of ["gender", "birthDate", "deathDate", "birthCity", "birthCountry"]) {
-      if (form[key]?.trim()) patch[key] = form[key].trim();
+    for (const key of Object.keys(current)) {
+      const next = (form[key] ?? "").trim();
+      if (next !== current[key] && !(key === "displayName" && !next)) patch[key] = next;
     }
     if (!Object.keys(patch).length) { setExpandedId(null); return; }
     setBusy(true);
@@ -314,7 +331,7 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
       {visible.map((person) => {
         const open = expandedId === person.id;
         return <div className={`fill-row ${open ? "is-open" : ""}`} key={person.id}>
-          <button type="button" className="fill-row-head" onClick={() => { setExpandedId(open ? null : person.id); setForm({}); setNotice(""); }}>
+          <button type="button" className="fill-row-head" onClick={() => { setExpandedId(open ? null : person.id); if (!open) seedForm(person); setNotice(""); }}>
             {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
             <span className="fill-row-copy">
               <strong>{person.displayName}</strong>
@@ -323,13 +340,15 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
             <span className="fill-row-missing">{missingOf(person).join(" · ")}</span>
           </button>
           {open && <div className="fill-fields">
-            {!person.gender && <div className="fill-field"><label>Gender</label><div className="fill-gender">
-              {(["female", "male"] as const).map((option) => <button key={option} type="button" className={form.gender === option ? "is-active" : ""} onClick={() => setForm({ ...form, gender: option })}>{option === "female" ? "♀ Female" : "♂ Male"}</button>)}
-            </div></div>}
-            {!person.birthDate && <div className="fill-field"><label>Born</label>{field("birthDate", "1962 or 1962-04-17")}</div>}
-            {!person.deathDate && <div className="fill-field"><label>Died <em>(leave empty if living)</em></label>{field("deathDate", "1990 or 1990-11-02")}</div>}
-            {!person.birthCity && !person.birthPlace && <div className="fill-field"><label>Birth city</label>{field("birthCity", "Qazvin")}</div>}
-            {!person.birthCountry && !person.birthPlace && <div className="fill-field"><label>Birth country</label>{field("birthCountry", "Iran")}</div>}
+            <div className="fill-field"><label>Name</label>{field("displayName", "Full name")}</div>
+            <div className="fill-field"><label>Gender{person.gender ? "" : " · missing"}</label><div className="fill-gender">
+              {(["female", "male"] as const).map((option) => <button key={option} type="button" className={form.gender === option ? "is-active" : ""} onClick={() => setForm({ ...form, gender: form.gender === option ? "" : option })}>{option === "female" ? "♀ Female" : "♂ Male"}</button>)}
+            </div></div>
+            <div className="fill-field"><label>Born{person.birthDate ? "" : " · missing"}</label>{field("birthDate", "1962 or 1962-04-17")}</div>
+            <div className="fill-field"><label>Died <em>(leave empty if living)</em></label>{field("deathDate", "1990 or 1990-11-02")}</div>
+            <div className="fill-field"><label>Birth city{person.birthCity || person.birthPlace ? "" : " · missing"}</label>{field("birthCity", "Qazvin")}</div>
+            <div className="fill-field"><label>Birth country{person.birthCountry || person.birthPlace ? "" : " · missing"}</label>{field("birthCountry", "Iran")}</div>
+            {person.biography && <p className="fill-bio">{person.biography}</p>}
             <div className="fill-actions">
               <button type="button" className="fill-save" disabled={busy} onClick={() => save(person)}>{busy ? "Saving…" : "Save"}</button>
               <button type="button" className="fill-skip" onClick={() => onOpen(person)}>Open full record</button>
