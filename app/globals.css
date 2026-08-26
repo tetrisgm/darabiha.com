@@ -586,3 +586,48 @@ main.chat-collapsed .person-drawer-backdrop { left: 0; }
 .chat-context-chip em { color:var(--muted); font-style:normal; }
 .chat-context-chip button { color:var(--muted); font-size:.9rem; padding:0 .3rem; }
 .chat-context-chip button:hover { color:var(--ink); }
+
+/* settings page */
+.settings-gear { display:inline-flex; height:2rem; width:2rem; align-items:center; justify-content:center; border-radius:.55rem; color:var(--muted); font-size:1.05rem; line-height:1; text-decoration:none; }
+.settings-gear:hover { color:var(--ink); background:var(--wash); }
+.settings-page { min-height:100dvh; background:var(--paper); color:var(--ink); padding:1.4rem clamp(1rem,4vw,3rem) 5rem; }
+.settings-masthead { display:flex; align-items:center; justify-content:space-between; max-width:44rem; margin:0 auto; }
+.settings-wordmark { font-family:var(--font-serif),Georgia,serif; font-size:1.35rem; font-weight:600; color:var(--ink); text-decoration:none; }
+.settings-back { color:var(--muted); font-size:.82rem; text-decoration:none; }
+.settings-back:hover, .settings-wordmark:hover { color:var(--accent); }
+.settings-panel { max-width:44rem; margin:3.5rem auto 0; }
+.settings-eyebrow { color:var(--accent); text-transform:uppercase; font-weight:600; }
+.settings-panel h1 { margin:.3rem 0 1.6rem; font-family:var(--font-serif),Georgia,serif; font-size:clamp(1.9rem,4vw,2.6rem); font-weight:500; letter-spacing:-.02em; }
+.settings-card { border:1px solid var(--line); border-radius:1.1rem; background:rgba(255,255,255,.9); padding:1.3rem 1.4rem; margin-bottom:1rem; box-shadow:0 1px 2px rgba(var(--shadow-tint),.05), 0 10px 30px rgba(var(--shadow-tint),.06); }
+.settings-card h2 { margin:0 0 .3rem; font-family:var(--font-serif),Georgia,serif; font-size:1.25rem; font-weight:600; }
+.settings-card p { margin:.2rem 0; line-height:1.6; font-size:.92rem; }
+.settings-hint { color:var(--muted); font-size:.82rem; }
+.settings-error { margin:.6rem 0; border-radius:.7rem; background:#fdf0ee; color:#8c3a2b; padding:.6rem .9rem; font-size:.85rem; }
+.settings-signin-row { display:flex; flex-wrap:wrap; gap:.6rem; margin-top:1rem; }
+.settings-signin { display:inline-flex; align-items:center; gap:.45rem; border-radius:999px; background:black; color:white; padding:.6rem 1.2rem; font-size:.88rem; font-weight:600; text-decoration:none; transition:background-color .3s var(--ease); }
+.settings-signin:hover { background:var(--accent); }
+.settings-signin.is-google { background:white; color:var(--ink); border:1px solid var(--line); }
+.settings-signin.is-google:hover { border-color:var(--accent); color:var(--accent); background:var(--wash); }
+.settings-signin.is-google span { display:inline-flex; height:1.15rem; width:1.15rem; align-items:center; justify-content:center; border-radius:999px; border:1px solid currentColor; font-size:.72rem; font-weight:700; }
+.settings-identity { display:flex; align-items:center; gap:1rem; }
+.settings-identity > div { display:flex; flex-direction:column; min-width:0; flex:1; }
+.settings-identity strong { font-size:.95rem; }
+.settings-identity span { color:var(--muted); font-size:.8rem; overflow:hidden; text-overflow:ellipsis; }
+.settings-role-badge { border-radius:999px; padding:.25rem .75rem; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; }
+.settings-role-badge.is-admin { background:color-mix(in srgb,var(--accent) 14%,white); color:var(--accent); }
+.settings-role-badge.is-editor { background:#eef2f8; color:#3f5a80; }
+.settings-role-badge.is-none { background:var(--wash); color:var(--muted); }
+.settings-signout { color:var(--muted); font-size:.82rem; text-decoration:none; white-space:nowrap; }
+.settings-signout:hover { color:var(--ink); }
+.settings-members { list-style:none; margin:.9rem 0; padding:0; display:flex; flex-direction:column; gap:.4rem; }
+.settings-members li { display:flex; align-items:center; gap:.7rem; border:1px solid var(--line); border-radius:.8rem; background:white; padding:.55rem .8rem; }
+.settings-member-email { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; font-size:.88rem; }
+.settings-member-email em { color:var(--muted); font-style:normal; font-size:.75rem; }
+.settings-members select, .settings-add select { border:1px solid var(--line); border-radius:.6rem; background:white; padding:.35rem .5rem; font-size:.8rem; color:var(--ink); }
+.settings-remove { display:inline-flex; height:1.7rem; width:1.7rem; align-items:center; justify-content:center; border-radius:.55rem; color:var(--muted); font-size:1.05rem; line-height:1; }
+.settings-remove:hover:not(:disabled) { background:#fdf0ee; color:#8c3a2b; }
+.settings-add { display:flex; gap:.55rem; margin-top:1rem; flex-wrap:wrap; }
+.settings-add input { flex:1; min-width:14rem; border:1px solid var(--line); border-radius:.7rem; padding:.5rem .8rem; font-size:.88rem; background:white; }
+.settings-add button { border-radius:999px; background:var(--ink); color:white; padding:.5rem 1.1rem; font-size:.82rem; font-weight:600; }
+.settings-add button:hover:not(:disabled) { background:var(--accent); }
+.settings-add button:disabled { opacity:.5; cursor:default; }

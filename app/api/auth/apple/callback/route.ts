@@ -20,10 +20,6 @@ async function clientSecret(clientId: string, teamId: string, keyId: string) {
     .sign(key);
 }
 
-function invitedEmails() {
-  return (process.env.EDITOR_EMAILS || "").split(",").map((email) => email.trim().toLowerCase()).filter(Boolean);
-}
-
 async function nonceMatches(tokenNonce: unknown, expected: string) {
   if (tokenNonce === expected) return true;
   if (typeof tokenNonce !== "string") return false;
@@ -67,7 +63,7 @@ export async function POST(request: Request) {
       throw new Error("invalid_identity_token");
     }
     const email = payload.email.toLowerCase();
-    if (!invitedEmails().includes(email)) return Response.redirect(`${origin}/?auth_error=not_invited`, 303);
+    // Anyone may sign in; the members table decides what the account can do.
     const session = await createSession({ subject: payload.sub, email, displayName: email.split("@")[0] });
     const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
     response.headers.append("set-cookie", sessionCookie(session));

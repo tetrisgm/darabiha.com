@@ -10,7 +10,7 @@ import { BUILD_ID, VERSION } from "../../lib/build";
 
 type Props = {
   initialTree: FamilyTree | null;
-  viewer: { signedIn: boolean; canEdit: boolean; displayName: string | null };
+  viewer: { signedIn: boolean; canEdit: boolean; role: "admin" | "editor" | null; displayName: string | null };
   signInPath: string;
   signOutPath: string;
   signInEnabled: boolean;
@@ -204,7 +204,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
         <div className="relative flex items-center gap-4">
           <TreeSearch tree={tree} onPick={(person) => openPerson(person)} />
           {signInEnabled && !viewer.signedIn && <><span className="text-sm text-[var(--muted)]">Sign in to edit</span><a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a></>}
-          {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
+          {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href="/settings">Settings</a><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
+          {!viewer.signedIn && <a className="settings-gear" href="/settings" aria-label="Site settings" title="Site settings">⚙</a>}
         </div>
       </header>
       <div className="family-shell flex h-screen min-h-0">

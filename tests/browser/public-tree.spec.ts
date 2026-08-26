@@ -160,3 +160,16 @@ test("dragging the dedicated surface pans while a card remains clickable", async
   await (await onCameraCard(page)).click();
   await expect(page.getByRole("dialog")).toBeVisible();
 });
+
+test("the settings page offers sign-in and explains member roles", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.locator("h1")).toHaveText(/Access & members/);
+  await expect(page.getByText("Sign in with Apple")).toBeVisible();
+});
+
+test("member management refuses anonymous requests", async ({ request }) => {
+  const listing = await request.get("/api/members");
+  expect(listing.status()).toBe(401);
+  const mutation = await request.post("/api/members", { data: { action: "set", email: "intruder@example.com", role: "admin" } });
+  expect(mutation.status()).toBe(401);
+});

@@ -28,6 +28,10 @@ const schemaStatements = [
     id TEXT PRIMARY KEY, actor_email TEXT NOT NULL, kind TEXT NOT NULL,
     summary TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS members (
+    email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'editor')),
+    added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`,
 ];
 
 export async function ensureSchema() {
@@ -37,8 +41,58 @@ export async function ensureSchema() {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
   try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
+  // First run seeds the member list: the owner as admin, plus any emails the
+  // old EDITOR_EMAILS allow-list carried, as editors.
+  const memberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM members").first<{ count: number }>();
+  if (!memberCount?.count) {
+    const now = new Date().toISOString();
+    const seeds: [string, "admin" | "editor"][] = [["ramine@ramine.net", "admin"]];
+    for (const email of (process.env.EDITOR_EMAILS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean)) {
+      if (!seeds.some(([seeded]) => seeded === email)) seeds.push([email, "editor"]);
+    }
+    await env.DB.batch(seeds.map(([email, role]) =>
+      env.DB.prepare("INSERT OR IGNORE INTO members (email, role, added_by, created_at, updated_at) VALUES (?, ?, 'seed', ?, ?)").bind(email, role, now, now)));
+  }
   await env.DB.prepare("PRAGMA optimize").run();
   initialized = true;
+}
+
+export type MemberRole = "admin" | "editor";
+export type Member = { email: string; role: MemberRole; addedBy: string; createdAt: string };
+
+export async function listMembers(): Promise<Member[]> {
+  await ensureSchema();
+  const result = await env.DB.prepare("SELECT email, role, added_by AS addedBy, created_at AS createdAt FROM members ORDER BY role, email").all<Member>();
+  return result.results;
+}
+
+export async function getMemberRole(email: string): Promise<MemberRole | null> {
+  await ensureSchema();
+  const row = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(email.toLowerCase()).first<{ role: MemberRole }>();
+  return row?.role ?? null;
+}
+
+export async function upsertMember(email: string, role: MemberRole, actorEmail: string) {
+  await ensureSchema();
+  const normalized = email.toLowerCase();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO members (email, role, added_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET role = excluded.role, updated_at = excluded.updated_at`).bind(normalized, role, actorEmail, now, now),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "member_set", `Gave ${normalized} the ${role} role`, JSON.stringify({ email: normalized, role }), now),
+  ]);
+}
+
+export async function removeMember(email: string, actorEmail: string) {
+  await ensureSchema();
+  const normalized = email.toLowerCase();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM members WHERE email = ?").bind(normalized),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "member_remove", `Removed ${normalized} from the member list`, JSON.stringify({ email: normalized }), now),
+  ]);
 }
 
 // Serialized-tree cache: the public tree endpoint is hit constantly and the
