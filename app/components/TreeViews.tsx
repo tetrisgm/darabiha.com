@@ -27,7 +27,7 @@ function PersonCard({ person, size, onClick, label }: { person: Person; size: "s
 
 /** One screen around a focal person: grandparents, parents, the couple, and
  * children. Clicking any relative re-centers on them. */
-export function FocusFamilyView({ tree, focusId, onFocus, onOpen }: { tree: FamilyTree; focusId: string; onFocus: (person: Person) => void; onOpen: (person: Person) => void }) {
+export function FocusFamilyView({ tree, focusId, onFocus, onOpen, onBack, canBack }: { tree: FamilyTree; focusId: string; onFocus: (person: Person) => void; onOpen: (person: Person) => void; onBack?: () => void; canBack?: boolean }) {
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
   const focal = maps.byId.get(focusId) ?? tree.people[0];
   if (!focal) return null;
@@ -51,17 +51,22 @@ export function FocusFamilyView({ tree, focusId, onFocus, onOpen }: { tree: Fami
     groups.set(key, group);
   }
   return <section className="focus-view" aria-label="Family around one person">
+    <div className="focus-toolbar">
+      <button type="button" className="focus-back" onClick={onBack} disabled={!canBack}>← Back</button>
+      <p className="focus-hint">Click any relative to move the view to them — parents take you up, children down.</p>
+    </div>
     <div className="focus-rows">
-      {grandparents.some((pair) => pair.length) && <div className="focus-row focus-row-grandparents">
+      {grandparents.some((pair) => pair.length) && <><p className="focus-row-label">Grandparents</p><div className="focus-row focus-row-grandparents">
         {grandparents.map((pair, index) => <div className="focus-pair" key={index}>{pair.map((gp) => <PersonCard key={gp.id} person={gp} size="sm" onClick={() => onFocus(gp)} />)}</div>)}
-      </div>}
-      {parents.length > 0 && <div className="focus-row">{parents.map((parent) => <PersonCard key={parent.id} person={parent} size="md" onClick={() => onFocus(parent)} />)}</div>}
+      </div></>}
+      {parents.length > 0 && <><p className="focus-row-label">Parents ↑</p><div className="focus-row">{parents.map((parent) => <PersonCard key={parent.id} person={parent} size="md" onClick={() => onFocus(parent)} />)}</div></>}
       <div className="focus-row focus-row-focal">
         <PersonCard person={focal} size="lg" onClick={() => onOpen(focal)} label="Open record" />
         {spouses.map((spouse) => <span className="focus-marriage" key={spouse.id}><span className="focus-marriage-glyph">⚭</span><PersonCard person={spouse} size="md" onClick={() => onFocus(spouse)} /></span>)}
       </div>
       {siblings.length > 0 && <div className="focus-siblings">Siblings: {siblings.map((sibling) => <button type="button" key={sibling.id} onClick={() => onFocus(sibling)}>{sibling.displayName}</button>)}</div>}
       {children.length > 0 && <div className="focus-children">
+        <p className="focus-row-label">Children ↓</p>
         {[...groups.values()].map((group, index) => <div className="focus-child-group" key={index}>
           {(groups.size > 1 || spouses.length > 1) && <p className="focus-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
           <div className="focus-row">{group.kids.map((child) => <PersonCard key={child.id} person={child} size="md" onClick={() => onFocus(child)} />)}</div>
@@ -72,12 +77,93 @@ export function FocusFamilyView({ tree, focusId, onFocus, onOpen }: { tree: Fami
   </section>;
 }
 
-/** Half-fan ancestor chart: the focal person at the center, ancestors in
- * concentric rings, children below to walk back down. */
+/** Fan chart with two directions: ancestors of the focal person in
+ * ahnentafel rings, or every descendant of a chosen forebear as
+ * proportional wedges. */
 export function FanChartView({ tree, focusId, onFocus }: { tree: FamilyTree; focusId: string; onFocus: (person: Person) => void }) {
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
+  const descent = useMemo(() => buildDescentModel(tree), [tree]);
+  const [mode, setMode] = useState<"descendants" | "ancestors">("descendants");
+  const [descendRoot, setDescendRoot] = useState<string | null>(null);
   const focal = maps.byId.get(focusId) ?? tree.people[0];
   if (!focal) return null;
+  if (mode === "descendants") {
+    // default center: the top of the focal person's own line
+    let centerId = descendRoot ?? focal.id;
+    if (!descendRoot) {
+      let guard = 0;
+      while (guard < 20) {
+        const parent = descent.primary.get(centerId);
+        if (!parent) break;
+        centerId = parent;
+        guard += 1;
+      }
+    }
+    const center = maps.byId.get(centerId) ?? focal;
+    const leafCount = new Map<string, number>();
+    const countLeaves = (id: string): number => {
+      const cached = leafCount.get(id);
+      if (cached !== undefined) return cached;
+      const kids = descent.kidsOf.get(id) ?? [];
+      const value = kids.length ? kids.reduce((sum, kid) => sum + countLeaves(kid), 0) : 1;
+      leafCount.set(id, value);
+      return value;
+    };
+    countLeaves(center.id);
+    let maxDepth = 1;
+    const measureDepth = (id: string, depth: number) => {
+      maxDepth = Math.max(maxDepth, depth);
+      for (const kid of descent.kidsOf.get(id) ?? []) measureDepth(kid, depth + 1);
+    };
+    measureDepth(center.id, 0);
+    const CX = 480, CY = 470, R0 = 66;
+    const RING = Math.min(78, (398 - R0) / Math.max(1, maxDepth));
+    const wedges: { person: Person; path: string; labelX: number; labelY: number; rotate: number; arc: number; ring: number }[] = [];
+    const point = (radius: number, angle: number) => [CX + radius * Math.cos(angle), CY - radius * Math.sin(angle)];
+    const walk = (id: string, ring: number, a0: number, a1: number) => {
+      const kids = descent.kidsOf.get(id) ?? [];
+      let angle = a0;
+      for (const kid of kids) {
+        const person = maps.byId.get(kid);
+        const share = (countLeaves(kid) / Math.max(1, countLeaves(id))) * (a1 - a0);
+        const b0 = angle, b1 = angle + share;
+        angle = b1;
+        if (!person) continue;
+        const inner = R0 + (ring - 1) * RING;
+        const outer = inner + RING;
+        const [x0, y0] = point(inner, b0);
+        const [x1, y1] = point(outer, b0);
+        const [x2, y2] = point(outer, b1);
+        const [x3, y3] = point(inner, b1);
+        const path = `M ${x0} ${y0} L ${x1} ${y1} A ${outer} ${outer} 0 0 1 ${x2} ${y2} L ${x3} ${y3} A ${inner} ${inner} 0 0 0 ${x0} ${y0}`;
+        const mid = (b0 + b1) / 2;
+        const [labelX, labelY] = point((inner + outer) / 2, mid);
+        let rotate = 90 - (mid * 180) / Math.PI;
+        if (rotate > 90) rotate -= 180;
+        wedges.push({ person, path, labelX, labelY, rotate, arc: (b1 - b0) * ((inner + outer) / 2), ring });
+        walk(kid, ring + 1, b0, b1);
+      }
+    };
+    walk(center.id, 1, Math.PI, 0);
+    const centerParent = descent.primary.get(center.id) ? maps.byId.get(descent.primary.get(center.id)!) : undefined;
+    return <section className="fan-view" aria-label="Descendant fan chart">
+      <div className="fan-mode"><button type="button" className="is-active">Descendants</button><button type="button" onClick={() => setMode("ancestors")}>Ancestors</button></div>
+      <svg viewBox="0 0 960 500" role="img" aria-label={`Descendants of ${center.displayName}`}>
+        {wedges.map((wedge) => <g key={wedge.person.id} className="fan-sector" onClick={() => { setDescendRoot(wedge.person.id); onFocus(wedge.person); }}>
+          <path d={wedge.path}><title>{`${wedge.person.displayName}${years(wedge.person) ? ` · ${years(wedge.person)}` : ""}`}</title></path>
+          {wedge.arc > 46 && <text x={wedge.labelX} y={wedge.labelY} transform={`rotate(${wedge.rotate} ${wedge.labelX} ${wedge.labelY})`} className={`fan-label fan-label-${Math.min(5, Math.max(1, wedge.ring))}`}>
+            <tspan x={wedge.labelX} dy="0.32em">{wedge.arc > 120 ? wedge.person.displayName : wedge.person.displayName.split(/\s+/)[0]}</tspan>
+          </text>}
+        </g>)}
+        <circle cx={CX} cy={CY} r={R0 - 6} className="fan-center" />
+        <text x={CX} y={CY - 26} className="fan-center-name"><tspan x={CX}>{center.displayName.split(/\s+/)[0]}</tspan><tspan x={CX} dy="1.25em">{center.displayName.split(/\s+/).slice(1).join(" ")}</tspan><tspan x={CX} dy="1.5em" className="fan-years">{years(center)}</tspan></text>
+      </svg>
+      <div className="fan-children">
+        Showing {wedges.length} descendants of {center.displayName}. Click a wedge to make it the center; hover for names.
+        {centerParent && <button type="button" onClick={() => setDescendRoot(centerParent.id)}>↑ Up to {centerParent.displayName}</button>}
+      </div>
+    </section>;
+  }
   const RINGS = 5;
   // ahnentafel slots: slot 1 = focal, parents of slot n are 2n and 2n + 1
   const slots = new Map<number, Person>();
@@ -123,6 +209,7 @@ export function FanChartView({ tree, focusId, onFocus }: { tree: FamilyTree; foc
     return person.displayName;
   };
   return <section className="fan-view" aria-label="Ancestor fan chart">
+    <div className="fan-mode"><button type="button" onClick={() => setMode("descendants")}>Descendants</button><button type="button" className="is-active">Ancestors</button></div>
     <svg viewBox="0 0 960 500" role="img" aria-label={`Ancestors of ${focal.displayName}`}>
       {sectors.map((sector) => <g key={sector.n} className={sector.person ? "fan-sector" : "fan-sector fan-sector-empty"} onClick={() => sector.person && onFocus(sector.person)}>
         <path d={sector.path} />
@@ -138,23 +225,31 @@ export function FanChartView({ tree, focusId, onFocus }: { tree: FamilyTree; foc
   </section>;
 }
 
+function buildDescentModel(tree: FamilyTree) {
+  const maps = buildRelationMaps(tree);
+  const lineage = new Map(tree.people.map((person) => [person.id, 0]));
+  for (let pass = 0; pass < tree.people.length; pass += 1) {
+    for (const [child, parents] of maps.parentsOf) {
+      for (const parent of parents) lineage.set(child, Math.max(lineage.get(child) ?? 0, (lineage.get(parent) ?? 0) + 1));
+    }
+  }
+  const primary = new Map<string, string>();
+  for (const [child, parents] of maps.parentsOf) {
+    const best = [...parents].sort((a, b) => (lineage.get(b) ?? 0) - (lineage.get(a) ?? 0) || (maps.byId.get(a)?.displayName ?? "").localeCompare(maps.byId.get(b)?.displayName ?? ""))[0];
+    primary.set(child, best);
+  }
+  const kidsOf = new Map<string, string[]>();
+  for (const [child, parent] of primary) kidsOf.set(parent, [...(kidsOf.get(parent) ?? []), child]);
+  for (const kids of kidsOf.values()) {
+    kids.sort((a, b) => (Number(maps.byId.get(a)?.birthDate?.slice(0, 4)) || 9999) - (Number(maps.byId.get(b)?.birthDate?.slice(0, 4)) || 9999) || (maps.byId.get(a)?.displayName ?? "").localeCompare(maps.byId.get(b)?.displayName ?? ""));
+  }
+  return { maps, primary, kidsOf };
+}
+
 /** The whole family as a collapsible indented outline. */
 export function OutlineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
   const model = useMemo(() => {
-    const maps = buildRelationMaps(tree);
-    const lineage = new Map(tree.people.map((person) => [person.id, 0]));
-    for (let pass = 0; pass < tree.people.length; pass += 1) {
-      for (const [child, parents] of maps.parentsOf) {
-        for (const parent of parents) lineage.set(child, Math.max(lineage.get(child) ?? 0, (lineage.get(parent) ?? 0) + 1));
-      }
-    }
-    const primary = new Map<string, string>();
-    for (const [child, parents] of maps.parentsOf) {
-      const best = [...parents].sort((a, b) => (lineage.get(b) ?? 0) - (lineage.get(a) ?? 0) || (maps.byId.get(a)?.displayName ?? "").localeCompare(maps.byId.get(b)?.displayName ?? ""))[0];
-      primary.set(child, best);
-    }
-    const kidsOf = new Map<string, string[]>();
-    for (const [child, parent] of primary) kidsOf.set(parent, [...(kidsOf.get(parent) ?? []), child]);
+    const { maps, kidsOf } = buildDescentModel(tree);
     const placedAsSpouse = new Set<string>();
     for (const person of tree.people) {
       if (maps.parentsOf.has(person.id)) continue;
@@ -179,7 +274,7 @@ export function OutlineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (p
       {spouses.map((spouse) => <span className="outline-spouse" key={spouse.id}>⚭ <button type="button" onClick={() => onSelect(spouse)}>{spouse.displayName}</button>{years(spouse) ? ` ${years(spouse)}` : ""}</span>)}
     </span>;
     if (!kids.length) return <div className="outline-leaf" key={person.id}>{line}</div>;
-    return <details key={person.id} open={depth < 2}>
+    return <details key={person.id} open>
       <summary>{line}</summary>
       <div className="outline-kids">{kids.map((kid) => renderPerson(kid, depth + 1, seen))}</div>
     </details>;
@@ -230,4 +325,112 @@ export function TreeSearch({ tree, onPick }: { tree: FamilyTree; onPick: (person
       </button>)}
     </div>}
   </div>;
+}
+
+/** A review queue of incomplete records: one card per person listing what is
+ * missing, with inline inputs, save, and skip. Skips persist per browser. */
+export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; onSaved: (tree: FamilyTree) => void; onOpen: (person: Person) => void }) {
+  const maps = useMemo(() => buildRelationMaps(tree), [tree]);
+  const generationOf = useMemo(() => {
+    const depth = new Map(tree.people.map((person) => [person.id, 0]));
+    for (let pass = 0; pass < tree.people.length; pass += 1) {
+      for (const [child, parents] of maps.parentsOf) {
+        for (const parent of parents) depth.set(child, Math.max(depth.get(child) ?? 0, (depth.get(parent) ?? 0) + 1));
+      }
+    }
+    return depth;
+  }, [tree, maps]);
+  const [skipped, setSkipped] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(window.localStorage.getItem("darabiha-skipped") ?? "[]") as string[]); } catch { return new Set(); }
+  });
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const missingOf = (person: Person) => {
+    const missing: string[] = [];
+    if (!person.gender) missing.push("gender");
+    if (!person.birthDate) missing.push("birth date");
+    if (!person.birthCity && !person.birthCountry && !person.birthPlace) missing.push("birth place");
+    if (!person.photoAttachmentId) missing.push("photo");
+    return missing;
+  };
+  const incomplete = tree.people.filter((person) => missingOf(person).length > 0);
+  const queue = incomplete
+    .filter((person) => !skipped.has(person.id))
+    .sort((a, b) => (generationOf.get(b.id) ?? 0) - (generationOf.get(a.id) ?? 0) || a.displayName.localeCompare(b.displayName));
+  const current = queue[0];
+  const persistSkips = (next: Set<string>) => {
+    setSkipped(next);
+    try { window.localStorage.setItem("darabiha-skipped", JSON.stringify([...next])); } catch { /* private mode */ }
+  };
+  const skip = () => {
+    if (!current) return;
+    persistSkips(new Set([...skipped, current.id]));
+    setForm({});
+    setNotice("");
+  };
+  const save = async () => {
+    if (!current) return;
+    const patch: Record<string, string> = {};
+    for (const key of ["gender", "birthDate", "deathDate", "birthCity", "birthCountry"]) {
+      if (form[key]?.trim()) patch[key] = form[key].trim();
+    }
+    if (!Object.keys(patch).length) { skip(); return; }
+    setBusy(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "update", personId: current.id, patch }) });
+      const data = await response.json() as { tree?: FamilyTree };
+      if (!response.ok || !data.tree) throw new Error("save_failed");
+      onSaved(data.tree);
+      setForm({});
+      setNotice(`Saved ${current.displayName}.`);
+    } catch {
+      setNotice("Could not save — please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const context = (person: Person) => {
+    const parents = (maps.parentsOf.get(person.id) ?? []).map((id) => maps.byId.get(id)?.displayName).filter(Boolean);
+    const spouses = [...new Set(maps.spousesOf.get(person.id) ?? [])].map((id) => maps.byId.get(id)?.displayName).filter(Boolean);
+    const kids = [...new Set(maps.childrenOf.get(person.id) ?? [])].length;
+    const parts = [];
+    if (parents.length) parts.push(`child of ${parents.join(" and ")}`);
+    if (spouses.length) parts.push(`married to ${spouses.join(", ")}`);
+    if (kids) parts.push(`${kids} ${kids === 1 ? "child" : "children"}`);
+    return parts.join(" · ") || "no recorded relatives";
+  };
+  const complete = tree.people.length - incomplete.length;
+  const field = (key: string, placeholder: string) =>
+    <input className="fill-input" value={form[key] ?? ""} placeholder={placeholder} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />;
+  return <section className="fill-view" aria-label="Fill in missing details">
+    <div className="fill-progress">
+      <strong>{complete}</strong> of {tree.people.length} records are complete · <strong>{queue.length}</strong> to review
+      {skipped.size > 0 && <> · {skipped.size} skipped <button type="button" className="fill-reset" onClick={() => persistSkips(new Set())}>reset</button></>}
+    </div>
+    {!current && <div className="fill-done">Every card has been reviewed. Thank you! {skipped.size > 0 ? "Reset the skipped list to go through them again." : ""}</div>}
+    {current && <div className="fill-card">
+      <div className="fill-head">
+        <button type="button" className="fill-name" onClick={() => onOpen(current)}>{current.displayName}</button>
+        <span className="fill-context">{context(current)}</span>
+        <span className="fill-missing">Missing: {missingOf(current).join(", ")}</span>
+      </div>
+      <div className="fill-fields">
+        {!current.gender && <div className="fill-field"><label>Gender</label><div className="fill-gender">
+          {(["female", "male"] as const).map((option) => <button key={option} type="button" className={form.gender === option ? "is-active" : ""} onClick={() => setForm({ ...form, gender: option })}>{option === "female" ? "♀ Female" : "♂ Male"}</button>)}
+        </div></div>}
+        {!current.birthDate && <div className="fill-field"><label>Born</label>{field("birthDate", "1962 or 1962-04-17")}</div>}
+        {!current.deathDate && <div className="fill-field"><label>Died <em>(leave empty if living)</em></label>{field("deathDate", "1990 or 1990-11-02")}</div>}
+        {!current.birthCity && !current.birthPlace && <div className="fill-field"><label>Birth city</label>{field("birthCity", "Qazvin")}</div>}
+        {!current.birthCountry && !current.birthPlace && <div className="fill-field"><label>Birth country</label>{field("birthCountry", "Iran")}</div>}
+      </div>
+      <div className="fill-actions">
+        <button type="button" className="fill-save" disabled={busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>
+        <button type="button" className="fill-skip" disabled={busy} onClick={skip}>Skip this person</button>
+        {notice && <span className="fill-notice">{notice}</span>}
+      </div>
+    </div>}
+    <p className="fill-footnote">Cards start with the youngest generations — the people the family knows best. A photo can be added from the person&rsquo;s record (click their name above). Anything saved here goes straight into the tree, the timeline, and the map.</p>
+  </section>;
 }

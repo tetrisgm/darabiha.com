@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { TimelineView, WorldMapView } from "./ArchiveViews";
-import { FanChartView, FocusFamilyView, OutlineView, TreeSearch } from "./TreeViews";
+import { FanChartView, FocusFamilyView, MissingDataView, OutlineView, TreeSearch } from "./TreeViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { BUILD_ID, VERSION } from "../../lib/build";
 
@@ -41,9 +41,9 @@ function formatDate(value: string | null) {
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
 const EMPTY_TREE: FamilyTree = { people: [], relationships: [], stories: [] };
-const VIEW_MODES = ["family", "tree", "fan", "list", "timeline", "map"] as const;
+const VIEW_MODES = ["family", "tree", "fan", "list", "timeline", "map", "fill"] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
-const VIEW_LABELS: Record<ViewMode, string> = { family: "Family", tree: "Full tree", fan: "Fan", list: "List", timeline: "Timeline", map: "Map" };
+const VIEW_LABELS: Record<ViewMode, string> = { family: "Family", tree: "Full tree", fan: "Fan", list: "List", timeline: "Timeline", map: "Map", fill: "Fill in" };
 
 export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOutPath, signInEnabled }: Props) {
   const [tree, setTree] = useState(initialTree ?? EMPTY_TREE);
@@ -82,7 +82,21 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     setViewModeState(mode);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
   };
-  const [focalId, setFocalId] = useState<string | null>(null);
+  const [focalId, setFocalIdState] = useState<string | null>(null);
+  const [focalHistory, setFocalHistory] = useState<string[]>([]);
+  const setFocalId = (next: string | null) => {
+    setFocalIdState((previous) => {
+      if (previous && next && previous !== next) setFocalHistory((history) => [...history.slice(-30), previous]);
+      return next;
+    });
+  };
+  const focalBack = () => {
+    setFocalHistory((history) => {
+      const previous = history[history.length - 1];
+      if (previous) setFocalIdState(previous);
+      return history.slice(0, -1);
+    });
+  };
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -221,10 +235,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="relative h-full min-h-0">
 
             <div className="relative h-full min-h-0 overflow-hidden bg-[#eef4f1]">
-              {(viewMode === "family" || viewMode === "tree" || viewMode === "fan" || viewMode === "list") && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
-              {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} onFocus={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); }} onOpen={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
+              {viewMode !== "timeline" && viewMode !== "map" && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
+              {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} canBack={focalHistory.length > 0} onBack={focalBack} onFocus={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); }} onOpen={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "fan" && treeLoaded && focal && <FanChartView tree={tree} focusId={focal.id} onFocus={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); }} />}
               {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} />}
+              {viewMode === "fill" && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} />}
               {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
               {viewMode === "map" && <WorldMapView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}

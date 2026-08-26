@@ -147,13 +147,28 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     // children, and a stem to each child. A parent who lives in another
     // family block is connected by their amber marriage elbow alone.
     const hooks = [...sets.values()].flatMap(({ parentIds, children }) => {
-      const childPoints = children.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[];
+      const allChildPoints = children.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[];
       const parentPoints = parentIds.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[];
-      if (!childPoints.length || !parentPoints.length) return [];
-      let barLeft = Math.min(...childPoints.map((p) => p.x));
-      let barRight = Math.max(...childPoints.map((p) => p.x));
-      const junctionY = Math.min(...childPoints.map((p) => p.y)) - ROW / 2;
-      /* halfway between the parents' row and the children's row */
+      if (!allChildPoints.length || !parentPoints.length) return [];
+      // a child drawn beside their spouse in another family block gets an
+      // elbow of their own; the sibling bar spans only the home cluster
+      const parentCenter = parentPoints.reduce((sum, p) => sum + p.x, 0) / parentPoints.length;
+      const sorted = [...allChildPoints].sort((a, b) => a.x - b.x);
+      let cluster = [sorted[0]];
+      const clusters: { x: number; y: number }[][] = [cluster];
+      for (let index = 1; index < sorted.length; index += 1) {
+        if (sorted[index].x - sorted[index - 1].x > SLOT * 3) { cluster = [sorted[index]]; clusters.push(cluster); }
+        else cluster.push(sorted[index]);
+      }
+      const core = clusters.sort((a, b) => {
+        const da = Math.min(...a.map((p) => Math.abs(p.x - parentCenter)));
+        const db = Math.min(...b.map((p) => Math.abs(p.x - parentCenter)));
+        return b.length - a.length || da - db;
+      })[0];
+      const farChildren = allChildPoints.filter((p) => !core.includes(p));
+      let barLeft = Math.min(...core.map((p) => p.x));
+      let barRight = Math.max(...core.map((p) => p.x));
+      const junctionY = Math.min(...core.map((p) => p.y)) - ROW / 2;
       const center = (barLeft + barRight) / 2;
       const near = parentPoints.filter((p) => p.x >= barLeft - SLOT * 2 && p.x <= barRight + SLOT * 2);
       const anchors = near.length ? near : [parentPoints.sort((a, b) => Math.abs(a.x - center) - Math.abs(b.x - center))[0]];
@@ -164,7 +179,10 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       return [{
         key: parentIds.join("|"),
         dropX, parentY, junctionY, barLeft, barRight,
-        drops: childPoints.map((p) => ({ x: p.x, y: p.y })),
+        drops: core.map((p) => ({ x: p.x, y: p.y })),
+        farLines: farChildren.map((p) => ({
+          path: `M ${Math.abs(p.x - barLeft) < Math.abs(p.x - barRight) ? barLeft : barRight} ${junctionY} L ${p.x} ${junctionY} L ${p.x} ${p.y}`,
+        })),
       }];
     });
     return { positions, spouseLines, hooks };
@@ -295,6 +313,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
           <line x1={hook.dropX} y1={hook.parentY} x2={hook.dropX} y2={hook.junctionY} />
           <line x1={hook.barLeft} y1={hook.junctionY} x2={hook.barRight} y2={hook.junctionY} />
           {hook.drops.map((drop) => <line key={`${drop.x}-${drop.y}`} x1={drop.x} y1={hook.junctionY} x2={drop.x} y2={drop.y} />)}
+          {hook.farLines.map((farLine, index) => <path key={index} d={farLine.path} fill="none" />)}
         </g>)}
       </svg>
       {visibleTree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}

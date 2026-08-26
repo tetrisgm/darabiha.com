@@ -132,35 +132,65 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
     primaryParent.set(child, best);
   }
 
-  // a married-in spouse (no recorded parents) is drawn inside the partner's
-  // couple row; everyone else anchors their own family block
+  // Married people always stand together: for every couple the partner with
+  // the shallower recorded ancestry leaves their own family block and joins
+  // the deeper partner's row (their tie back to their parents is drawn as a
+  // descent elbow instead).
+  const anchorScore = (id: string) => [lineage.get(id) ?? 0, countAncestors(id)] as const;
+  const outranks = (a: string, b: string) => {
+    const [la, ca] = anchorScore(a);
+    const [lb, cb] = anchorScore(b);
+    if (la !== lb) return la > lb;
+    if (ca !== cb) return ca > cb;
+    if ((depth.get(a) ?? 0) !== (depth.get(b) ?? 0)) return (depth.get(a) ?? 0) < (depth.get(b) ?? 0);
+    const byName = name(a).localeCompare(name(b));
+    if (byName !== 0) return byName < 0;
+    return a < b;
+  };
   const attachedTo = new Map<string, string>();
-  for (const person of tree.people) {
-    if (hasParents(person.id)) continue;
-    const partners = (spousesOf.get(person.id) ?? []).filter((partner) => hasParents(partner) || (spousesOf.get(partner)?.length ?? 0) === 0);
-    const anchor = partners.filter(hasParents).sort((a, b) => name(a).localeCompare(name(b)))[0];
-    if (anchor) attachedTo.set(person.id, anchor);
+  const pairs: [string, string][] = [];
+  for (const [id, partners] of spousesOf) for (const partner of partners) if (id < partner) pairs.push([id, partner]);
+  // strongest partners claim their spouses first so chains stay short
+  pairs.sort((left, right) => (outranks(left[0], left[1]) ? 0 : 1) - (outranks(right[0], right[1]) ? 0 : 1));
+  for (const [a, b] of pairs) {
+    const winner = outranks(a, b) ? a : b;
+    const loser = winner === a ? b : a;
+    if (!attachedTo.has(loser) && loser !== winner) attachedTo.set(loser, winner);
   }
-  // two rootless people married to each other: attach the later name to the first
-  for (const person of tree.people) {
-    if (hasParents(person.id) || attachedTo.has(person.id)) continue;
-    const partners = (spousesOf.get(person.id) ?? []).filter((partner) => !hasParents(partner) && !attachedTo.has(partner));
-    for (const partner of partners) {
-      if (name(partner) > name(person.id) || (name(partner) === name(person.id) && partner > person.id)) attachedTo.set(partner, person.id);
+  // never attach to someone who is themselves attached into a cycle
+  for (const [loser] of attachedTo) {
+    const seen = new Set<string>([loser]);
+    let current = attachedTo.get(loser);
+    while (current !== undefined) {
+      if (seen.has(current)) { attachedTo.delete(loser); break; }
+      seen.add(current);
+      current = attachedTo.get(current);
     }
   }
+  const attachRoot = (id: string) => {
+    let current = id;
+    let guard = 0;
+    while (attachedTo.has(current) && guard < 20) { current = attachedTo.get(current)!; guard += 1; }
+    return current;
+  };
 
+  const attachedOf = new Map<string, string[]>();
+  for (const [loser] of attachedTo) {
+    const owner = attachRoot(loser);
+    attachedOf.set(owner, [...(attachedOf.get(owner) ?? []), loser]);
+  }
   const memberRow = (owner: string) => {
-    const attached = (spousesOf.get(owner) ?? []).filter((spouse) => attachedTo.get(spouse) === owner);
+    const attached = [...(attachedOf.get(owner) ?? [])];
     attached.sort((a, b) => name(a).localeCompare(name(b)));
     if (attached.length <= 1) return [owner, ...attached];
     return [attached[0], owner, ...attached.slice(1)]; // sit between two spouses
   };
   const childList = (owner: string) => {
+    const members = memberRow(owner);
     const ids = new Set<string>();
-    for (const member of memberRow(owner)) for (const child of childrenOf.get(member) ?? []) if (primaryParent.get(child) === member || primaryParent.get(child) === owner) ids.add(child);
+    for (const member of members) for (const child of childrenOf.get(member) ?? []) if (members.includes(primaryParent.get(child) ?? "")) ids.add(child);
     return [...ids]
-      .filter((child) => primaryParent.get(child) && memberRow(owner).includes(primaryParent.get(child)!))
+      .filter((child) => !attachedTo.has(child)) // drawn beside their spouse instead
       .sort((a, b) => {
         const ya = Number(byId.get(a)?.birthDate?.slice(0, 4)) || 9999;
         const yb = Number(byId.get(b)?.birthDate?.slice(0, 4)) || 9999;
@@ -196,17 +226,35 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
     }
   };
 
-  // roots: no parents and not drawn inside someone else's couple row
+  // roots: no parents and not drawn inside someone else's couple row. An
+  // in-law parent whose every child is drawn beside a spouse elsewhere is a
+  // "satellite": placed directly above that child rather than at the edge.
   const roots = tree.people
     .filter((person) => !hasParents(person.id) && !attachedTo.has(person.id))
     .sort((a, b) => (depth.get(a.id) ?? 0) - (depth.get(b.id) ?? 0) || ((spousesOf.get(b.id)?.length ?? 0) - (spousesOf.get(a.id)?.length ?? 0)) || a.displayName.localeCompare(b.displayName));
+  const isSatellite = (id: string) => childList(id).length === 0 && (childrenOf.get(id) ?? []).length > 0;
   let cursor = 0;
   let anchorX: number | null = null;
   for (const root of roots) {
-    if (positions.has(root.id)) continue;
+    if (positions.has(root.id) || isSatellite(root.id)) continue;
     place(root.id, cursor);
     if (anchorX === null) anchorX = positions.get(root.id)?.x ?? null;
     cursor += measure(root.id) + 1;
+  }
+  for (const root of roots) {
+    if (positions.has(root.id) || !isSatellite(root.id)) continue;
+    const width = measure(root.id);
+    const row = depth.get(root.id) ?? 0;
+    const child = (childrenOf.get(root.id) ?? []).map((id) => positions.get(id)).find(Boolean);
+    if (!child) { place(root.id, cursor); cursor += width + 1; continue; }
+    const occupied = [...positions.values()].filter((slot) => slot.y === row).map((slot) => slot.x);
+    const free = (center: number) => occupied.every((x) => Math.abs(x - center) > width / 2 + 0.6);
+    let center = child.x;
+    for (let step = 0; step < 40 && !free(center); step += 1) {
+      const offset = (Math.floor(step / 2) + 1) * 1.1;
+      center = child.x + (step % 2 === 0 ? offset : -offset);
+    }
+    place(root.id, center - width / 2);
   }
   // safety net: anything unplaced (odd data shapes) lines up at the end
   for (const person of tree.people) {
