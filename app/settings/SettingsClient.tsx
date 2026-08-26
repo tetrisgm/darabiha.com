@@ -94,12 +94,21 @@ export default function SettingsClient({ viewer, appleSignInPath, googleSignInPa
 
       {viewer.signedIn && <div className="settings-card">
         <h2>Linked sign-ins</h2>
-        <p className="settings-hint">Link your Apple and Google sign-ins so either one lands in this same account — linking works by completing the other provider&rsquo;s sign-in once.</p>
+        <p className="settings-hint">Link your Apple and Google sign-ins so either one lands in this same account — linking works by completing the other provider&rsquo;s sign-in once. The × disconnects a linked sign-in again.</p>
         <ul className="settings-identity-list">
           <li><span className="settings-member-email">{viewer.accountEmail}</span><span className="settings-provider">primary</span></li>
           {viewer.links.map((link) => <li key={link.email}>
             <span className="settings-member-email">{link.email}</span>
             <span className="settings-provider">{link.provider ? PROVIDER_LABEL[link.provider] ?? link.provider : "linked"}</span>
+            <button type="button" className="settings-remove" disabled={busy} aria-label={`Disconnect ${link.email}`} title="Disconnect this sign-in"
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await fetch("/api/members", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "unlink", email: link.email }) });
+                } finally {
+                  window.location.reload();
+                }
+              }}>×</button>
           </li>)}
         </ul>
         <div className="settings-signin-row">

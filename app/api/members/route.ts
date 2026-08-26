@@ -1,4 +1,5 @@
-import { requireAdmin } from "../../authz";
+import { getAppleUser } from "../../apple-auth";
+import { getViewerRole, requireAdmin } from "../../authz";
 import { linkIdentity, listMembers, removeMember, resolveMemberEmail, unlinkIdentity, upsertMember } from "../../../db/store";
 
 export async function GET() {
@@ -8,21 +9,27 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await requireAdmin();
-  if (!auth.ok) return auth.response;
+  const user = await getAppleUser();
+  if (!user) return Response.json({ error: "sign_in_required" }, { status: 401 });
   const body = await request.json().catch(() => null) as { action?: string; email?: string; role?: string; memberEmail?: string } | null;
   const email = (body?.email || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: "invalid_email" }, { status: 400 });
+  const isAdmin = (await getViewerRole(user)) === "admin";
 
   if (body?.action === "unlink") {
-    await unlinkIdentity(email, auth.user.email);
-    return Response.json({ members: await listMembers() });
+    // Anyone may disconnect a sign-in from their OWN account; unlinking
+    // someone else's needs an admin.
+    const own = (await resolveMemberEmail(user.email)) === (await resolveMemberEmail(email));
+    if (!isAdmin && !own) return Response.json({ error: "admin_access_required" }, { status: 403 });
+    await unlinkIdentity(email, user.email);
+    return Response.json(isAdmin ? { members: await listMembers() } : { ok: true });
   }
+  if (!isAdmin) return Response.json({ error: "admin_access_required" }, { status: 403 });
   if (body?.action === "link") {
     const memberEmail = (body.memberEmail || "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memberEmail)) return Response.json({ error: "invalid_email" }, { status: 400 });
     try {
-      await linkIdentity(email, memberEmail, null, auth.user.email);
+      await linkIdentity(email, memberEmail, null, user.email);
     } catch {
       return Response.json({ error: "identity_linked_elsewhere" }, { status: 409 });
     }
@@ -39,12 +46,12 @@ export async function POST(request: Request) {
   if (body?.action === "remove") {
     if (!target) return Response.json({ error: "not_a_member" }, { status: 404 });
     if (lastAdmin) return Response.json({ error: "last_admin" }, { status: 400 });
-    await removeMember(canonical, auth.user.email);
+    await removeMember(canonical, user.email);
   } else if (body?.action === "set") {
     const role = body.role === "admin" ? "admin" as const : body.role === "editor" ? "editor" as const : null;
     if (!role) return Response.json({ error: "invalid_role" }, { status: 400 });
     if (lastAdmin && role !== "admin") return Response.json({ error: "last_admin" }, { status: 400 });
-    await upsertMember(canonical, role, auth.user.email);
+    await upsertMember(canonical, role, user.email);
   } else {
     return Response.json({ error: "unknown_action" }, { status: 400 });
   }
