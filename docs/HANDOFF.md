@@ -5,16 +5,16 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 52**, `BUILD_ID=0e1e56c`, Worker deployment `e5beef79-1e8e-4801-9e48-8b1bd843431e`.
+- The live release is **Version 53**, `BUILD_ID=85a473b`, Worker deployment `af20582f-4b29-4328-be2f-5d068ef68355`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - `app/authz.ts` intentionally has `TEMPORARY_OPEN_EDITOR = true`. This is the owner-requested testing exception while Nasser’s Apple account is temporarily locked. Every visitor can currently mutate the archive. The Apple implementation and allowlist remain present but are not enforced.
 - Apple enforcement is restored by changing only that constant to `false`, testing all three invited family accounts, incrementing `lib/build.ts`, and deploying. The owner must first confirm that family Apple access is working.
-- Production exposes its uncached identity at `/api/version` and as visible `Version 52` text at the lower-left edge.
+- Production exposes its uncached identity at `/api/version` and as visible `Version 53` text at the lower-left edge.
 - **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":52,"build":"0e1e56c","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":53,"build":"85a473b","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - `/legacy-family-tree` returns the corrected 183 KB outline reconstruction; `/legacy-family-tree-data.json` returns 407 people, 680 relationships (543 parent, 137 spouse), 14 documents, nine photograph records, and zero identity warnings; `/legacy-photos/*.jpg` serves the eight unique photograph files.
 - `/api/auth/apple` returns 302 to Apple with the Darabiha callback URL.
@@ -37,6 +37,14 @@ Last updated: 2026-08-26
 - The one known data conflict is resolved: Parissima Darabiha's birth date was a typo (`1983-09-09`) and was corrected to `1987-09-09` on 2026-08-26 through the audited update path, matching the archive's 1987.
 - Re-running the import script after a successful import is a no-op; `--execute` runs wrangler against the remote database, without it the script only writes SQL and a report.
 
+### Profile drawer and marriage status (Version 53)
+
+- The drawer edits everything in place: name, gender chips, birth/death dates and structured places, and the biography are click-to-edit fields saving single-field patches through `/api/people` `update` (the Edit toggle, the "Family member" eyebrow, the redundant date line, and the dead legacy `PersonModal` are gone). Names of other family members inside a biography render as clickable links.
+- Spouse relationships carry an optional `status` column (`divorced` | `widowed`; NULL means married): `ensureSchema` adds it with a compatibility ALTER, `setRelationshipStatus` writes it with a change_log entry, `/api/people` action `relationship_status` exposes it, a select beside each spouse chip edits it, and ended marriages render fainter on the Tree canvas (`.spouse-connector.is-ended`).
+- Tree-canvas cards use the same gendered silhouettes as the pedigree (the separate gender glyph chip was removed).
+- **Fill in** is a searchable list of every incomplete card (youngest generations first): click a row to fill gender/dates/places in place or jump to the full record; the one-at-a-time queue and its localStorage skip list are gone.
+- A biography-mining pass (2026-08-26) filled facts stated or strongly implied by the family biographies: Ghassem Darabi died in Tehran (the family moved there in 1326 SH/1947; he died 1358/1979), Mohammad Zehtab Darabi and Hossein Zehtab Darabi died in Qazvin (both died before the Tehran move). The biographies also name Robabeh Masoudi's siblings (Ebrahim, Esmail, Mahmoud, Fatemeh, Masoumeh) who are not yet people in the tree — a candidate future addition.
+
 ### Reconstructed legacy archive
 
 - `public/legacy-family-tree.html` is a read-only reconstruction of Nasser's `Darabi_Family_Tree_RD.zip`; it does not mutate or replace the current D1 tree. Version 45 replaced the first reconstruction after a full correctness audit (2026-08-25): the original had 35 people with zero relationships (the youngest generation was created but never linked), roughly ten spelling-variant duplicate people, missing marker-inferred mothers, and a canvas whose straight same-row marriage lines read as mass marriages.
@@ -51,8 +59,8 @@ Last updated: 2026-08-26
 
 ### Views, search, and navigation
 
-- The header offers seven views — **Family** (default), **Tree**, **Fan**, **List**, **Timeline**, **Map**, **Fill in** — plus a person search whose picks open the drawer, set the focal person, and (on the Tree) unfold and center on them. The chosen view persists in `localStorage` (`darabiha-view`).
-- **Family** (`app/components/TreeViews.tsx FocusFamilyView`): an ancestry.com-style pedigree — the focal couple in the middle with gendered portrait silhouettes (blue male / rose female / gray unknown, photos where added), children stacked left grouped by marriage, parents and grandparents branching right with measured SVG connector elbows (ResizeObserver-driven), dashed `＋ Add father / Add mother` ghost slots where ancestors are unrecorded, a collapsible sibling list, a Back button over the focal history, and a click popover on every card offering `Tree here` (re-center) and `Profile` (open the drawer). The initial focal person is Nasser Darabiha.
+- The header offers six views — **Family** (default), **Tree**, **List**, **Timeline**, **Map**, **Fill in** (the Fan view was removed 2026-08-26 at the owner's request) — plus a person search whose picks open the drawer, set the focal person, and (on the Tree) unfold and center on them. The chosen view persists in `localStorage` (`darabiha-view`).
+- **Family** (`app/components/TreeViews.tsx FocusFamilyView`): an ancestry.com-style pedigree — the focal couple in the middle with gendered portrait silhouettes (blue male / rose female / gray unknown, photos where added), children stacked left grouped by marriage, parents and grandparents branching right with measured SVG connector elbows, dashed `＋ Add father / Add mother` ghost slots, and a collapsible sibling list. Clicking any person centers the pedigree on them AND opens their record in one action; browser-style ←/→ arrows walk the focal history (past/future stacks in the app shell). The initial focal person is Nasser Darabiha; a spouse card shows `divorced`/`widowed` when a marriage status is set.
 - **Fan** (`FanChartView`): two modes. Descendants (default) draws every descendant of a chosen forebear as proportional wedges tinted by founding branch — it opens at the top of the focal person's line (Haj Chorok shows 274 people at once), wedges re-center on click, tooltips carry names the thin wedges cannot fit. Ancestors is the classic five-ring ahnentafel half-fan; its empty sectors are honest — most upper-generation mothers are unrecorded.
 - **List** (`OutlineView`): the whole family as an indented outline, fully expanded by default (collapsible per branch), marriages inline, names opening the drawer.
 - **Fill in** (`MissingDataView`): a review queue over incomplete records — one card per person with a relatives-context line, the missing fields named (gender, birth date, birth place, photo), inline inputs saved through the audited `/api/people` update path, and a per-browser skip list (`darabiha-skipped` in localStorage) with a reset. Cards start with the youngest generations. This queue is the intended route to a fuller Timeline and Map, which can only show people with dates and places.

@@ -53,7 +53,7 @@ test("a person card opens a navigable record", async ({ page }) => {
   await (await onCameraCard(page)).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.locator(".person-drawer-backdrop")).toBeVisible();
-  await expect(page.getByText("Family member")).toBeVisible();
+  await expect(page.locator(".person-modal-v2 h2")).toBeVisible();
 });
 
 test("canvas accepts wheel zoom without scrolling the document", async ({ page }) => {
@@ -97,7 +97,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("52");
+  expect(version).toBe("53");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
