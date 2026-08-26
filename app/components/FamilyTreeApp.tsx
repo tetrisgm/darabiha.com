@@ -10,7 +10,7 @@ import { BUILD_ID, VERSION } from "../../lib/build";
 
 type Props = {
   initialTree: FamilyTree | null;
-  viewer: { signedIn: boolean; canEdit: boolean; role: "admin" | "editor" | null; displayName: string | null };
+  viewer: { signedIn: boolean; canEdit: boolean; role: "admin" | "editor" | "viewer" | null; displayName: string | null };
   signInPath: string;
   signOutPath: string;
   signInEnabled: boolean;

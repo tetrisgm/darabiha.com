@@ -29,11 +29,14 @@ const schemaStatements = [
     summary TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS members (
-    email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'editor')),
+    email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'editor', 'viewer')),
     added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS member_links (
     email TEXT PRIMARY KEY, member_email TEXT NOT NULL, provider TEXT, created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS site_settings (
+    key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
 ];
 
@@ -44,6 +47,20 @@ export async function ensureSchema() {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
   try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
+  // Databases created before the viewer role carry a two-role CHECK
+  // constraint; SQLite cannot alter it, so the table is rebuilt once.
+  const membersSchema = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='members'").first<{ sql: string }>();
+  if (membersSchema && !membersSchema.sql.includes("'viewer'")) {
+    await env.DB.batch([
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS members_next (
+        email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'editor', 'viewer')),
+        added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      )`),
+      env.DB.prepare("INSERT OR IGNORE INTO members_next SELECT email, role, added_by, created_at, updated_at FROM members"),
+      env.DB.prepare("DROP TABLE members"),
+      env.DB.prepare("ALTER TABLE members_next RENAME TO members"),
+    ]);
+  }
   // First run seeds the member list: the owner as admin, plus any emails the
   // old EDITOR_EMAILS allow-list carried, as editors.
   const memberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM members").first<{ count: number }>();
@@ -60,7 +77,47 @@ export async function ensureSchema() {
   initialized = true;
 }
 
-export type MemberRole = "admin" | "editor";
+export type MemberRole = "admin" | "editor" | "viewer";
+
+export type SiteVisibility = "public" | "members";
+let visibilityCache: { value: SiteVisibility; time: number } | null = null;
+
+/** "public": anyone can visit. "members": visitors must sign in (every
+ * first sign-in auto-registers a viewer, so the member list is the guest
+ * book and admins can raise or remove anyone). */
+export async function getSiteVisibility(): Promise<SiteVisibility> {
+  if (visibilityCache && Date.now() - visibilityCache.time < 10_000) return visibilityCache.value;
+  await ensureSchema();
+  const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'visibility'").first<{ value: string }>();
+  const value: SiteVisibility = row?.value === "members" ? "members" : "public";
+  visibilityCache = { value, time: Date.now() };
+  return value;
+}
+
+export async function setSiteVisibility(value: SiteVisibility, actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO site_settings (key, value, updated_at) VALUES ('visibility', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(value, now),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "site_visibility", value === "members" ? "Restricted the site to signed-in members" : "Opened the site to anyone with the link", JSON.stringify({ visibility: value }), now),
+  ]);
+  visibilityCache = { value, time: Date.now() };
+}
+
+/** First sign-in of an unknown identity registers it as a viewer, so every
+ * account exists in the member list for admins to see and promote. */
+export async function registerViewer(email: string) {
+  const canonical = await resolveMemberEmail(email);
+  const existing = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(canonical).first<{ role: MemberRole }>();
+  if (existing) return;
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO members (email, role, added_by, created_at, updated_at) VALUES (?, 'viewer', 'sign-up', ?, ?)").bind(canonical, now, now),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), canonical, "member_signup", `${canonical} signed in for the first time and became a viewer`, JSON.stringify({ email: canonical, role: "viewer" }), now),
+  ]);
+}
 export type MemberIdentity = { email: string; provider: string | null };
 export type Member = { email: string; role: MemberRole; addedBy: string; createdAt: string; links: MemberIdentity[] };
 

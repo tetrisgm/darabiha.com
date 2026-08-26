@@ -1,5 +1,5 @@
 import { getAppleUser, type AppleUser } from "./apple-auth";
-import { getMemberRole, type MemberRole } from "../db/store";
+import { getMemberRole, getSiteVisibility, type MemberRole } from "../db/store";
 
 // TEMPORARY TEST MODE: keep this isolated so enforcement can be restored in one change
 // after the family finishes testing archive imports.
@@ -26,13 +26,31 @@ export async function requireEditor(): Promise<
       response: Response.json({ error: "sign_in_required" }, { status: 401 }),
     };
   }
-  if (!(await getViewerRole(user))) {
+  const role = await getViewerRole(user);
+  if (role !== "admin" && role !== "editor") {
     return {
       ok: false,
       response: Response.json({ error: "editor_access_required" }, { status: 403 }),
     };
   }
   return { ok: true, user };
+}
+
+/** Gate for read access. In "public" visibility everyone passes; in
+ * "members" visibility the visitor must be signed in with any role (every
+ * sign-in auto-registers a viewer, and admins can remove one). */
+export async function requireVisitor(): Promise<
+  { ok: true } | { ok: false; response: Response }
+> {
+  if ((await getSiteVisibility()) === "public") return { ok: true };
+  const user = await getAppleUser();
+  if (!user) {
+    return { ok: false, response: Response.json({ error: "sign_in_required" }, { status: 401 }) };
+  }
+  if (!(await getViewerRole(user))) {
+    return { ok: false, response: Response.json({ error: "viewer_access_required" }, { status: 403 }) };
+  }
+  return { ok: true };
 }
 
 /** Member management is admin-only and is never opened by the temporary

@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createSession, sessionCookie, verifyToken } from "../../../../apple-auth";
-import { linkIdentity } from "../../../../../db/store";
+import { linkIdentity, registerViewer } from "../../../../../db/store";
 
 type State = { nonce: string; returnTo: string; linkTo?: string; exp: number };
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
@@ -42,7 +42,9 @@ export async function GET(request: Request) {
     const displayName = typeof payload.name === "string" && payload.name ? payload.name : email.split("@")[0];
     // A link request attaches this proven identity to the initiating account.
     if (state.linkTo && state.linkTo !== email) await linkIdentity(email, state.linkTo, "google", state.linkTo);
-    // Anyone may sign in; the members table decides what the account can do.
+    // Anyone may sign in; a first sign-in registers the account as a viewer
+    // and admins assign roles from there.
+    await registerViewer(email);
     const session = await createSession({ subject: `google:${payload.sub}`, email, displayName });
     const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
     response.headers.append("set-cookie", sessionCookie(session));

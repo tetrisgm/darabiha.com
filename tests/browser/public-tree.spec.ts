@@ -173,3 +173,10 @@ test("member management refuses anonymous requests", async ({ request }) => {
   const mutation = await request.post("/api/members", { data: { action: "set", email: "intruder@example.com", role: "admin" } });
   expect(mutation.status()).toBe(401);
 });
+
+test("site access settings are admin-gated and the tree is public by default", async ({ request }) => {
+  const mutation = await request.post("/api/site", { data: { visibility: "members" } });
+  expect(mutation.status()).toBe(401);
+  const tree = await request.get("/api/tree");
+  expect(tree.status()).toBe(200);
+});

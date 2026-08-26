@@ -1,9 +1,12 @@
 import OpenAI from "openai";
 import { readTree } from "../../../db/store";
+import { requireVisitor } from "../../authz";
 
 export const runtime = "edge";
 
 export async function POST(request: Request) {
+  const access = await requireVisitor();
+  if (!access.ok) return access.response;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "openai_not_configured" }, { status: 503 });
   const body = await request.json() as { message?: unknown };

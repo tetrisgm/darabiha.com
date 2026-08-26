@@ -640,3 +640,14 @@ main.chat-collapsed .person-drawer-backdrop { left: 0; }
 .settings-member-link { display:inline-flex; align-items:center; gap:.25rem; margin-right:.7rem; color:var(--muted); font-size:.74rem; }
 .settings-unlink { display:inline-flex; height:1.15rem; width:1.15rem; align-items:center; justify-content:center; border-radius:.35rem; color:var(--muted); font-size:.8rem; line-height:1; }
 .settings-unlink:hover:not(:disabled) { background:#fdf0ee; color:#8c3a2b; }
+
+/* site access */
+.settings-visibility { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin-top:.9rem; }
+.settings-visibility-option { display:flex; flex-direction:column; gap:.25rem; border:1px solid var(--line); border-radius:.9rem; background:white; padding:.85rem 1rem; text-align:left; }
+.settings-visibility-option strong { font-size:.88rem; }
+.settings-visibility-option span { color:var(--muted); font-size:.76rem; line-height:1.45; }
+.settings-visibility-option.is-active { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.settings-visibility-option.is-active strong { color:var(--accent); }
+.settings-role-badge.is-viewer { background:var(--wash); color:var(--muted); }
+.visit-gate .settings-panel { margin-top:22vh; }
+@media (max-width: 640px) { .settings-visibility { grid-template-columns:1fr; } }
