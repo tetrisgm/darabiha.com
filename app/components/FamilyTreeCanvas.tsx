@@ -75,25 +75,28 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       entry.children.push(childId);
       sets.set(key, entry);
     }
+    // One line per meaning: descent is a single blue T - a drop from the
+    // couple's marriage line (or the lone recorded parent), a bar over the
+    // children, and a stem to each child. A parent who lives in another
+    // family block is connected by their amber marriage elbow alone.
     const hooks = [...sets.values()].flatMap(({ parentIds, children }) => {
       const childPoints = children.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[];
       const parentPoints = parentIds.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[];
       if (!childPoints.length || !parentPoints.length) return [];
-      const barLeft = Math.min(...childPoints.map((p) => p.x));
-      const barRight = Math.max(...childPoints.map((p) => p.x));
+      let barLeft = Math.min(...childPoints.map((p) => p.x));
+      let barRight = Math.max(...childPoints.map((p) => p.x));
       const junctionY = Math.min(...childPoints.map((p) => p.y)) - ROW / 2;
       const center = (barLeft + barRight) / 2;
       const near = parentPoints.filter((p) => p.x >= barLeft - SLOT * 2 && p.x <= barRight + SLOT * 2);
       const anchors = near.length ? near : [parentPoints.sort((a, b) => Math.abs(a.x - center) - Math.abs(b.x - center))[0]];
-      const far = parentPoints.filter((p) => !anchors.includes(p));
       const dropX = anchors.reduce((sum, p) => sum + p.x, 0) / anchors.length;
       const parentY = Math.max(...anchors.map((p) => p.y));
+      barLeft = Math.min(barLeft, dropX);
+      barRight = Math.max(barRight, dropX);
       return [{
         key: parentIds.join("|"),
-        coupleBar: anchors.length > 1 ? { y: parentY, left: Math.min(...anchors.map((p) => p.x)), right: Math.max(...anchors.map((p) => p.x)) } : null,
         dropX, parentY, junctionY, barLeft, barRight,
         drops: childPoints.map((p) => ({ x: p.x, y: p.y })),
-        farLines: far.map((p) => ({ px: p.x, py: p.y, toX: Math.abs(p.x - barLeft) < Math.abs(p.x - barRight) ? barLeft : barRight })),
       }];
     });
     return { positions, spouseLines, hooks };
@@ -179,6 +182,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   }
   return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} data-custom-cursor="true" data-interactive="true" data-panning={isPanning ? "true" : "false"} style={{ cursor: isPanning ? "grabbing" : "grab" }} onKeyDown={keyDown} onPointerEnter={positionCursor} onPointerLeave={hideCursor} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onWheel={zoom}>
     <div className="canvas-hit-surface" aria-hidden="true" style={{ cursor: isPanning ? "grabbing" : "grab" }} />
+    <div className="canvas-legend" aria-hidden="true"><i className="legend-swatch legend-parent" /> parent <i className="legend-swatch legend-marriage" /> marriage</div>
     <div className="canvas-controls" role="group" aria-label="Canvas zoom controls">
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(0.9)} aria-label="Zoom out" title="Zoom out">−</button>
       <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setView({ x: 0, y: 0, scale: 1 })} aria-label={`Reset zoom to 100 percent`} title="Reset zoom">{Math.round(view.scale * 100)}%</button>
@@ -188,11 +192,9 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       <svg className="tree-connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
         {spouseLines.map((line) => <path className="spouse-connector" key={line.id} d={line.path} fill="none" />)}
         {hooks.map((hook) => <g className="parent-connector" key={hook.key}>
-          {hook.coupleBar ? <line x1={hook.coupleBar.left} y1={hook.coupleBar.y} x2={hook.coupleBar.right} y2={hook.coupleBar.y} /> : null}
           <line x1={hook.dropX} y1={hook.parentY} x2={hook.dropX} y2={hook.junctionY} />
           <line x1={hook.barLeft} y1={hook.junctionY} x2={hook.barRight} y2={hook.junctionY} />
           {hook.drops.map((drop) => <line key={`${drop.x}-${drop.y}`} x1={drop.x} y1={hook.junctionY} x2={drop.x} y2={drop.y} />)}
-          {hook.farLines.map((farLine) => <path key={`${farLine.px}-${farLine.py}`} d={`M ${farLine.px} ${farLine.py} L ${farLine.px} ${hook.junctionY} L ${farLine.toX} ${hook.junctionY}`} fill="none" />)}
         </g>)}
       </svg>
       {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}

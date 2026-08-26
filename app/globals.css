@@ -238,6 +238,11 @@ button { cursor: pointer; }
 .tree-connectors line, .tree-connectors path { fill:none; stroke-width:.45; }
 .parent-connector { stroke:#4e8cff; }
 .spouse-connector { stroke:#e5ad52; stroke-dasharray:1.5 1; }
+.canvas-legend { position:absolute; left:16px; bottom:16px; z-index:4; display:flex; align-items:center; gap:6px;
+  padding:6px 12px; border-radius:999px; background:rgba(255,255,255,.85); border:1px solid var(--line);
+  font-size:11px; color:var(--muted); pointer-events:none; }
+.legend-swatch { display:inline-block; width:18px; height:0; border-top:2.5px solid #4e8cff; }
+.legend-swatch.legend-marriage { border-top:3px dashed #e5ad52; }
 .tree-card { position:absolute; z-index:2; display:flex; width:clamp(13rem,20vw,18rem); min-height:6rem; transform:translate(-50%,-50%); align-items:center; gap:.75rem; border:1px solid rgba(84, 111, 100, .25); border-radius:1rem; background:rgba(255,255,255,.92); padding:1rem; color:var(--ink); box-shadow:0 14px 40px rgba(45, 72, 57, .16); cursor:pointer; pointer-events:auto; text-align:left; backdrop-filter:blur(12px); }
 .tree-card-gender { position:absolute; right:.7rem; top:.55rem; display:flex; height:1.15rem; width:1.15rem; align-items:center; justify-content:center; border-radius:999px; background:#e9f1ea; color:#25734c; font-family:ui-sans-serif,system-ui,sans-serif; font-size:.82rem; font-weight:700; }
 .tree-card-portrait { display:flex; width:2.8rem; height:2.8rem; flex:0 0 auto; align-items:center; justify-content:center; overflow:hidden; border-radius:.75rem; background:#dbead9; color:#25734c; font-family:var(--font-serif),serif; font-size:1.25rem; }
