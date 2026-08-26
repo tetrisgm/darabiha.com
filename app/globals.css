@@ -390,3 +390,53 @@ button { cursor: pointer; }
 .fill-skip:hover { color:var(--ink); }
 .fill-notice { color:var(--muted); font-size:.8rem; }
 .fill-footnote { max-width:34rem; color:var(--muted); font-size:.76rem; text-align:center; }
+
+/* Ancestry-style pedigree (Family view) */
+.ped-view { padding:5.6rem 1.5rem 3rem; }
+.ped-stage { position:relative; margin:0 auto; max-width:76rem; min-height:24rem; }
+.ped-lines { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+.ped-lines path { fill:none; stroke:#b9c6bd; stroke-width:1.5; }
+.ped-columns { position:relative; display:flex; justify-content:center; gap:3.2rem; }
+.ped-col { display:flex; flex-direction:column; justify-content:center; gap:.55rem; min-width:13rem; }
+.ped-col-label { color:var(--muted); font-size:.66rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; margin-bottom:.15rem; }
+.ped-none { color:var(--muted); font-size:.78rem; }
+.ped-card button { display:flex; width:100%; align-items:center; gap:.6rem; border:1px solid rgba(84,111,100,.28); border-radius:.7rem;
+  background:white; padding:.5rem .7rem; text-align:left; box-shadow:0 6px 18px rgba(45,72,57,.1); transition:border-color .12s, box-shadow .12s; }
+.ped-card button:hover { border-color:var(--accent); box-shadow:0 10px 26px rgba(45,72,57,.16); }
+.ped-card.is-focal > button { border-width:2px; border-color:var(--accent); background:#f4faf6; }
+.ped-copy { display:flex; flex-direction:column; min-width:0; }
+.ped-copy strong { font-size:.82rem; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ped-copy > span { color:var(--muted); font-size:.7rem; }
+.ped-place { color:var(--muted); font-size:.66rem; }
+.ped-card-lg > button { padding:.75rem .85rem; }
+.ped-card-lg .ped-copy strong { font-size:.98rem; white-space:normal; }
+.ped-card-sm > button { padding:.35rem .55rem; box-shadow:none; }
+.ped-card-sm .ped-copy strong { font-size:.74rem; }
+.ped-portrait { display:flex; height:2.1rem; width:2.1rem; flex:none; align-items:center; justify-content:center; border-radius:999px; overflow:hidden; }
+.ped-card-lg .ped-portrait { height:2.9rem; width:2.9rem; }
+.ped-card-sm .ped-portrait { height:1.6rem; width:1.6rem; }
+.ped-portrait svg { width:68%; height:68%; }
+.ped-portrait circle, .ped-portrait path { fill:currentColor; }
+.ped-male { background:#e3ecf6; color:#5b7fa6; }
+.ped-female { background:#f6e3ea; color:#a65b7c; }
+.ped-unknown { background:#ececec; color:#9a9a9a; }
+.ped-photo img { height:100%; width:100%; object-fit:cover; }
+.ped-ghost button { border-style:dashed; background:rgba(255,255,255,.55); color:var(--muted); font-size:.74rem; justify-content:center; box-shadow:none; }
+.ped-ghost button:hover { color:var(--accent); }
+.ped-couple { display:flex; flex-direction:column; gap:.45rem; }
+.ped-spouse { display:flex; align-items:center; gap:.35rem; }
+.ped-marriage { color:#b98a44; font-size:.95rem; flex:none; }
+.ped-siblings { margin-top:1rem; border-top:1px dashed var(--line); padding-top:.6rem; }
+.ped-siblings summary { cursor:pointer; color:var(--muted); font-size:.74rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; margin-bottom:.4rem; }
+.ped-siblings .ped-card { margin:.3rem 0; }
+.ped-group-label { color:var(--muted); font-size:.7rem; font-style:italic; margin:.3rem 0 .1rem; }
+.ped-popover { position:absolute; z-index:30; transform:translateX(-50%); width:16.5rem; border:1px solid var(--line); border-radius:.9rem;
+  background:white; box-shadow:0 22px 60px rgba(45,72,57,.24); padding:.8rem .9rem; }
+.ped-popover-head { display:flex; align-items:center; gap:.6rem; margin-bottom:.6rem; }
+.ped-popover-head .ped-portrait { height:2.4rem; width:2.4rem; }
+.ped-popover-head strong { display:block; font-size:.88rem; }
+.ped-popover-head span { color:var(--muted); font-size:.72rem; }
+.ped-popover-actions { display:flex; gap:.45rem; }
+.ped-popover-actions button { border:1px solid var(--line); border-radius:999px; padding:.34rem .85rem; font-size:.76rem; font-weight:600; }
+.ped-popover-actions button:hover { border-color:var(--accent); color:var(--accent); }
+.ped-popover-close { margin-left:auto; border:none !important; color:var(--muted); font-size:1rem; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildRelationMaps } from "../../lib/tree-layout";
 
@@ -14,65 +14,161 @@ function years(person: Person | undefined) {
   return "";
 }
 
-function initial(person: Person) {
-  return person.displayName.slice(0, 1).toUpperCase();
+/** Ancestry-style pedigree around a focal person: children stacked on the
+ * left, the focal couple in the middle, parents and grandparents branching
+ * to the right, with measured connector lines, gendered silhouettes, ghost
+ * "add parent" slots, and a click popover offering Tree here / Profile. */
+function Silhouette({ gender }: { gender: Person["gender"] }) {
+  return <span className={`ped-portrait ped-${gender ?? "unknown"}`} aria-hidden="true">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+  </span>;
 }
 
-function PersonCard({ person, size, onClick, label }: { person: Person; size: "sm" | "md" | "lg"; onClick: () => void; label?: string }) {
-  return <button type="button" className={`focus-card focus-card-${size}`} onClick={onClick}>
-    <span className="focus-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : initial(person)}</span>
-    <span className="focus-card-copy"><strong>{person.displayName}</strong><span>{years(person) || " "}</span>{label ? <em>{label}</em> : null}</span>
-  </button>;
+function place(person: Person) {
+  return [person.birthCity, person.birthCountry].filter(Boolean).join(", ") || person.birthPlace || "";
 }
 
-/** One screen around a focal person: grandparents, parents, the couple, and
- * children. Clicking any relative re-centers on them. */
 export function FocusFamilyView({ tree, focusId, onFocus, onOpen, onBack, canBack }: { tree: FamilyTree; focusId: string; onFocus: (person: Person) => void; onOpen: (person: Person) => void; onBack?: () => void; canBack?: boolean }) {
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
-  const focal = maps.byId.get(focusId) ?? tree.people[0];
-  if (!focal) return null;
-  const get = (id: string) => maps.byId.get(id);
-  const parents = (maps.parentsOf.get(focal.id) ?? []).map(get).filter(Boolean) as Person[];
-  const grandparents = parents.map((parent) => ((maps.parentsOf.get(parent.id) ?? []).map(get).filter(Boolean) as Person[]));
-  const spouses = [...new Set(maps.spousesOf.get(focal.id) ?? [])].map(get).filter(Boolean) as Person[];
-  const childIds = [...new Set(maps.childrenOf.get(focal.id) ?? [])];
-  const children = childIds.map(get).filter(Boolean) as Person[];
-  children.sort((a, b) => (Number(a.birthDate?.slice(0, 4)) || 9999) - (Number(b.birthDate?.slice(0, 4)) || 9999) || a.displayName.localeCompare(b.displayName));
-  const siblings = [...new Set(parents.flatMap((parent) => maps.childrenOf.get(parent.id) ?? []))]
-    .filter((id) => id !== focal.id)
-    .map(get).filter(Boolean) as Person[];
-  const otherParentOf = (child: Person) => (maps.parentsOf.get(child.id) ?? []).filter((id) => id !== focal.id).map(get).filter(Boolean)[0] as Person | undefined;
-  const groups = new Map<string, { spouse: Person | undefined; kids: Person[] }>();
-  for (const child of children) {
-    const other = otherParentOf(child);
-    const key = other?.id ?? "-";
-    const group = groups.get(key) ?? { spouse: other, kids: [] };
-    group.kids.push(child);
-    groups.set(key, group);
-  }
-  return <section className="focus-view" aria-label="Family around one person">
+  const containerRef = useRef<HTMLDivElement>(null);
+  const slotRefs = useRef(new Map<string, HTMLDivElement>());
+  const [paths, setPaths] = useState<string[]>([]);
+  const [popover, setPopover] = useState<{ person: Person; x: number; y: number } | null>(null);
+  const model = useMemo(() => {
+    const focal = maps.byId.get(focusId) ?? tree.people[0];
+    if (!focal) return null;
+    const get = (id: string) => maps.byId.get(id);
+    const parents = (maps.parentsOf.get(focal.id) ?? []).map(get).filter(Boolean) as Person[];
+    const father = parents.find((parent) => parent.gender === "male") ?? parents[0];
+    const mother = parents.find((parent) => parent !== father);
+    const spouses = [...new Set(maps.spousesOf.get(focal.id) ?? [])].map(get).filter(Boolean) as Person[];
+    const children = [...new Set(maps.childrenOf.get(focal.id) ?? [])].map(get).filter(Boolean) as Person[];
+    children.sort((a, b) => (Number(a.birthDate?.slice(0, 4)) || 9999) - (Number(b.birthDate?.slice(0, 4)) || 9999) || a.displayName.localeCompare(b.displayName));
+    const siblings = [...new Set(parents.flatMap((parent) => maps.childrenOf.get(parent.id) ?? []))].filter((id) => id !== focal.id).map(get).filter(Boolean) as Person[];
+    const childGroups: { spouse: Person | undefined; kids: Person[] }[] = [];
+    for (const child of children) {
+      const other = (maps.parentsOf.get(child.id) ?? []).filter((id) => id !== focal.id).map(get).filter(Boolean)[0] as Person | undefined;
+      const existing = childGroups.find((group) => group.spouse?.id === other?.id);
+      if (existing) existing.kids.push(child);
+      else childGroups.push({ spouse: other, kids: [child] });
+    }
+    const links: [string, string][] = [];
+    for (const child of children) links.push([`child-${child.id}`, "focal"]);
+    if (father) links.push(["focal", "p-father"]);
+    if (mother) links.push(["focal", "p-mother"]);
+    const grandSlots: { parentKey: string; person: Person | undefined; key: string; label: string }[] = [];
+    for (const [parentKey, parent] of [["p-father", father], ["p-mother", mother]] as const) {
+      if (!parent) continue;
+      const grandparents = (maps.parentsOf.get(parent.id) ?? []).map(get).filter(Boolean) as Person[];
+      const grandfather = grandparents.find((gp) => gp.gender === "male") ?? grandparents[0];
+      const grandmother = grandparents.find((gp) => gp !== grandfather);
+      grandSlots.push({ parentKey, person: grandfather, key: `${parentKey}-gf`, label: "Add father" });
+      grandSlots.push({ parentKey, person: grandmother, key: `${parentKey}-gm`, label: "Add mother" });
+      if (grandfather) links.push([parentKey, `${parentKey}-gf`]);
+      if (grandmother) links.push([parentKey, `${parentKey}-gm`]);
+    }
+    return { focal, father, mother, spouses, children, siblings, childGroups, grandSlots, links };
+  }, [maps, tree, focusId]);
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || !model) return;
+    const draw = () => {
+      const base = container.getBoundingClientRect();
+      const next: string[] = [];
+      for (const [fromKey, toKey] of model.links) {
+        const from = slotRefs.current.get(fromKey)?.getBoundingClientRect();
+        const to = slotRefs.current.get(toKey)?.getBoundingClientRect();
+        if (!from || !to) continue;
+        const x0 = from.right - base.left, y0 = from.top + from.height / 2 - base.top;
+        const x1 = to.left - base.left, y1 = to.top + to.height / 2 - base.top;
+        const mid = (x0 + x1) / 2;
+        next.push(`M ${x0} ${y0} L ${mid} ${y0} L ${mid} ${y1} L ${x1} ${y1}`);
+      }
+      setPaths(next);
+    };
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [model]);
+  if (!model) return null;
+  const { focal, father, mother, spouses, children, siblings, childGroups, grandSlots } = model;
+  const setRef = (key: string) => (element: HTMLDivElement | null) => {
+    if (element) slotRefs.current.set(key, element);
+    else slotRefs.current.delete(key);
+  };
+  const openPopover = (person: Person, event: React.MouseEvent) => {
+    const stage = (event.currentTarget as HTMLElement).closest(".ped-stage");
+    const base = stage?.getBoundingClientRect();
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    if (!base) return;
+    setPopover({ person, x: rect.left - base.left + rect.width / 2, y: rect.bottom - base.top + 8 });
+  };
+  const card = (person: Person, key: string, size: "lg" | "md" | "sm") =>
+    <div ref={setRef(key)} className={`ped-card ped-card-${size} ${person.id === focal.id ? "is-focal" : ""}`} key={key}>
+      <button type="button" onClick={(event) => openPopover(person, event)}>
+        {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
+        <span className="ped-copy">
+          <strong>{person.displayName}</strong>
+          <span>{years(person) || "dates unknown"}</span>
+          {size === "lg" && place(person) && <span className="ped-place">{place(person)}</span>}
+        </span>
+      </button>
+    </div>;
+  const ghost = (label: string, key: string) =>
+    <div ref={setRef(key)} className="ped-card ped-card-sm ped-ghost" key={key}>
+      <button type="button" onClick={() => onOpen(focal)} title="Open the record to add this relative">＋ {label}</button>
+    </div>;
+  return <section className="focus-view ped-view" aria-label="Family around one person">
     <div className="focus-toolbar">
       <button type="button" className="focus-back" onClick={onBack} disabled={!canBack}>← Back</button>
-      <p className="focus-hint">Click any relative to move the view to them — parents take you up, children down.</p>
+      <p className="focus-hint">Click a card for options — center the tree on them or open their record.</p>
     </div>
-    <div className="focus-rows">
-      {grandparents.some((pair) => pair.length) && <><p className="focus-row-label">Grandparents</p><div className="focus-row focus-row-grandparents">
-        {grandparents.map((pair, index) => <div className="focus-pair" key={index}>{pair.map((gp) => <PersonCard key={gp.id} person={gp} size="sm" onClick={() => onFocus(gp)} />)}</div>)}
-      </div></>}
-      {parents.length > 0 && <><p className="focus-row-label">Parents ↑</p><div className="focus-row">{parents.map((parent) => <PersonCard key={parent.id} person={parent} size="md" onClick={() => onFocus(parent)} />)}</div></>}
-      <div className="focus-row focus-row-focal">
-        <PersonCard person={focal} size="lg" onClick={() => onOpen(focal)} label="Open record" />
-        {spouses.map((spouse) => <span className="focus-marriage" key={spouse.id}><span className="focus-marriage-glyph">⚭</span><PersonCard person={spouse} size="md" onClick={() => onFocus(spouse)} /></span>)}
+    <div className="ped-stage" ref={containerRef} onClick={(event) => { if (event.target === event.currentTarget) setPopover(null); }}>
+      <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
+      <div className="ped-columns">
+        <div className="ped-col ped-col-children">
+          <p className="ped-col-label">Children</p>
+          {children.length === 0 && <p className="ped-none">none recorded</p>}
+          {childGroups.map((group, index) => <div className="ped-group" key={index}>
+            {(childGroups.length > 1 || spouses.length > 1) && <p className="ped-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
+            {group.kids.map((child) => card(child, `child-${child.id}`, "md"))}
+          </div>)}
+        </div>
+        <div className="ped-col ped-col-focal">
+          <div className="ped-couple">
+            {card(focal, "focal", "lg")}
+            {spouses.map((spouse) => <div className="ped-spouse" key={spouse.id}><span className="ped-marriage">⚭</span>{card(spouse, `spouse-${spouse.id}`, "md")}</div>)}
+          </div>
+          {siblings.length > 0 && <details className="ped-siblings">
+            <summary>Siblings ({siblings.length})</summary>
+            {siblings.map((sibling) => card(sibling, `sib-${sibling.id}`, "sm"))}
+          </details>}
+        </div>
+        <div className="ped-col ped-col-parents">
+          <p className="ped-col-label">Parents</p>
+          {father ? card(father, "p-father", "md") : ghost("Add father", "p-father")}
+          {mother ? card(mother, "p-mother", "md") : ghost("Add mother", "p-mother")}
+        </div>
+        <div className="ped-col ped-col-grand">
+          <p className="ped-col-label">Grandparents</p>
+          {grandSlots.length === 0 && <p className="ped-none">—</p>}
+          {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
+            {slot.person ? card(slot.person, slot.key, "sm") : ghost(slot.label, slot.key)}
+          </div>)}
+        </div>
       </div>
-      {siblings.length > 0 && <div className="focus-siblings">Siblings: {siblings.map((sibling) => <button type="button" key={sibling.id} onClick={() => onFocus(sibling)}>{sibling.displayName}</button>)}</div>}
-      {children.length > 0 && <div className="focus-children">
-        <p className="focus-row-label">Children ↓</p>
-        {[...groups.values()].map((group, index) => <div className="focus-child-group" key={index}>
-          {(groups.size > 1 || spouses.length > 1) && <p className="focus-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
-          <div className="focus-row">{group.kids.map((child) => <PersonCard key={child.id} person={child} size="md" onClick={() => onFocus(child)} />)}</div>
-        </div>)}
+      {popover && <div className="ped-popover" style={{ left: popover.x, top: popover.y }}>
+        <div className="ped-popover-head">
+          <Silhouette gender={popover.person.gender} />
+          <div><strong>{popover.person.displayName}</strong><span>{years(popover.person) || "dates unknown"}{place(popover.person) ? ` · ${place(popover.person)}` : ""}</span></div>
+        </div>
+        <div className="ped-popover-actions">
+          <button type="button" onClick={() => { const person = popover.person; setPopover(null); onFocus(person); }}>Tree here</button>
+          <button type="button" onClick={() => { const person = popover.person; setPopover(null); onOpen(person); }}>Profile</button>
+          <button type="button" className="ped-popover-close" onClick={() => setPopover(null)} aria-label="Close">×</button>
+        </div>
       </div>}
-      {parents.length === 0 && children.length === 0 && spouses.length === 0 && <p className="focus-empty">No recorded relatives yet.</p>}
     </div>
   </section>;
 }
