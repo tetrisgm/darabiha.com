@@ -118,17 +118,19 @@ export function FanChartView({ tree, focusId, onFocus }: { tree: FamilyTree; foc
     measureDepth(center.id, 0);
     const CX = 480, CY = 470, R0 = 66;
     const RING = Math.min(78, (398 - R0) / Math.max(1, maxDepth));
-    const wedges: { person: Person; path: string; labelX: number; labelY: number; rotate: number; arc: number; ring: number }[] = [];
+    const wedges: { person: Person; path: string; labelX: number; labelY: number; rotate: number; arc: number; ring: number; tint: string }[] = [];
     const point = (radius: number, angle: number) => [CX + radius * Math.cos(angle), CY - radius * Math.sin(angle)];
-    const walk = (id: string, ring: number, a0: number, a1: number) => {
+    const HUES = [148, 32, 208, 268, 96, 4];
+    const walk = (id: string, ring: number, a0: number, a1: number, branch: number) => {
       const kids = descent.kidsOf.get(id) ?? [];
       let angle = a0;
-      for (const kid of kids) {
+      kids.forEach((kid, index) => {
         const person = maps.byId.get(kid);
         const share = (countLeaves(kid) / Math.max(1, countLeaves(id))) * (a1 - a0);
         const b0 = angle, b1 = angle + share;
         angle = b1;
-        if (!person) continue;
+        if (!person) return;
+        const childBranch = ring === 1 ? index : branch;
         const inner = R0 + (ring - 1) * RING;
         const outer = inner + RING;
         const [x0, y0] = point(inner, b0);
@@ -140,17 +142,18 @@ export function FanChartView({ tree, focusId, onFocus }: { tree: FamilyTree; foc
         const [labelX, labelY] = point((inner + outer) / 2, mid);
         let rotate = 90 - (mid * 180) / Math.PI;
         if (rotate > 90) rotate -= 180;
-        wedges.push({ person, path, labelX, labelY, rotate, arc: (b1 - b0) * ((inner + outer) / 2), ring });
-        walk(kid, ring + 1, b0, b1);
-      }
+        const tint = `hsl(${HUES[childBranch % HUES.length]} 42% ${Math.min(97, 88 + ring * 1.6)}%)`;
+        wedges.push({ person, path, labelX, labelY, rotate, arc: Math.abs(b1 - b0) * ((inner + outer) / 2), ring, tint });
+        walk(kid, ring + 1, b0, b1, childBranch);
+      });
     };
-    walk(center.id, 1, Math.PI, 0);
+    walk(center.id, 1, Math.PI, 0, 0);
     const centerParent = descent.primary.get(center.id) ? maps.byId.get(descent.primary.get(center.id)!) : undefined;
     return <section className="fan-view" aria-label="Descendant fan chart">
       <div className="fan-mode"><button type="button" className="is-active">Descendants</button><button type="button" onClick={() => setMode("ancestors")}>Ancestors</button></div>
       <svg viewBox="0 0 960 500" role="img" aria-label={`Descendants of ${center.displayName}`}>
         {wedges.map((wedge) => <g key={wedge.person.id} className="fan-sector" onClick={() => { setDescendRoot(wedge.person.id); onFocus(wedge.person); }}>
-          <path d={wedge.path}><title>{`${wedge.person.displayName}${years(wedge.person) ? ` · ${years(wedge.person)}` : ""}`}</title></path>
+          <path d={wedge.path} style={{ fill: wedge.tint }}><title>{`${wedge.person.displayName}${years(wedge.person) ? ` · ${years(wedge.person)}` : ""}`}</title></path>
           {wedge.arc > 46 && <text x={wedge.labelX} y={wedge.labelY} transform={`rotate(${wedge.rotate} ${wedge.labelX} ${wedge.labelY})`} className={`fan-label fan-label-${Math.min(5, Math.max(1, wedge.ring))}`}>
             <tspan x={wedge.labelX} dy="0.32em">{wedge.arc > 120 ? wedge.person.displayName : wedge.person.displayName.split(/\s+/)[0]}</tspan>
           </text>}

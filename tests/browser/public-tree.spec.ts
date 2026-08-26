@@ -2,7 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 async function openFullTree(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Full tree" }).click();
+  await page.getByRole("button", { name: "Tree", exact: true }).click();
   await page.locator(".tree-card").first().waitFor();
 }
 
@@ -97,7 +97,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("50");
+  expect(version).toBe("51");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);

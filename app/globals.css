@@ -264,8 +264,8 @@ button { cursor: pointer; }
 .three-person-label:hover { transform: scale(1.06); border-color: #0071e3; }
 .three-person-label span { color: #6e6e73; font-size: 9px; letter-spacing: .04em; }
 
-/* view switcher with six views */
-.archive-view-switcher button { min-width:3.4rem; }
+/* view switcher with seven views */
+.archive-view-switcher button { min-width:2.9rem; white-space:nowrap; font-size:.72rem; padding:.4rem .55rem; }
 
 /* person search */
 .tree-search { position:relative; }

@@ -43,7 +43,7 @@ function locationLine(city: string | null, country: string | null, fallback: str
 const EMPTY_TREE: FamilyTree = { people: [], relationships: [], stories: [] };
 const VIEW_MODES = ["family", "tree", "fan", "list", "timeline", "map", "fill"] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
-const VIEW_LABELS: Record<ViewMode, string> = { family: "Family", tree: "Full tree", fan: "Fan", list: "List", timeline: "Timeline", map: "Map", fill: "Fill in" };
+const VIEW_LABELS: Record<ViewMode, string> = { family: "Family", tree: "Tree", fan: "Fan", list: "List", timeline: "Timeline", map: "Map", fill: "Fill in" };
 
 export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOutPath, signInEnabled }: Props) {
   const [tree, setTree] = useState(initialTree ?? EMPTY_TREE);
