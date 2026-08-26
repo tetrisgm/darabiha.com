@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildFamilyLayout } from "../../lib/tree-layout";
 
@@ -39,12 +39,15 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
   // Every derived structure is computed once per tree, never per render frame
   // (panning re-renders on each pointermove).
+  // The world is measured in fixed pixels (cards have a fixed width), so a
+  // couple's gap, the dash pattern, and every bar length look the same on
+  // every screen size; the viewport transform provides pan and zoom.
   const { positions, spouseLines, hooks } = useMemo(() => {
     if (!ready) return { positions: new Map<string, { x: number; y: number }>(), spouseLines: [] as { id: string; path: string }[], hooks: [] as never[] };
-    const SLOT = 30, ROW = 28;
+    const SLOT = 270, ROW = 190;
     const layout = buildFamilyLayout(tree);
     const positions = new Map<string, { x: number; y: number }>();
-    for (const [id, slot] of layout.positions) positions.set(id, { x: 50 + (slot.x - layout.anchorX) * SLOT, y: 28 + slot.y * ROW });
+    for (const [id, slot] of layout.positions) positions.set(id, { x: (slot.x - layout.anchorX) * SLOT, y: 90 + slot.y * ROW });
     // marriages: a straight line between a couple sitting together, a raised
     // elbow between spouses drawn in different family blocks (cousin
     // marriages) so the line never runs through the cards between them
@@ -55,7 +58,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
         const b = positions.get(link.toPersonId);
         if (!a || !b) return null;
         const adjacent = Math.abs(a.x - b.x) <= SLOT * 1.2 && a.y === b.y;
-        const lift = Math.min(a.y, b.y) - ROW / 2 + 3;
+        const lift = Math.min(a.y, b.y) - 75;
         return { id: link.id, a, b, path: adjacent ? `M ${a.x} ${a.y} L ${b.x} ${b.y}` : `M ${a.x} ${a.y} L ${a.x} ${lift} L ${b.x} ${lift} L ${b.x} ${b.y}` };
       })
       .filter((line): line is NonNullable<typeof line> => Boolean(line));
@@ -86,6 +89,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       let barLeft = Math.min(...childPoints.map((p) => p.x));
       let barRight = Math.max(...childPoints.map((p) => p.x));
       const junctionY = Math.min(...childPoints.map((p) => p.y)) - ROW / 2;
+      /* halfway between the parents' row and the children's row */
       const center = (barLeft + barRight) / 2;
       const near = parentPoints.filter((p) => p.x >= barLeft - SLOT * 2 && p.x <= barRight + SLOT * 2);
       const anchors = near.length ? near : [parentPoints.sort((a, b) => Math.abs(a.x - center) - Math.abs(b.x - center))[0]];
@@ -107,18 +111,27 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   const gesture = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
   const zoomBy = (factor: number) => setView((current) => zoomView(current, factor, { x: 0, y: 0 }));
-  const point = (person: Person) => positions.get(person.id) ?? { x: 50, y: 28 };
+  const point = (person: Person) => positions.get(person.id) ?? { x: 0, y: 90 };
   const centerOn = (person: Person, animate = true) => {
     const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
     if (!rect) return;
     const p = point(person);
-    const target = { x: -((p.x - 50) / 100) * rect.width * view.scale, y: -((p.y - 50) / 100) * rect.height * view.scale };
+    const target = { x: -(p.x - rect.width / 2) * view.scale, y: -(p.y - rect.height / 2) * view.scale };
     if (!animate) { setView((current) => ({ ...current, ...target })); return; }
     const start = view; const started = performance.now();
     const tick = (now: number) => { const progress = Math.min(1, (now - started) / 360); const eased = 1 - (1 - progress) ** 3; setView((current) => ({ ...current, x: start.x + (target.x - start.x) * eased, y: start.y + (target.y - start.y) * eased })); if (progress < 1) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
   };
   useEffect(() => { const person = focusPersonId ? tree.people.find((candidate) => candidate.id === focusPersonId) : undefined; if (person) centerOn(person); }, [focusPersonId]);
+  // open on the patriarch: world x 0 is the layout anchor
+  const centered = useRef(false);
+  useLayoutEffect(() => {
+    if (!ready || centered.current) return;
+    const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
+    if (!rect) return;
+    centered.current = true;
+    setView({ x: rect.width / 2, y: 30, scale: 1 });
+  }, [ready]);
   const positionCursor = (event: React.PointerEvent<HTMLDivElement>) => {
     const cursor = cursorRef.current;
     if (!cursor || event.pointerType === "touch") return;
@@ -189,7 +202,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(1.1)} aria-label="Zoom in" title="Zoom in">＋</button>
     </div>
     <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
-      <svg className="tree-connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <svg className="tree-connectors">
         {spouseLines.map((line) => <path className="spouse-connector" key={line.id} d={line.path} fill="none" />)}
         {hooks.map((hook) => <g className="parent-connector" key={hook.key}>
           <line x1={hook.dropX} y1={hook.parentY} x2={hook.dropX} y2={hook.junctionY} />
@@ -197,7 +210,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
           {hook.drops.map((drop) => <line key={`${drop.x}-${drop.y}`} x1={drop.x} y1={hook.junctionY} x2={drop.x} y2={drop.y} />)}
         </g>)}
       </svg>
-      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
     </div>
     <CanvasCursor mode={cursorMode} cursorRef={cursorRef} />
   </div>;
