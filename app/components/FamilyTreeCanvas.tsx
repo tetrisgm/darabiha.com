@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
-import { buildFamilyLayout } from "../../lib/tree-layout";
+import { buildFamilyLayout, buildGenerations } from "../../lib/tree-layout";
 
 const cardDateFormat = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 function cardDate(value: string | null) {
@@ -37,6 +37,69 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   // it during the server response repeatedly tripped the Worker CPU limit, so
   // the server sends a light shell and the tree appears on hydration.
   const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
+  // Branch folding: each parent card carries a chip; deep branches start
+  // folded so the whole tree opens at a readable width.
+  const fullLayout = useMemo(() => (ready ? buildFamilyLayout(tree) : null), [tree, ready]);
+  const primaryChildren = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (fullLayout) for (const [child, parent] of fullLayout.primaryParent) map.set(parent, [...(map.get(parent) ?? []), child]);
+    return map;
+  }, [fullLayout]);
+  const defaultCollapsed = useMemo(() => {
+    const set = new Set<string>();
+    if (!ready) return set;
+    const depth = buildGenerations(tree).depth;
+    for (const parent of primaryChildren.keys()) if ((depth.get(parent) ?? 0) >= 4) set.add(parent);
+    return set;
+  }, [tree, primaryChildren, ready]);
+  const [collapsedState, setCollapsedState] = useState<Set<string> | null>(null);
+  const collapsed = collapsedState ?? defaultCollapsed;
+  const { visibleTree, hiddenCounts, visibleSet } = useMemo(() => {
+    if (!fullLayout || collapsed.size === 0) {
+      const counts = new Map<string, number>();
+      return { visibleTree: tree, hiddenCounts: counts, visibleSet: new Set(tree.people.map((person) => person.id)) };
+    }
+    const parentless = new Set(tree.people.map((person) => person.id));
+    for (const link of tree.relationships) if (link.type === "parent") parentless.delete(link.toPersonId);
+    const spousesOf = new Map<string, string[]>();
+    for (const link of tree.relationships) {
+      if (link.type !== "spouse") continue;
+      spousesOf.set(link.fromPersonId, [...(spousesOf.get(link.fromPersonId) ?? []), link.toPersonId]);
+      spousesOf.set(link.toPersonId, [...(spousesOf.get(link.toPersonId) ?? []), link.fromPersonId]);
+    }
+    const hidden = new Set<string>();
+    const hideDescendants = (id: string) => {
+      for (const child of primaryChildren.get(id) ?? []) {
+        if (hidden.has(child)) continue;
+        hidden.add(child);
+        hideDescendants(child);
+      }
+    };
+    for (const id of collapsed) hideDescendants(id);
+    for (const [id, partners] of spousesOf) {
+      if (parentless.has(id) && partners.every((partner) => hidden.has(partner))) hidden.add(id);
+    }
+    const hiddenCounts = new Map<string, number>();
+    const countBranch = (id: string): number => {
+      const cached = hiddenCounts.get(id);
+      if (cached !== undefined) return cached;
+      let count = 0;
+      for (const child of primaryChildren.get(id) ?? []) {
+        count += 1 + countBranch(child);
+        for (const spouse of spousesOf.get(child) ?? []) if (parentless.has(spouse)) count += 1;
+      }
+      hiddenCounts.set(id, count);
+      return count;
+    };
+    for (const parent of primaryChildren.keys()) countBranch(parent);
+    const visibleSet = new Set(tree.people.filter((person) => !hidden.has(person.id)).map((person) => person.id));
+    const visibleTree: FamilyTree = {
+      people: tree.people.filter((person) => visibleSet.has(person.id)),
+      relationships: tree.relationships.filter((link) => visibleSet.has(link.fromPersonId) && visibleSet.has(link.toPersonId)),
+      stories: tree.stories,
+    };
+    return { visibleTree, hiddenCounts, visibleSet };
+  }, [tree, fullLayout, primaryChildren, collapsed]);
   // Every derived structure is computed once per tree, never per render frame
   // (panning re-renders on each pointermove).
   // The world is measured in fixed pixels (cards have a fixed width), so a
@@ -45,6 +108,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   const { positions, spouseLines, hooks } = useMemo(() => {
     if (!ready) return { positions: new Map<string, { x: number; y: number }>(), spouseLines: [] as { id: string; path: string }[], hooks: [] as never[] };
     const SLOT = 270, ROW = 190;
+    const tree = visibleTree;
     const layout = buildFamilyLayout(tree);
     const positions = new Map<string, { x: number; y: number }>();
     for (const [id, slot] of layout.positions) positions.set(id, { x: (slot.x - layout.anchorX) * SLOT, y: 90 + slot.y * ROW });
@@ -104,7 +168,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       }];
     });
     return { positions, spouseLines, hooks };
-  }, [tree, ready]);
+  }, [visibleTree, ready]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [cursorMode, setCursorMode] = useState<CanvasCursorMode>("grab");
@@ -122,7 +186,24 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     const tick = (now: number) => { const progress = Math.min(1, (now - started) / 360); const eased = 1 - (1 - progress) ** 3; setView((current) => ({ ...current, x: start.x + (target.x - start.x) * eased, y: start.y + (target.y - start.y) * eased })); if (progress < 1) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
   };
-  useEffect(() => { const person = focusPersonId ? tree.people.find((candidate) => candidate.id === focusPersonId) : undefined; if (person) centerOn(person); }, [focusPersonId]);
+  useEffect(() => {
+    if (!focusPersonId || !fullLayout || visibleSet.has(focusPersonId)) return;
+    const frame = requestAnimationFrame(() => {
+      const next = new Set(collapsed);
+      let current: string | undefined = focusPersonId;
+      let guard = 0;
+      while (current && guard < 60) { next.delete(current); current = fullLayout.primaryParent.get(current); guard += 1; }
+      setCollapsedState(next);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusPersonId, visibleSet, fullLayout, collapsed]);
+  const lastCentered = useRef<string | null>(null);
+  useEffect(() => {
+    const person = focusPersonId ? tree.people.find((candidate) => candidate.id === focusPersonId) : undefined;
+    if (!person || !positions.has(person.id) || lastCentered.current === person.id) return;
+    lastCentered.current = person.id;
+    centerOn(person);
+  }, [focusPersonId, positions]);
   // open on the patriarch: world x 0 is the layout anchor
   const centered = useRef(false);
   useLayoutEffect(() => {
@@ -205,6 +286,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(0.9)} aria-label="Zoom out" title="Zoom out">−</button>
       <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setView({ x: 0, y: 0, scale: 1 })} aria-label={`Reset zoom to 100 percent`} title="Reset zoom">{Math.round(view.scale * 100)}%</button>
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(1.1)} aria-label="Zoom in" title="Zoom in">＋</button>
+      <button type="button" className="canvas-fold-toggle" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCollapsedState(collapsed.size ? new Set() : null)}>{collapsed.size ? "Unfold all" : "Fold branches"}</button>
     </div>
     <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
       <svg className="tree-connectors">
@@ -215,7 +297,12 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
           {hook.drops.map((drop) => <line key={`${drop.x}-${drop.y}`} x1={drop.x} y1={hook.junctionY} x2={drop.x} y2={drop.y} />)}
         </g>)}
       </svg>
-      {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {visibleTree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {[...primaryChildren.keys()].filter((id) => visibleSet.has(id) && positions.has(id)).map((id) => {
+        const p = positions.get(id)!;
+        const isFolded = collapsed.has(id);
+        return <button key={`chip-${id}`} type="button" className="branch-chip" style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} family members` : "Fold this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); const next = new Set(collapsed); if (isFolded) next.delete(id); else next.add(id); setCollapsedState(next); }}>{isFolded ? `▸ ${hiddenCounts.get(id) ?? 0}` : "▾"}</button>;
+      })}
     </div>
     <CanvasCursor mode={cursorMode} cursorRef={cursorRef} />
   </div>;

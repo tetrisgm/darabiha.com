@@ -1,5 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
+async function openFullTree(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Full tree" }).click();
+  await page.locator(".tree-card").first().waitFor();
+}
+
 async function onCameraCard(page: Page): Promise<Locator> {
   const canvas = await page.locator(".family-canvas").boundingBox();
   if (!canvas) throw new Error("Family canvas is not visible");
@@ -24,10 +30,9 @@ async function emptyCanvasPoint(page: Page) {
 }
 
 test("public tree renders as an interactive canvas beside the archive chat", async ({ page }) => {
-  await page.goto("/");
+  await openFullTree(page);
   await expect(page.locator(".family-canvas")).toBeVisible();
   await expect(page.locator(".chat-sidebar")).toBeVisible();
-  await page.locator(".tree-card").first().waitFor();
   expect(await page.locator(".tree-card").count()).toBeGreaterThan(0);
   await expect(page.locator(".tree-connectors line")).not.toHaveCount(0);
   await expect(page.getByRole("button", { name: /Add a person/ })).toBeVisible();
@@ -44,8 +49,7 @@ test("chat sidebar collapses and returns from the left edge", async ({ page }) =
 });
 
 test("a person card opens a navigable record", async ({ page }) => {
-  await page.goto("/");
-  await page.locator(".tree-card").first().waitFor();
+  await openFullTree(page);
   await (await onCameraCard(page)).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.locator(".person-drawer-backdrop")).toBeVisible();
@@ -53,7 +57,7 @@ test("a person card opens a navigable record", async ({ page }) => {
 });
 
 test("canvas accepts wheel zoom without scrolling the document", async ({ page }) => {
-  await page.goto("/");
+  await openFullTree(page);
   const canvas = page.locator(".family-canvas");
   await canvas.hover();
   await page.mouse.wheel(0, -300);
@@ -62,7 +66,7 @@ test("canvas accepts wheel zoom without scrolling the document", async ({ page }
 });
 
 test("canvas zoom controls change and reset the zoom percentage", async ({ page }) => {
-  await page.goto("/");
+  await openFullTree(page);
   const level = page.locator(".canvas-zoom-level");
   await expect(level).toHaveText("100%");
   await page.getByRole("button", { name: "Zoom in" }).click();
@@ -117,7 +121,7 @@ test("the file picker accepts a ZIP archive without filtering it out", async ({ 
 });
 
 test("Safari gets a visible custom grab cursor and clickable-card cursor", async ({ page }) => {
-  await page.goto("/");
+  await openFullTree(page);
   const canvas = page.locator(".family-canvas");
   await expect(canvas).toHaveAttribute("data-interactive", "true");
   await expect(canvas).toBeVisible();
@@ -138,7 +142,7 @@ test("Safari gets a visible custom grab cursor and clickable-card cursor", async
 });
 
 test("dragging the dedicated surface pans while a card remains clickable", async ({ page }) => {
-  await page.goto("/");
+  await openFullTree(page);
   await expect(page.locator(".family-canvas")).toHaveAttribute("data-interactive", "true");
   await expect(page.locator(".family-canvas")).toBeVisible();
   const viewport = page.locator(".tree-viewport");

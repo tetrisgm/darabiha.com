@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { TimelineView, WorldMapView } from "./ArchiveViews";
+import { FanChartView, FocusFamilyView, OutlineView, TreeSearch } from "./TreeViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { BUILD_ID, VERSION } from "../../lib/build";
 
@@ -40,6 +41,9 @@ function formatDate(value: string | null) {
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
 const EMPTY_TREE: FamilyTree = { people: [], relationships: [], stories: [] };
+const VIEW_MODES = ["family", "tree", "fan", "list", "timeline", "map"] as const;
+type ViewMode = (typeof VIEW_MODES)[number];
+const VIEW_LABELS: Record<ViewMode, string> = { family: "Family", tree: "Full tree", fan: "Fan", list: "List", timeline: "Timeline", map: "Map" };
 
 export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOutPath, signInEnabled }: Props) {
   const [tree, setTree] = useState(initialTree ?? EMPTY_TREE);
@@ -64,7 +68,21 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const [addingPerson, setAddingPerson] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
-  const [viewMode, setViewMode] = useState<"tree" | "timeline" | "map">("tree");
+  const [viewMode, setViewModeState] = useState<ViewMode>("family");
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        const saved = window.localStorage.getItem("darabiha-view");
+        if (saved && (VIEW_MODES as readonly string[]).includes(saved)) setViewModeState(saved as ViewMode);
+      } catch { /* private mode */ }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const setViewMode = (mode: ViewMode) => {
+    setViewModeState(mode);
+    try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
+  };
+  const [focalId, setFocalId] = useState<string | null>(null);
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -136,14 +154,21 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
     }
   }
 
+  const focal = useMemo(() => {
+    const explicit = focalId ? tree.people.find((person) => person.id === focalId) : undefined;
+    if (explicit) return explicit;
+    return tree.people.find((person) => person.displayName === "Nasser Darabiha") ?? tree.people[0];
+  }, [tree, focalId]);
+
   return (
     <main className={`min-h-screen bg-[var(--paper)] text-[var(--ink)] ${chatCollapsed ? "chat-collapsed" : ""}`} data-build-id={BUILD_ID} data-version={VERSION}>
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <header className={`site-action-bar absolute top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8 ${chatCollapsed ? "is-chat-collapsed" : ""}`}>
         <p className="text-base font-semibold tracking-[-.01em]">Darabiha</p>
-        <nav className="archive-view-switcher" aria-label="Archive view">{(["tree", "timeline", "map"] as const).map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</nav>
+        <nav className="archive-view-switcher" aria-label="Archive view">{VIEW_MODES.map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{VIEW_LABELS[mode]}</button>)}</nav>
         <div className="relative flex items-center gap-4">
+          <TreeSearch tree={tree} onPick={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); setSelectedPerson(person); }} />
           {signInEnabled && !viewer.signedIn && <><span className="text-sm text-[var(--muted)]">Sign in to edit</span><a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href={signInPath}>&nbsp; Sign in with Apple</a></>}
           {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
         </div>
@@ -196,7 +221,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="relative h-full min-h-0">
 
             <div className="relative h-full min-h-0 overflow-hidden bg-[#eef4f1]">
-              {viewMode === "tree" && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
+              {(viewMode === "family" || viewMode === "tree" || viewMode === "fan" || viewMode === "list") && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
+              {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} onFocus={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); }} onOpen={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
+              {viewMode === "fan" && treeLoaded && focal && <FanChartView tree={tree} focusId={focal.id} onFocus={(person) => { setFocalId(person.id); setHighlightedIds([person.id]); }} />}
+              {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => { setSelectedPerson(person); setHighlightedIds([person.id]); }} />}
               {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
               {viewMode === "map" && <WorldMapView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}

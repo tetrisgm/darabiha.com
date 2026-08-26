@@ -263,3 +263,89 @@ button { cursor: pointer; }
 .three-person-label { display: flex; min-width: 118px; flex-direction: column; align-items: center; gap: 2px; border: 1px solid rgba(0,0,0,.12); border-radius: 999px; background: rgba(255,255,255,.82); padding: 8px 14px; color: #1d1d1f; font: 600 10px/1.2 Inter, sans-serif; letter-spacing: .08em; text-transform: uppercase; box-shadow: 0 8px 24px rgba(0,0,0,.08); backdrop-filter: blur(14px); transition: transform .2s ease, border-color .2s ease; }
 .three-person-label:hover { transform: scale(1.06); border-color: #0071e3; }
 .three-person-label span { color: #6e6e73; font-size: 9px; letter-spacing: .04em; }
+
+/* view switcher with six views */
+.archive-view-switcher button { min-width:3.4rem; }
+
+/* person search */
+.tree-search { position:relative; }
+.tree-search input { width:12.5rem; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.75);
+  padding:.42rem .9rem; font-size:.8rem; color:var(--ink); }
+.tree-search input:focus { outline:2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.tree-search-results { position:absolute; right:0; top:2.4rem; z-index:60; width:17rem; overflow:hidden;
+  border:1px solid var(--line); border-radius:.9rem; background:white; box-shadow:0 18px 50px rgba(45,72,57,.18); }
+.tree-search-results button { display:flex; width:100%; align-items:baseline; justify-content:space-between; gap:.75rem;
+  padding:.55rem .9rem; text-align:left; font-size:.82rem; }
+.tree-search-results button:hover { background:var(--wash); }
+.tree-search-results button span { color:var(--muted); font-size:.72rem; white-space:nowrap; }
+
+/* focus (person-centered) view */
+.focus-view { position:absolute; inset:0; overflow:auto; padding:6.5rem 2rem 4rem; }
+.focus-rows { display:flex; flex-direction:column; align-items:center; gap:1.4rem; max-width:64rem; margin:0 auto; }
+.focus-row { display:flex; flex-wrap:wrap; justify-content:center; gap:1rem; }
+.focus-pair { display:flex; gap: .6rem; padding:0 1.2rem; }
+.focus-card { display:flex; align-items:center; gap:.7rem; border:1px solid rgba(84,111,100,.25); border-radius:.9rem;
+  background:rgba(255,255,255,.94); padding:.7rem .9rem; text-align:left; box-shadow:0 10px 26px rgba(45,72,57,.12); }
+.focus-card:hover { border-color:var(--accent); }
+.focus-card-portrait { display:flex; height:2.4rem; width:2.4rem; flex:none; align-items:center; justify-content:center; overflow:hidden;
+  border-radius:999px; background:#e9f1ea; color:#25734c; font-weight:700; }
+.focus-card-portrait img { height:100%; width:100%; object-fit:cover; }
+.focus-card-copy { display:flex; flex-direction:column; }
+.focus-card-copy strong { font-size:.86rem; line-height:1.25; }
+.focus-card-copy span { color:var(--muted); font-size:.72rem; }
+.focus-card-copy em { color:var(--accent); font-size:.68rem; font-style:normal; font-weight:600; }
+.focus-card-sm { padding:.45rem .65rem; opacity:.92; }
+.focus-card-sm .focus-card-portrait { height:1.7rem; width:1.7rem; font-size:.75rem; }
+.focus-card-sm strong { font-size:.74rem; }
+.focus-card-lg { border-width:2px; border-color:var(--accent); padding:.95rem 1.15rem; }
+.focus-card-lg .focus-card-portrait { height:3.2rem; width:3.2rem; font-size:1.2rem; }
+.focus-card-lg strong { font-size:1.02rem; }
+.focus-row-focal { align-items:center; }
+.focus-marriage { display:flex; align-items:center; gap:.5rem; }
+.focus-marriage-glyph { color:#b98a44; font-size:1.1rem; }
+.focus-siblings { display:flex; flex-wrap:wrap; justify-content:center; gap:.4rem; color:var(--muted); font-size:.76rem; }
+.focus-siblings button { border:1px solid var(--line); border-radius:999px; padding:.2rem .65rem; font-size:.72rem; color:var(--ink); background:rgba(255,255,255,.8); }
+.focus-siblings button:hover { border-color:var(--accent); }
+.focus-children { display:flex; flex-direction:column; gap:1rem; border-top:1px dashed var(--line); padding-top:1.2rem; width:100%; }
+.focus-child-group { display:flex; flex-direction:column; align-items:center; gap:.5rem; }
+.focus-group-label { color:var(--muted); font-size:.74rem; font-style:italic; }
+.focus-empty { color:var(--muted); }
+
+/* fan chart */
+.fan-view { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; overflow:auto; padding:5.5rem 1.5rem 3rem; }
+.fan-view svg { width:min(60rem, 100%); height:auto; }
+.fan-sector path { fill:rgba(255,255,255,.95); stroke:rgba(84,111,100,.3); stroke-width:1; cursor:pointer; transition:fill .12s; }
+.fan-sector:hover path { fill:#eaf3ec; }
+.fan-sector-empty path { fill:rgba(255,255,255,.35); cursor:default; }
+.fan-label { fill:var(--ink); font-size:13px; text-anchor:middle; pointer-events:none; }
+.fan-label-3 { font-size:11px; }
+.fan-label-4 { font-size:9.5px; }
+.fan-label-5 { font-size:8.5px; }
+.fan-years { fill:#6f7f74; font-size:10px; }
+.fan-center { fill:#e9f1ea; stroke:rgba(84,111,100,.4); }
+.fan-center-name { fill:var(--ink); font-size:14px; font-weight:600; text-anchor:middle; }
+.fan-children { display:flex; flex-wrap:wrap; justify-content:center; gap:.4rem; margin-top:.75rem; color:var(--muted); font-size:.78rem; }
+.fan-children button { border:1px solid var(--line); border-radius:999px; padding:.22rem .7rem; font-size:.74rem; color:var(--ink); background:rgba(255,255,255,.85); }
+.fan-children button:hover { border-color:var(--accent); }
+
+/* outline (list) view */
+.outline-view { position:absolute; inset:0; overflow:auto; padding:6.5rem 2.5rem 4rem; font-size:.9rem; }
+.outline-view details, .outline-view .outline-leaf { margin:.1rem 0; }
+.outline-view .outline-kids { margin-left:.55rem; border-left:1px solid var(--line); padding-left:1rem; }
+.outline-view summary { cursor:pointer; list-style:none; }
+.outline-view summary::-webkit-details-marker { display:none; }
+.outline-view summary::before { content:'▾'; display:inline-block; width:1.05em; color:var(--muted); font-size:.8em; }
+.outline-view details:not([open]) > summary::before { content:'▸'; }
+.outline-leaf { padding-left:1.05em; }
+.outline-name { font-weight:600; }
+.outline-name:hover, .outline-spouse button:hover { color:var(--accent); }
+.outline-years { color:var(--muted); font-size:.78em; margin-left:.45em; }
+.outline-spouse { color:var(--muted); margin-left:.7em; font-size:.9em; }
+.outline-spouse button { font-weight:500; }
+
+/* branch folding chips on the full tree */
+.branch-chip { position:absolute; z-index:3; transform:translate(-50%,0); pointer-events:auto;
+  border:1px solid rgba(84,111,100,.35); border-radius:999px; background:white; color:var(--ink);
+  padding:.14rem .6rem; font-size:.72rem; font-weight:600; box-shadow:0 4px 14px rgba(45,72,57,.14); cursor:pointer !important; }
+.branch-chip:hover { border-color:var(--accent); color:var(--accent); }
+.canvas-fold-toggle { font-size:.72rem; padding:.4rem .6rem; white-space:nowrap; }

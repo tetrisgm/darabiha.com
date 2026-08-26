@@ -217,3 +217,27 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
   }
   return { positions, width: Math.max(cursor, 1), anchorX: anchorX ?? Math.max(cursor, 1) / 2, primaryParent };
 }
+
+export interface RelationMaps {
+  parentsOf: Map<string, string[]>;
+  childrenOf: Map<string, string[]>;
+  spousesOf: Map<string, string[]>;
+  byId: Map<string, Person>;
+}
+
+/** Plain lookup maps over the recorded relationships, shared by the views. */
+export function buildRelationMaps(tree: FamilyTree): RelationMaps {
+  const parentsOf = new Map<string, string[]>();
+  const childrenOf = new Map<string, string[]>();
+  const spousesOf = new Map<string, string[]>();
+  for (const link of tree.relationships) {
+    if (link.type === "parent") {
+      parentsOf.set(link.toPersonId, [...(parentsOf.get(link.toPersonId) ?? []), link.fromPersonId]);
+      childrenOf.set(link.fromPersonId, [...(childrenOf.get(link.fromPersonId) ?? []), link.toPersonId]);
+    } else {
+      spousesOf.set(link.fromPersonId, [...(spousesOf.get(link.fromPersonId) ?? []), link.toPersonId]);
+      spousesOf.set(link.toPersonId, [...(spousesOf.get(link.toPersonId) ?? []), link.fromPersonId]);
+    }
+  }
+  return { parentsOf, childrenOf, spousesOf, byId: new Map(tree.people.map((person) => [person.id, person])) };
+}
