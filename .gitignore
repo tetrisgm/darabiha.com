@@ -38,3 +38,4 @@ next-env.d.ts
 /outputs/
 /work/
 scripts/import_legacy_tree_to_d1.generated.sql
+scripts/enrich_gender.generated.sql
