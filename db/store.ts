@@ -32,6 +32,9 @@ const schemaStatements = [
     email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'editor')),
     added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS member_links (
+    email TEXT PRIMARY KEY, member_email TEXT NOT NULL, provider TEXT, created_at TEXT NOT NULL
+  )`,
 ];
 
 export async function ensureSchema() {
@@ -58,18 +61,81 @@ export async function ensureSchema() {
 }
 
 export type MemberRole = "admin" | "editor";
-export type Member = { email: string; role: MemberRole; addedBy: string; createdAt: string };
+export type MemberIdentity = { email: string; provider: string | null };
+export type Member = { email: string; role: MemberRole; addedBy: string; createdAt: string; links: MemberIdentity[] };
 
 export async function listMembers(): Promise<Member[]> {
   await ensureSchema();
-  const result = await env.DB.prepare("SELECT email, role, added_by AS addedBy, created_at AS createdAt FROM members ORDER BY role, email").all<Member>();
+  const [members, links] = await Promise.all([
+    env.DB.prepare("SELECT email, role, added_by AS addedBy, created_at AS createdAt FROM members ORDER BY role, email").all<Omit<Member, "links">>(),
+    env.DB.prepare("SELECT email, member_email AS memberEmail, provider FROM member_links ORDER BY created_at").all<{ email: string; memberEmail: string; provider: string | null }>(),
+  ]);
+  return members.results.map((member) => ({
+    ...member,
+    links: links.results.filter((link) => link.memberEmail === member.email).map((link) => ({ email: link.email, provider: link.provider })),
+  }));
+}
+
+/** A sign-in email resolves through member_links to the canonical account
+ * email — one person, several providers, one member row. */
+export async function resolveMemberEmail(email: string): Promise<string> {
+  await ensureSchema();
+  const normalized = email.toLowerCase();
+  const row = await env.DB.prepare("SELECT member_email AS memberEmail FROM member_links WHERE email = ?").bind(normalized).first<{ memberEmail: string }>();
+  return row?.memberEmail ?? normalized;
+}
+
+export async function listLinksFor(memberEmail: string): Promise<MemberIdentity[]> {
+  await ensureSchema();
+  const result = await env.DB.prepare("SELECT email, provider FROM member_links WHERE member_email = ? ORDER BY created_at").bind(memberEmail.toLowerCase()).all<MemberIdentity>();
   return result.results;
 }
 
 export async function getMemberRole(email: string): Promise<MemberRole | null> {
-  await ensureSchema();
-  const row = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(email.toLowerCase()).first<{ role: MemberRole }>();
+  const canonical = await resolveMemberEmail(email);
+  const row = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(canonical).first<{ role: MemberRole }>();
   return row?.role ?? null;
+}
+
+/** Attach identityEmail to memberEmail's account. If identityEmail is itself
+ * a member row, the two accounts merge: the target keeps the higher role, the
+ * identity row dissolves into a link, and any links it held are re-pointed so
+ * chains never form. */
+export async function linkIdentity(identityEmail: string, memberEmail: string, provider: string | null, actorEmail: string) {
+  await ensureSchema();
+  const identity = identityEmail.toLowerCase();
+  const canonical = await resolveMemberEmail(memberEmail);
+  if (identity === canonical) return;
+  const existing = await env.DB.prepare("SELECT member_email AS memberEmail FROM member_links WHERE email = ?").bind(identity).first<{ memberEmail: string }>();
+  if (existing) {
+    if (existing.memberEmail === canonical) return;
+    throw new Error("identity_linked_elsewhere");
+  }
+  const now = new Date().toISOString();
+  const identityRow = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(identity).first<{ role: MemberRole }>();
+  const statements = [];
+  if (identityRow) {
+    statements.push(env.DB.prepare(`INSERT INTO members (email, role, added_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET role = CASE WHEN excluded.role = 'admin' THEN 'admin' ELSE members.role END, updated_at = excluded.updated_at`)
+      .bind(canonical, identityRow.role, actorEmail, now, now));
+    statements.push(env.DB.prepare("UPDATE member_links SET member_email = ? WHERE member_email = ?").bind(canonical, identity));
+    statements.push(env.DB.prepare("DELETE FROM members WHERE email = ?").bind(identity));
+  }
+  statements.push(env.DB.prepare("INSERT INTO member_links (email, member_email, provider, created_at) VALUES (?, ?, ?, ?)").bind(identity, canonical, provider, now));
+  statements.push(env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), actorEmail, "member_link", `Linked ${identity} to ${canonical} as one account`, JSON.stringify({ email: identity, memberEmail: canonical, provider, merged: Boolean(identityRow) }), now));
+  await env.DB.batch(statements);
+}
+
+export async function unlinkIdentity(identityEmail: string, actorEmail: string) {
+  await ensureSchema();
+  const identity = identityEmail.toLowerCase();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM member_links WHERE email = ?").bind(identity),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "member_unlink", `Unlinked ${identity} from its account`, JSON.stringify({ email: identity }), now),
+  ]);
 }
 
 export async function upsertMember(email: string, role: MemberRole, actorEmail: string) {
@@ -90,6 +156,7 @@ export async function removeMember(email: string, actorEmail: string) {
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("DELETE FROM members WHERE email = ?").bind(normalized),
+    env.DB.prepare("DELETE FROM member_links WHERE member_email = ?").bind(normalized),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), actorEmail, "member_remove", `Removed ${normalized} from the member list`, JSON.stringify({ email: normalized }), now),
   ]);

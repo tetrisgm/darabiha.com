@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Role = "admin" | "editor" | null;
-type Member = { email: string; role: "admin" | "editor"; addedBy: string; createdAt: string };
+type Identity = { email: string; provider: string | null };
+type Member = { email: string; role: "admin" | "editor"; addedBy: string; createdAt: string; links: Identity[] };
 type Props = {
-  viewer: { signedIn: boolean; email: string | null; displayName: string | null; role: Role };
+  viewer: { signedIn: boolean; email: string | null; accountEmail: string | null; displayName: string | null; role: Role; links: Identity[] };
   appleSignInPath: string;
   googleSignInPath: string | null;
   signOutPath: string;
 };
+
+const PROVIDER_LABEL: Record<string, string> = { apple: "Apple", google: "Google" };
 
 const ERROR_COPY: Record<string, string> = {
   invalid_response: "The sign-in response was incomplete. Please try again.",
@@ -21,6 +24,7 @@ const ERROR_COPY: Record<string, string> = {
   last_admin: "That is the last admin — give someone else the admin role first.",
   not_a_member: "That email address is not on the member list.",
   invalid_email: "That does not look like an email address.",
+  identity_linked_elsewhere: "That sign-in is already linked to a different member \u2014 unlink it there first.",
 };
 
 export default function SettingsClient({ viewer, appleSignInPath, googleSignInPath, signOutPath }: Props) {
@@ -82,10 +86,26 @@ export default function SettingsClient({ viewer, appleSignInPath, googleSignInPa
       {viewer.signedIn && <div className="settings-card settings-identity">
         <div>
           <strong>{viewer.displayName ?? viewer.email}</strong>
-          <span>{viewer.email}</span>
+          <span>{viewer.email}{viewer.accountEmail && viewer.accountEmail !== viewer.email ? ` \u00b7 account ${viewer.accountEmail}` : ""}</span>
         </div>
         <span className={`settings-role-badge is-${viewer.role ?? "none"}`}>{viewer.role ?? "no access"}</span>
         <a className="settings-signout" href={signOutPath}>Sign out</a>
+      </div>}
+
+      {viewer.signedIn && <div className="settings-card">
+        <h2>Linked sign-ins</h2>
+        <p className="settings-hint">Link your Apple and Google sign-ins so either one lands in this same account — linking works by completing the other provider&rsquo;s sign-in once.</p>
+        <ul className="settings-identity-list">
+          <li><span className="settings-member-email">{viewer.accountEmail}</span><span className="settings-provider">primary</span></li>
+          {viewer.links.map((link) => <li key={link.email}>
+            <span className="settings-member-email">{link.email}</span>
+            <span className="settings-provider">{link.provider ? PROVIDER_LABEL[link.provider] ?? link.provider : "linked"}</span>
+          </li>)}
+        </ul>
+        <div className="settings-signin-row">
+          <a className="settings-signin" href={`${appleSignInPath}&link=1`}> Link an Apple sign-in</a>
+          {googleSignInPath && <a className="settings-signin is-google" href={`${googleSignInPath}&link=1`}><span aria-hidden="true">G</span> Link a Google sign-in</a>}
+        </div>
       </div>}
 
       {viewer.signedIn && viewer.role === null && <div className="settings-card">
@@ -103,7 +123,14 @@ export default function SettingsClient({ viewer, appleSignInPath, googleSignInPa
         {!members && <p className="settings-hint">Loading the member list…</p>}
         {members && <ul className="settings-members">
           {members.map((member) => <li key={member.email}>
-            <span className="settings-member-email">{member.email}{member.email === viewer.email ? <em> · you</em> : null}</span>
+            <span className="settings-member-email">
+              {member.email}{member.email === viewer.accountEmail ? <em> · you</em> : null}
+              {member.links.length > 0 && <span className="settings-member-links">
+                {member.links.map((link) => <span key={link.email} className="settings-member-link">↪ {link.email}{link.provider ? ` (${PROVIDER_LABEL[link.provider] ?? link.provider})` : ""}
+                  <button type="button" className="settings-unlink" disabled={busy} aria-label={`Unlink ${link.email}`} title="Unlink this sign-in" onClick={() => mutate({ action: "unlink", email: link.email })}>×</button>
+                </span>)}
+              </span>}
+            </span>
             <select value={member.role} disabled={busy} aria-label={`Role for ${member.email}`}
               onChange={(event) => mutate({ action: "set", email: member.email, role: event.target.value })}>
               <option value="editor">editor</option>

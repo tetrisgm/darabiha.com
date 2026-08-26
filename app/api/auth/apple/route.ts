@@ -1,4 +1,5 @@
-import { signToken } from "../../../apple-auth";
+import { getAppleUser, signToken } from "../../../apple-auth";
+import { resolveMemberEmail } from "../../../../db/store";
 
 function requiredConfig() {
   const clientId = process.env.APPLE_CLIENT_ID;
@@ -13,8 +14,12 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const requestedReturn = url.searchParams.get("return_to") || "/";
   const returnTo = requestedReturn.startsWith("/") && !requestedReturn.startsWith("//") ? requestedReturn : "/";
+  // Linking: Apple's form_post callback arrives without our SameSite=Lax
+  // session cookie, so the signed state carries the initiating account.
+  const linker = url.searchParams.get("link") === "1" ? await getAppleUser() : null;
+  const linkTo = linker ? await resolveMemberEmail(linker.email) : undefined;
   const nonce = crypto.randomUUID();
-  const state = await signToken({ nonce, returnTo, exp: Math.floor(Date.now() / 1000) + 10 * 60 });
+  const state = await signToken({ nonce, returnTo, ...(linkTo ? { linkTo } : {}), exp: Math.floor(Date.now() / 1000) + 10 * 60 });
   const authorize = new URL("https://appleid.apple.com/auth/authorize");
   authorize.searchParams.set("client_id", config.clientId);
   authorize.searchParams.set("redirect_uri", config.redirectUri);

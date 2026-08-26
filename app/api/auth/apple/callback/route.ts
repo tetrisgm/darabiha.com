@@ -1,7 +1,8 @@
 import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from "jose";
 import { createSession, sessionCookie, verifyToken } from "../../../../apple-auth";
+import { linkIdentity } from "../../../../../db/store";
 
-type State = { nonce: string; returnTo: string; exp: number };
+type State = { nonce: string; returnTo: string; linkTo?: string; exp: number };
 const appleKeys = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
 
 function normalizedPrivateKey() {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const state = await verifyToken<State>(String(form.get("state") || ""));
   const code = String(form.get("code") || "");
-  if (!state || !code) return Response.redirect(`${origin}/?auth_error=invalid_response`, 303);
+  if (!state || !code) return Response.redirect(`${origin}/settings?auth_error=invalid_response`, 303);
 
   try {
     const tokenResponse = await fetch("https://appleid.apple.com/auth/token", {
@@ -63,6 +64,8 @@ export async function POST(request: Request) {
       throw new Error("invalid_identity_token");
     }
     const email = payload.email.toLowerCase();
+    // A link request attaches this proven identity to the initiating account.
+    if (state.linkTo && state.linkTo !== email) await linkIdentity(email, state.linkTo, "apple", state.linkTo);
     // Anyone may sign in; the members table decides what the account can do.
     const session = await createSession({ subject: payload.sub, email, displayName: email.split("@")[0] });
     const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const detail = error instanceof Error ? error.message : "unknown_error";
     console.warn("Apple sign-in failed", detail);
-    const code = detail.startsWith("token_exchange_failed") ? "apple_token_exchange_failed" : detail === "invalid_identity_token" ? detail : "sign_in_failed";
-    return Response.redirect(`${origin}/?auth_error=${code}`, 303);
+    const code = detail.startsWith("token_exchange_failed") ? "apple_token_exchange_failed" : detail === "invalid_identity_token" || detail === "identity_linked_elsewhere" ? detail : "sign_in_failed";
+    return Response.redirect(`${origin}/settings?auth_error=${code}`, 303);
   }
 }

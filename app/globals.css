@@ -631,3 +631,12 @@ main.chat-collapsed .person-drawer-backdrop { left: 0; }
 .settings-add button { border-radius:999px; background:var(--ink); color:white; padding:.5rem 1.1rem; font-size:.82rem; font-weight:600; }
 .settings-add button:hover:not(:disabled) { background:var(--accent); }
 .settings-add button:disabled { opacity:.5; cursor:default; }
+
+/* linked sign-ins */
+.settings-identity-list { list-style:none; margin:.9rem 0; padding:0; display:flex; flex-direction:column; gap:.4rem; }
+.settings-identity-list li { display:flex; align-items:center; gap:.7rem; border:1px solid var(--line); border-radius:.8rem; background:white; padding:.55rem .8rem; }
+.settings-provider { border-radius:999px; background:var(--wash); color:var(--muted); padding:.2rem .65rem; font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; white-space:nowrap; }
+.settings-member-links { display:block; margin-top:.15rem; }
+.settings-member-link { display:inline-flex; align-items:center; gap:.25rem; margin-right:.7rem; color:var(--muted); font-size:.74rem; }
+.settings-unlink { display:inline-flex; height:1.15rem; width:1.15rem; align-items:center; justify-content:center; border-radius:.35rem; color:var(--muted); font-size:.8rem; line-height:1; }
+.settings-unlink:hover:not(:disabled) { background:#fdf0ee; color:#8c3a2b; }
