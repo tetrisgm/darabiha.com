@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGenerations } from "../lib/tree-layout";
+import { buildFamilyLayout, buildGenerations } from "../lib/tree-layout";
 import type { FamilyTree, Person } from "../lib/types";
 
 const person = (id: string): Person => ({ id, displayName: id, givenName: null, familyName: null, birthDate: null, deathDate: null, birthPlace: null, deathPlace: null, birthCity: null, birthCountry: null, deathCity: null, deathCountry: null, biography: null, photoAttachmentId: null });
@@ -24,6 +24,38 @@ describe("tree generation layout", () => {
   it("keeps siblings in the same generation group", () => {
     const result = buildGenerations(tree);
     expect(result.groups.get(1)?.map((person) => person.id)).toEqual(["daughter", "son"]);
+  });
+
+  it("draws a couple side by side with their children beneath them", () => {
+    const layout = buildFamilyLayout(tree);
+    const mother = layout.positions.get("mother")!;
+    const father = layout.positions.get("father")!;
+    const daughter = layout.positions.get("daughter")!;
+    const son = layout.positions.get("son")!;
+    expect(Math.abs(mother.x - father.x)).toBe(1); // adjacent slots
+    expect(mother.y).toBe(father.y);
+    expect(daughter.y).toBe(mother.y + 1);
+    const coupleCenter = (mother.x + father.x) / 2;
+    const childrenCenter = (Math.min(daughter.x, son.x) + Math.max(daughter.x, son.x)) / 2;
+    expect(Math.abs(coupleCenter - childrenCenter)).toBeLessThan(1.01);
+  });
+
+  it("draws every person exactly once, even children of a cousin marriage", () => {
+    const cousinTree: FamilyTree = {
+      people: ["root", "a", "b", "child"].map(person),
+      relationships: [
+        { id: "p1", fromPersonId: "root", toPersonId: "a", type: "parent" },
+        { id: "p2", fromPersonId: "root", toPersonId: "b", type: "parent" },
+        { id: "s1", fromPersonId: "a", toPersonId: "b", type: "spouse" },
+        { id: "p3", fromPersonId: "a", toPersonId: "child", type: "parent" },
+        { id: "p4", fromPersonId: "b", toPersonId: "child", type: "parent" },
+      ],
+      stories: [],
+    };
+    const layout = buildFamilyLayout(cousinTree);
+    expect(layout.positions.size).toBe(4);
+    expect([...layout.positions.values()].every((slot) => Number.isFinite(slot.x) && Number.isFinite(slot.y))).toBe(true);
+    expect(layout.positions.get("child")!.y).toBe(2);
   });
 
   it("places a married-in spouse beside their partner instead of the top row", () => {

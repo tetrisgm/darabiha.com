@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
-import { buildGenerations } from "../../lib/tree-layout";
+import { buildFamilyLayout } from "../../lib/tree-layout";
 
 const cardDateFormat = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 function cardDate(value: string | null) {
@@ -35,14 +35,28 @@ function CanvasCursor({ mode, cursorRef }: { mode: CanvasCursorMode; cursorRef: 
 export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPersonId }: { tree: FamilyTree; onSelect: (person: Person) => void; highlightedIds?: string[]; focusPersonId?: string }) {
   // The tree is hundreds of people; every derived structure is computed once
   // per tree, never per render frame (panning re-renders on each pointermove).
-  const { positions, spouseLines, parentSets } = useMemo(() => {
-    const { groups } = buildGenerations(tree);
+  const { positions, spouseLines, hooks } = useMemo(() => {
+    const SLOT = 30, ROW = 28;
+    const layout = buildFamilyLayout(tree);
     const positions = new Map<string, { x: number; y: number }>();
-    for (const [level, row] of groups) row.forEach((person, index) => positions.set(person.id, { x: 50 + (index - (row.length - 1) / 2) * 30, y: 28 + level * 28 }));
+    for (const [id, slot] of layout.positions) positions.set(id, { x: 50 + (slot.x - layout.width / 2) * SLOT, y: 28 + slot.y * ROW });
+    // marriages: a straight line between a couple sitting together, a raised
+    // elbow between spouses drawn in different family blocks (cousin
+    // marriages) so the line never runs through the cards between them
     const spouseLines = tree.relationships
       .filter((link) => link.type === "spouse")
-      .map((link) => ({ id: link.id, a: positions.get(link.fromPersonId), b: positions.get(link.toPersonId) }))
-      .filter((line): line is { id: string; a: { x: number; y: number }; b: { x: number; y: number } } => Boolean(line.a && line.b));
+      .map((link) => {
+        const a = positions.get(link.fromPersonId);
+        const b = positions.get(link.toPersonId);
+        if (!a || !b) return null;
+        const adjacent = Math.abs(a.x - b.x) <= SLOT * 1.2 && a.y === b.y;
+        const lift = Math.min(a.y, b.y) - ROW / 2 + 3;
+        return { id: link.id, a, b, path: adjacent ? `M ${a.x} ${a.y} L ${b.x} ${b.y}` : `M ${a.x} ${a.y} L ${a.x} ${lift} L ${b.x} ${lift} L ${b.x} ${b.y}` };
+      })
+      .filter((line): line is NonNullable<typeof line> => Boolean(line));
+    // parent hooks: the bar spans the children; the drop comes from the couple
+    // standing over them, and a parent living in another family block joins
+    // with their own elbow instead of one bar across the whole canvas
     const parentsOfChild = new Map<string, string[]>();
     for (const link of tree.relationships) {
       if (link.type !== "parent") continue;
@@ -56,7 +70,28 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       entry.children.push(childId);
       sets.set(key, entry);
     }
-    return { positions, spouseLines, parentSets: [...sets.values()] };
+    const hooks = [...sets.values()].flatMap(({ parentIds, children }) => {
+      const childPoints = children.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[];
+      const parentPoints = parentIds.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[];
+      if (!childPoints.length || !parentPoints.length) return [];
+      const barLeft = Math.min(...childPoints.map((p) => p.x));
+      const barRight = Math.max(...childPoints.map((p) => p.x));
+      const junctionY = Math.min(...childPoints.map((p) => p.y)) - ROW / 2;
+      const center = (barLeft + barRight) / 2;
+      const near = parentPoints.filter((p) => p.x >= barLeft - SLOT * 2 && p.x <= barRight + SLOT * 2);
+      const anchors = near.length ? near : [parentPoints.sort((a, b) => Math.abs(a.x - center) - Math.abs(b.x - center))[0]];
+      const far = parentPoints.filter((p) => !anchors.includes(p));
+      const dropX = anchors.reduce((sum, p) => sum + p.x, 0) / anchors.length;
+      const parentY = Math.max(...anchors.map((p) => p.y));
+      return [{
+        key: parentIds.join("|"),
+        coupleBar: anchors.length > 1 ? { y: parentY, left: Math.min(...anchors.map((p) => p.x)), right: Math.max(...anchors.map((p) => p.x)) } : null,
+        dropX, parentY, junctionY, barLeft, barRight,
+        drops: childPoints.map((p) => ({ x: p.x, y: p.y })),
+        farLines: far.map((p) => ({ px: p.x, py: p.y, toX: Math.abs(p.x - barLeft) < Math.abs(p.x - barRight) ? barLeft : barRight })),
+      }];
+    });
+    return { positions, spouseLines, hooks };
   }, [tree]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
@@ -141,8 +176,14 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     </div>
     <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
       <svg className="tree-connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {spouseLines.map((line) => <line className="spouse-connector" key={line.id} x1={line.a.x} y1={line.a.y} x2={line.b.x} y2={line.b.y} />)}
-        {parentSets.map(({ children, parentIds }) => { const parentPoints = parentIds.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[]; const childPoints = children.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[]; if (!parentPoints.length || !childPoints.length) return null; const left = Math.min(...childPoints.map((item) => item.x)); const right = Math.max(...childPoints.map((item) => item.x)); const parentLeft = Math.min(...parentPoints.map((item) => item.x)); const parentRight = Math.max(...parentPoints.map((item) => item.x)); const junctionY = Math.min(...childPoints.map((item) => item.y)) - 14; const parentY = parentPoints[0].y; return <g className="parent-connector" key={parentIds.join("|")}><line x1={parentLeft} y1={parentY} x2={parentRight} y2={parentY} /><line x1={(parentLeft + parentRight) / 2} y1={parentY} x2={(parentLeft + parentRight) / 2} y2={junctionY} /><line x1={left} y1={junctionY} x2={right} y2={junctionY} />{childPoints.map((childPoint) => <line key={`${childPoint.x}-${childPoint.y}`} x1={childPoint.x} y1={junctionY} x2={childPoint.x} y2={childPoint.y} />)}</g>; })}
+        {spouseLines.map((line) => <path className="spouse-connector" key={line.id} d={line.path} fill="none" />)}
+        {hooks.map((hook) => <g className="parent-connector" key={hook.key}>
+          {hook.coupleBar ? <line x1={hook.coupleBar.left} y1={hook.coupleBar.y} x2={hook.coupleBar.right} y2={hook.coupleBar.y} /> : null}
+          <line x1={hook.dropX} y1={hook.parentY} x2={hook.dropX} y2={hook.junctionY} />
+          <line x1={hook.barLeft} y1={hook.junctionY} x2={hook.barRight} y2={hook.junctionY} />
+          {hook.drops.map((drop) => <line key={`${drop.x}-${drop.y}`} x1={drop.x} y1={hook.junctionY} x2={drop.x} y2={drop.y} />)}
+          {hook.farLines.map((farLine) => <path key={`${farLine.px}-${farLine.py}`} d={`M ${farLine.px} ${farLine.py} L ${farLine.px} ${hook.junctionY} L ${farLine.toX} ${hook.junctionY}`} fill="none" />)}
+        </g>)}
       </svg>
       {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
     </div>
