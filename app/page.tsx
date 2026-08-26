@@ -34,7 +34,6 @@ export default async function Home() {
     <FamilyTreeApp
       initialTree={null}
       viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "editor", role, displayName: user?.displayName ?? null }}
-      signInPath={appleSignInPath("/")}
       signOutPath={appleSignOutPath("/")}
       signInEnabled={!TEMPORARY_OPEN_EDITOR}
     />

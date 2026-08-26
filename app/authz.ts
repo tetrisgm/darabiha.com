@@ -1,9 +1,10 @@
 import { getAppleUser, type AppleUser } from "./apple-auth";
 import { getMemberRole, getSiteVisibility, type MemberRole } from "../db/store";
 
-// TEMPORARY TEST MODE: keep this isolated so enforcement can be restored in one change
-// after the family finishes testing archive imports.
-export const TEMPORARY_OPEN_EDITOR = true;
+// Editing is enforced: only members with the editor or admin role can
+// mutate the archive. Flipping this to true reopens the old test mode where
+// every visitor could edit.
+export const TEMPORARY_OPEN_EDITOR = false;
 const temporaryEditor: AppleUser = { subject: "temporary-open-editor", email: "temporary-open-editor@darabiha.com", displayName: "Temporary editor" };
 
 export type ViewerRole = MemberRole | null;

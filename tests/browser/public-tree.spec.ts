@@ -35,7 +35,7 @@ test("public tree renders as an interactive canvas beside the archive chat", asy
   await expect(page.locator(".chat-sidebar")).toBeVisible();
   expect(await page.locator(".tree-card").count()).toBeGreaterThan(0);
   await expect(page.locator(".tree-connectors line")).not.toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Add a person/ })).toBeVisible();
+  await expect(page.locator(".public-chat")).toBeVisible();
 });
 
 test("chat sidebar collapses and returns from the left edge", async ({ page }) => {
