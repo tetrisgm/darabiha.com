@@ -52,7 +52,7 @@ test("a person card opens a navigable record", async ({ page }) => {
   await openFullTree(page);
   await (await onCameraCard(page)).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.locator(".person-drawer-backdrop")).toBeVisible();
+  await expect(page.locator(".person-panel")).toBeVisible();
   await expect(page.locator(".person-modal-v2 h2")).toBeVisible();
 });
 
@@ -166,7 +166,7 @@ test("dragging the dedicated surface pans while a card remains clickable", async
 
 test("the settings page offers sign-in and explains member roles", async ({ page }) => {
   await page.goto("/settings");
-  await expect(page.locator("h1")).toHaveText(/Access & members/);
+  await expect(page.locator("h1")).toHaveText("Settings");
   await expect(page.getByText("Sign in with Apple")).toBeVisible();
 });
 

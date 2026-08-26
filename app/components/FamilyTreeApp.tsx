@@ -259,7 +259,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
                     ] : [
                       "Who has the most descendants?",
                       "What do we know about Ramazan Darabi?",
-                      "Add a person: my cousin, born in Tehran in 1985",
+                      "My cousin was born in Tehran in 1985 — record him",
                       "Which records are missing birth dates?",
                     ]).map((prompt) => <button type="button" className="chat-suggestion" key={prompt} onClick={() => { setInput(prompt); inputRef.current?.focus(); }}>{prompt}</button>)}
                   </div>}
