@@ -164,7 +164,7 @@ button { cursor: pointer; }
 .person-delete-footer { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
 .person-delete-button { color: #b42318; font-size: .85rem; font-weight: 600; }
 .person-delete-button:hover { text-decoration: underline; }
-.person-drawer-backdrop { position: fixed; inset: 0 auto 0 0; width: 430px; align-items: stretch; justify-content: flex-start; padding: 0; background: rgba(32, 40, 36, .12); }
+.person-drawer-backdrop { position: fixed; inset: 0 auto 0 430px; width: 430px; align-items: stretch; justify-content: flex-start; padding: 0; background: rgba(32, 40, 36, .12); }
 .person-drawer-backdrop .person-modal-v2 { height: 100%; max-height: none; width: min(100%, 30rem); border: 0; border-right: 1px solid var(--line); border-radius: 0 1.25rem 1.25rem 0; padding: 2.5rem; box-shadow: 18px 0 60px rgba(24, 39, 31, .18); animation: drawer-in 220ms ease-out both; }
 @keyframes drawer-in { from { opacity: .5; transform: translateX(-2rem); } to { opacity: 1; transform: translateX(0); } }
 .person-modal-hero { display:flex; gap:1.5rem; align-items:center; }
@@ -562,3 +562,13 @@ button:active:not(:disabled) { transform: scale(.98); }
   color:var(--muted); font-size:1.05rem; line-height:1; display:flex; align-items:center; justify-content:center; }
 .person-nav button:hover { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 45%, transparent); }
 .fill-bio { color:var(--muted); font-size:.78rem; line-height:1.55; border-left:2px solid var(--line); padding-left:.7rem; }
+
+/* the profile opens beside the chat, never over it */
+main.chat-collapsed .person-drawer-backdrop { left: 0; }
+.chat-context-chip { display:flex; align-items:center; gap:.45rem; margin:0 .35rem .5rem; padding:.3rem .4rem .3rem .7rem; width:max-content; max-width:100%;
+  border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius:999px; background:color-mix(in srgb, var(--accent) 9%, white);
+  font-size:.72rem; color:var(--ink); }
+.chat-context-chip strong { font-weight:700; }
+.chat-context-chip em { color:var(--muted); font-style:normal; }
+.chat-context-chip button { color:var(--muted); font-size:.9rem; padding:0 .3rem; }
+.chat-context-chip button:hover { color:var(--ink); }
