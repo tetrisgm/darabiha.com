@@ -1,6 +1,6 @@
 # Darabiha handoff
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
 
 ## Read this first
 
@@ -12,7 +12,7 @@ Last updated: 2026-08-25
 - Production exposes its uncached identity at `/api/version` and as visible `Version 47` text at the lower-left edge.
 - **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
 
-## Live state verified on 2026-08-25
+## Live state verified on 2026-08-26
 
 - `/api/version` returns `{"version":47,"build":"5d84371","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.

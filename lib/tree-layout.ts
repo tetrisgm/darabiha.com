@@ -27,8 +27,10 @@ export function buildGenerations(tree: FamilyTree) {
 
 export interface FamilyLayout {
   positions: Map<string, { x: number; y: number }>;
-  /** total width in slot units, for centering */
+  /** total width in slot units */
   width: number;
+  /** x slot of the first root (the patriarch) - the natural opening view */
+  anchorX: number;
   /** child id -> the parent under whose family block the child is drawn */
   primaryParent: Map<string, string>;
 }
@@ -150,9 +152,11 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
     .filter((person) => !hasParents(person.id) && !attachedTo.has(person.id))
     .sort((a, b) => (depth.get(a.id) ?? 0) - (depth.get(b.id) ?? 0) || ((spousesOf.get(b.id)?.length ?? 0) - (spousesOf.get(a.id)?.length ?? 0)) || a.displayName.localeCompare(b.displayName));
   let cursor = 0;
+  let anchorX: number | null = null;
   for (const root of roots) {
     if (positions.has(root.id)) continue;
     place(root.id, cursor);
+    if (anchorX === null) anchorX = positions.get(root.id)?.x ?? null;
     cursor += measure(root.id) + 1;
   }
   // safety net: anything unplaced (odd data shapes) lines up at the end
@@ -162,5 +166,5 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
       cursor += 1.5;
     }
   }
-  return { positions, width: Math.max(cursor, 1), primaryParent };
+  return { positions, width: Math.max(cursor, 1), anchorX: anchorX ?? Math.max(cursor, 1) / 2, primaryParent };
 }
