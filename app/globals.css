@@ -730,3 +730,6 @@ main.chat-collapsed .site-action-bar { left:16px; }
   .site-action-bar .site-wordmark { display:none; }
   .tree-search input { width:9rem; }
 }
+
+/* tabs as a real flex item so the header can never overlap them */
+.site-action-bar .archive-view-switcher { position:static; transform:none; }

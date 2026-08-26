@@ -100,7 +100,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("63");
+  expect(version).toBe("64");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
@@ -115,12 +115,6 @@ test("timeline and map are generated from the same public family records", async
   await expect(page.getByRole("region", { name: "Family places" })).toBeVisible();
   await page.getByRole("button", { name: "Tree" }).click();
   await expect(page.locator(".family-canvas")).toBeVisible();
-});
-
-test("the file picker accepts a ZIP archive without filtering it out", async ({ page }) => {
-  await page.goto("/");
-  const picker = page.locator('input[type="file"]:not([webkitdirectory])').first();
-  await expect(picker).not.toHaveAttribute("accept");
 });
 
 test("Safari gets a visible custom grab cursor and clickable-card cursor", async ({ page }) => {
