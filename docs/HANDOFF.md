@@ -5,28 +5,37 @@ Last updated: 2026-08-25
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 45**, `BUILD_ID=f70ffe1`, Worker deployment `6eef3e2f-cc60-4aeb-af5f-492a2a74f6a6`.
-- The release implementation is commit `f70ffe1` (`Rebuild legacy archive reconstruction after correctness audit`).
+- The live release is **Version 47**, `BUILD_ID=5d84371`, Worker deployment `f3a97065-a3ce-4b8c-9a02-bc5449ac6b0e`.
+- The release spans commits `6543b81..5d84371` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, and the root page was fitted into the Worker CPU budget.
 - `app/authz.ts` intentionally has `TEMPORARY_OPEN_EDITOR = true`. This is the owner-requested testing exception while Nasser’s Apple account is temporarily locked. Every visitor can currently mutate the archive. The Apple implementation and allowlist remain present but are not enforced.
 - Apple enforcement is restored by changing only that constant to `false`, testing all three invited family accounts, incrementing `lib/build.ts`, and deploying. The owner must first confirm that family Apple access is working.
-- Production exposes its uncached identity at `/api/version` and as visible `Version 45` text at the lower-left edge.
+- Production exposes its uncached identity at `/api/version` and as visible `Version 47` text at the lower-left edge.
+- **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
 
 ## Live state verified on 2026-08-25
 
-- `/api/version` returns `{"version":45,"build":"f70ffe1","deployedAt":"2026-08-25"}`.
-- `/` returns 200 with `cache-control: no-store, must-revalidate`.
+- `/api/version` returns `{"version":47,"build":"5d84371","deployedAt":"2026-08-26"}`.
+- `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - `/legacy-family-tree` returns the corrected 183 KB outline reconstruction; `/legacy-family-tree-data.json` returns 407 people, 680 relationships (543 parent, 137 spouse), 14 documents, nine photograph records, and zero identity warnings; `/legacy-photos/*.jpg` serves the eight unique photograph files.
 - `/api/auth/apple` returns 302 to Apple with the Darabiha callback URL.
-- The public D1 tree currently reports **20 people, 21 relationships, and 0 stories**.
-- A case-insensitive exact-name scan currently reports no duplicate display names.
-- `npm test`: 6 files, 13 tests passed.
-- `npm run test:browser`: 24 live tests passed across Chromium and Playwright WebKit. The chromium `a person card opens a navigable record` test is timing-flaky in full parallel runs and passes alone and in per-browser runs.
+- The public D1 tree currently reports **410 people, 680 relationships (543 parent, 137 spouse), and 0 stories** — the corrected legacy archive merged with the previously hand-entered records (see “Main tree data” below).
+- A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
+- `npm test`: 6 files, 16 tests passed.
+- `npm run test:browser`: 24 live tests passed across Chromium and Playwright WebKit, twice consecutively. Tests that inspect cards now wait for the client-side tree fetch (`.tree-card` waitFor) before counting or clicking.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with five known warnings: one unused legacy `PersonModal`, three raw `<img>` warnings, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
 ## Product behavior
+
+### Main tree data (imported 2026-08-26)
+
+- The live D1 tree is now the corrected legacy archive merged with the family's hand-entered records. `scripts/import_legacy_tree_to_d1.mjs` performed the merge (change_log kind `import_legacy_archive`): 390 people added, 17 existing records matched to archive identities through an explicit variant-name table (`Mohammad Zehtab Darabi` = the archive's `Mohammad Darabi` G4, `Jila Darabiha` = `Jila Khosravi Saeed`, `Salmeh` = `Salameh X`, and so on), 7 birth/death year fills into NULL fields only, and 659 relationships added; the 21 pre-existing relationships all matched archive facts and were kept as-is.
+- Existing people kept their ids, display names, portraits, places, and full birth dates. Archive-only people carry year-only dates (the UI renders bare years correctly) and, where relevant, a biography note with archive aliases or a placeholder-code explanation.
+- Untouched leftovers with no archive counterpart: `Mehdi Zehtab`, `Haj Mirza Agha Masoudi` (both disconnected), and a junk person literally named `unused` — candidates for family cleanup through the normal UI.
+- Known data conflict deliberately left alone: D1 records Parissima Darabiha born `1983-09-09` while the archive says 1987 (and her brother Ramine is `1983-07-05` — two months apart is impossible, so one of the two D1 dates is a typo). The family should correct it in the drawer.
+- Re-running the import script after a successful import is a no-op; `--execute` runs wrangler against the remote database, without it the script only writes SQL and a report.
 
 ### Reconstructed legacy archive
 
@@ -42,9 +51,11 @@ Last updated: 2026-08-25
 
 ### Tree and navigation
 
-- The main surface is a full-height, Figma-like 2D family-tree canvas beside a 430 px left chat rail.
+- The main surface is a full-height, Figma-like 2D family-tree canvas beside a 430 px left chat rail. The canvas renders after hydration (`useSyncExternalStore` gate) and the tree data arrives from `/api/tree` client-side; a light shell is server-rendered.
 - Click-drag pans. Wheel/trackpad input zooms around the cursor. The lower-right controls zoom out, show/reset the percentage, and zoom in. Keyboard arrows pan; `+`, `-`, and `0` zoom/reset.
-- Person cards are grouped by generation. Parent relationships use a shared parent junction and a bounded sibling bar; spouse relationships are separate horizontal spouse connectors.
+- `lib/tree-layout.ts buildFamilyLayout` lays the tree out as a classic genealogy chart: a couple sits side by side (a person with two marriages sits between the spouses), children hang directly beneath their parents, and each sibling brings their own family block. A married-in spouse (no recorded parents) joins their partner's couple row; co-parents without a recorded marriage still stand together. Children of a marriage between relatives are drawn once, under the parent closest to the root. The world is anchored so the page opens on the patriarch (Haj Chorok, generation 1).
+- Marriage connectors join adjacent partners with a short line; the five cousin marriages use a raised elbow routed between rows so the line never crosses other cards. Parent hooks drop from the couple standing over the children; a parent drawn in another family block joins the children's bar with its own elbow. On the live tree, 132 of 137 marriages render as adjacent couples.
+- All canvas geometry (positions, marriage paths, parent hooks) is memoized per tree and never recomputed during pan/zoom frames.
 - A sibling is not stored as a direct relationship. Siblings are inferred from shared parent edges.
 - Selecting a person animates the camera toward the card, highlights it, and opens a museum-style person drawer over the chat rail. Closing or clicking away clears the highlight.
 - The canvas uses an app-rendered SVG cursor layer for fine pointers. Empty space shows an open hand, active panning a closed hand, and cards a pointing hand. The layer is `pointer-events: none`; actual controls remain underneath.
@@ -121,7 +132,7 @@ Last updated: 2026-08-25
 
 ## API map
 
-- `GET /api/tree`: public current tree.
+- `GET /api/tree`: public current tree, served from a 10-second serialized cache refreshed by every `readTree()` (mutations always return a fresh tree directly).
 - `POST /api/ask`: public grounded questions over the current tree.
 - `POST /api/agent`: multipart editor chat, files/folders/ZIP inference, reconciliation, and strict tool proposals.
 - `POST /api/changes`: validates and applies one agent proposal.
@@ -145,6 +156,8 @@ Last updated: 2026-08-25
 - `lib/build.ts`: visible production version/build identity.
 - `tests/browser/public-tree.spec.ts`: live Chromium/WebKit production coverage.
 - `scripts/extract_legacy_family_tree.py`: reproducible old-archive graph reconstruction and standalone HTML generator.
+- `scripts/import_legacy_tree_to_d1.mjs`: additive merge of the corrected archive into the live D1 tree (idempotent after success).
+- `lib/tree-layout.ts`: generation depths and the classic family-block canvas layout.
 - `scripts/validate_legacy_family_tree.mjs`: structural regression checks for the reconstructed archive.
 - `docs/legacy-family-tree-import-report.md`: extraction rules, graph counts, complex marriages, and same-name identity audit.
 
@@ -182,8 +195,8 @@ The current Worker has D1, R2, public-origin, and Apple identifier bindings in `
 
 - Versions 2–5 repeatedly changed CSS cursor declarations. Web Inspector reported correct computed cursor values and Playwright WebKit passed, while real Safari on macOS continued to draw the arrow.
 - Version 6 replaced native-cursor reliance with the app-rendered cursor layer and one unambiguous canvas hit surface. Real Safari screenshots verified the open-hand and clickable-card hand on that release.
-- Version 45 retains that fallback unchanged (the legacy-archive rebuild did not touch the canvas). Its automated WebKit cursor, pointer-capture, card-click, wheel containment, and pan tests pass.
-- Version 45 was not separately declared physically verified in real Safari. Playwright WebKit is regression coverage, not proof of the macOS cursor or physical trackpad gesture.
+- Version 47 keeps the cursor-layer fallback; the family-layout rewrite changed card positions and connector shapes but not the hit surface, cursor layer, or gesture handling. Automated WebKit cursor, pointer-capture, card-click, wheel containment, and pan tests pass.
+- Version 47 was not separately declared physically verified in real Safari. Playwright WebKit is regression coverage, not proof of the macOS cursor or physical trackpad gesture.
 
 ## Known follow-ups and boundaries
 

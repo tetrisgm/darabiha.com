@@ -27,6 +27,7 @@ test("public tree renders as an interactive canvas beside the archive chat", asy
   await page.goto("/");
   await expect(page.locator(".family-canvas")).toBeVisible();
   await expect(page.locator(".chat-sidebar")).toBeVisible();
+  await page.locator(".tree-card").first().waitFor();
   expect(await page.locator(".tree-card").count()).toBeGreaterThan(0);
   await expect(page.locator(".tree-connectors line")).not.toHaveCount(0);
   await expect(page.getByRole("button", { name: /Add a person/ })).toBeVisible();
@@ -44,6 +45,7 @@ test("chat sidebar collapses and returns from the left edge", async ({ page }) =
 
 test("a person card opens a navigable record", async ({ page }) => {
   await page.goto("/");
+  await page.locator(".tree-card").first().waitFor();
   await (await onCameraCard(page)).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.locator(".person-drawer-backdrop")).toBeVisible();
@@ -91,7 +93,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("45");
+  expect(version).toBe("47");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
