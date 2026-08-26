@@ -5,16 +5,16 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 47**, `BUILD_ID=5d84371`, Worker deployment `f3a97065-a3ce-4b8c-9a02-bc5449ac6b0e`.
-- The release spans commits `6543b81..5d84371` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, and the root page was fitted into the Worker CPU budget.
+- The live release is **Version 48**, `BUILD_ID=b718d60`, Worker deployment `9c53fdfa-873e-4c8d-b714-8dc15e7827a5`.
+- The release spans commits `6543b81..b718d60` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout with one-meaning-per-line connectors and fixed pixel geometry, and the root page was fitted into the Worker CPU budget.
 - `app/authz.ts` intentionally has `TEMPORARY_OPEN_EDITOR = true`. This is the owner-requested testing exception while Nasser’s Apple account is temporarily locked. Every visitor can currently mutate the archive. The Apple implementation and allowlist remain present but are not enforced.
 - Apple enforcement is restored by changing only that constant to `false`, testing all three invited family accounts, incrementing `lib/build.ts`, and deploying. The owner must first confirm that family Apple access is working.
-- Production exposes its uncached identity at `/api/version` and as visible `Version 47` text at the lower-left edge.
+- Production exposes its uncached identity at `/api/version` and as visible `Version 48` text at the lower-left edge.
 - **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":47,"build":"5d84371","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":48,"build":"b718d60","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - `/legacy-family-tree` returns the corrected 183 KB outline reconstruction; `/legacy-family-tree-data.json` returns 407 people, 680 relationships (543 parent, 137 spouse), 14 documents, nine photograph records, and zero identity warnings; `/legacy-photos/*.jpg` serves the eight unique photograph files.
 - `/api/auth/apple` returns 302 to Apple with the Darabiha callback URL.
@@ -54,7 +54,8 @@ Last updated: 2026-08-26
 - The main surface is a full-height, Figma-like 2D family-tree canvas beside a 430 px left chat rail. The canvas renders after hydration (`useSyncExternalStore` gate) and the tree data arrives from `/api/tree` client-side; a light shell is server-rendered.
 - Click-drag pans. Wheel/trackpad input zooms around the cursor. The lower-right controls zoom out, show/reset the percentage, and zoom in. Keyboard arrows pan; `+`, `-`, and `0` zoom/reset.
 - `lib/tree-layout.ts buildFamilyLayout` lays the tree out as a classic genealogy chart: a couple sits side by side (a person with two marriages sits between the spouses), children hang directly beneath their parents, and each sibling brings their own family block. A married-in spouse (no recorded parents) joins their partner's couple row; co-parents without a recorded marriage still stand together. Children of a marriage between relatives are drawn once, under the parent closest to the root. The world is anchored so the page opens on the patriarch (Haj Chorok, generation 1).
-- Marriage connectors join adjacent partners with a short line; the five cousin marriages use a raised elbow routed between rows so the line never crosses other cards. Parent hooks drop from the couple standing over the children; a parent drawn in another family block joins the children's bar with its own elbow. On the live tree, 132 of 137 marriages render as adjacent couples.
+- Connectors carry exactly one meaning each, named by a small legend on the canvas: a dashed amber line always and only means marriage (a short line between an adjacent couple; a raised elbow routed between rows for the five cousin marriages, so it never crosses cards), and a solid blue T always and only means descent - a drop from the couple's marriage-line midpoint (or the lone recorded parent) to a bar over the children, with a stem to each child. A parent drawn in another family block is connected by the marriage elbow alone. 132 of 137 marriages render as adjacent couples.
+- The world uses fixed pixel geometry (15 rem cards, 270 px slots, 190 px rows), so couple gaps, dash patterns, and bar lengths are identical on every screen; the viewport transform provides pan and zoom. The earlier percentage-of-viewport coordinates made adjacent spouses touch on narrow panes and hid their marriage line. The view opens centered on Haj Chorok; the centering effect retries with requestAnimationFrame until the canvas measures a nonzero width.
 - All canvas geometry (positions, marriage paths, parent hooks) is memoized per tree and never recomputed during pan/zoom frames.
 - A sibling is not stored as a direct relationship. Siblings are inferred from shared parent edges.
 - Selecting a person animates the camera toward the card, highlights it, and opens a museum-style person drawer over the chat rail. Closing or clicking away clears the highlight.
