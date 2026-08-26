@@ -127,10 +127,15 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   const centered = useRef(false);
   useLayoutEffect(() => {
     if (!ready || centered.current) return;
-    const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
-    if (!rect) return;
-    centered.current = true;
-    setView({ x: rect.width / 2, y: 30, scale: 1 });
+    let raf = 0;
+    const attempt = () => {
+      const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
+      if (!rect || !rect.width) { raf = requestAnimationFrame(attempt); return; }
+      centered.current = true;
+      setView({ x: rect.width / 2, y: 30, scale: 1 });
+    };
+    attempt();
+    return () => cancelAnimationFrame(raf);
   }, [ready]);
   const positionCursor = (event: React.PointerEvent<HTMLDivElement>) => {
     const cursor = cursorRef.current;
