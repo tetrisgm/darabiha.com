@@ -26,6 +26,17 @@ Last updated: 2026-08-25
 
 ## Product behavior
 
+### Reconstructed legacy archive
+
+- `public/legacy-family-tree.html` is a standalone, read-only reconstruction of Nasser's `Darabi_Family_Tree_RD.zip`; it does not mutate or replace the current D1 tree.
+- `public/legacy-family-tree-data.json` contains 418 normalized people, 466 parent/child links, 141 marriages, five detected related-spouse marriages, 14 preserved narrative documents, and metadata for nine archive photographs. The standalone HTML embeds the photographs so it remains a single portable file.
+- The source ZIP remains outside the repository and is never modified. Its SHA-256 during reconstruction was `ed5e7b3ae3686670e5e536e1ee7949174cca197f15e7cfbafc978764268138ee`. `scripts/extract_legacy_family_tree.py` reproducibly reads it into a temporary directory and regenerates the HTML, JSON, and `docs/legacy-family-tree-import-report.md`.
+- Directory ancestry, generation rows, explicit links, spouse columns, child-marriage markers, and repeated subtrees are independent evidence channels. A subtree copied beneath both spouses is merged by normalized person identity plus its canonical parent union.
+- Archive generation numbers are branch-relative. Where cousin marriages make the same child appear at two levels, identity resolution is independent of generation; the output retains the highest level and raises descendants as needed for a valid parent-before-child layout.
+- Placeholder names such as `Xxx Darabi`, `Yyy Darabiha`, and `---` are omitted. Exact same-name people remain separate when their parents differ.
+- `npm run legacy:validate` checks referential integrity, duplicate edges, parent cycles, generation order, placeholder leakage, parent cardinality, known family chains, and the standalone HTML payload.
+- The audit currently has no cycles, self-links, duplicate relationships, people with more than two parents, placeholder people, or unresolved identity warnings.
+
 ### Tree and navigation
 
 - The main surface is a full-height, Figma-like 2D family-tree canvas beside a 430 px left chat rail.
@@ -130,6 +141,9 @@ Last updated: 2026-08-25
 - `app/authz.ts`: Apple allowlist and the current temporary bypass.
 - `lib/build.ts`: visible production version/build identity.
 - `tests/browser/public-tree.spec.ts`: live Chromium/WebKit production coverage.
+- `scripts/extract_legacy_family_tree.py`: reproducible old-archive graph reconstruction and standalone HTML generator.
+- `scripts/validate_legacy_family_tree.mjs`: structural regression checks for the reconstructed archive.
+- `docs/legacy-family-tree-import-report.md`: extraction rules, graph counts, complex marriages, and same-name identity audit.
 
 ## Build, deploy, and verification
 

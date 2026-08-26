@@ -10,6 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "legacy:validate": "node scripts/validate_legacy_family_tree.mjs",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run --config vitest.config.ts",
     "test:browser": "playwright test --config playwright.config.ts"
