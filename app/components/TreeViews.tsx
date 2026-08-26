@@ -121,7 +121,22 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
     if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
   };
   useEffect(() => {
-    const frame = requestAnimationFrame(() => { setPan({ x: 0, y: 0 }); setPanMode("idle"); });
+    const frame = requestAnimationFrame(() => {
+      setPanMode("idle");
+      setPan({ x: 0, y: 0 });
+      // after the zero-pan layout paints, land the focal card on the stage center
+      requestAnimationFrame(() => {
+        const stage = containerRef.current;
+        const focalCard = slotRefs.current.get("focal");
+        if (!stage || !focalCard) return;
+        const stageRect = stage.getBoundingClientRect();
+        const cardRect = focalCard.getBoundingClientRect();
+        setPan({
+          x: (stageRect.left + stageRect.width / 2) - (cardRect.left + cardRect.width / 2),
+          y: (stageRect.top + stageRect.height / 2) - (cardRect.top + cardRect.height / 2),
+        });
+      });
+    });
     return () => cancelAnimationFrame(frame);
   }, [focusId]);
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {

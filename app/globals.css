@@ -724,3 +724,9 @@ main.chat-collapsed .site-action-bar { left:16px; }
 .ped-pan { flex:none; }
 .focus-toolbar { display:flex; align-items:center; justify-content:flex-start; gap:1rem; }
 .focus-toolbar .focus-hint { margin:0; }
+
+/* narrow-window header: tabs win, the wordmark yields */
+@media (max-width: 1100px) {
+  .site-action-bar .site-wordmark { display:none; }
+  .tree-search input { width:9rem; }
+}
