@@ -36,6 +36,7 @@ export async function ensureSchema() {
   for (const column of ["birth_city", "birth_country", "death_city", "death_country", "gender"]) {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
+  try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
   await env.DB.prepare("PRAGMA optimize").run();
   initialized = true;
 }
@@ -56,7 +57,7 @@ export async function readTree(): Promise<FamilyTree> {
       birth_place AS birthPlace, death_place AS deathPlace, birth_city AS birthCity, birth_country AS birthCountry,
       death_city AS deathCity, death_country AS deathCountry, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
     env.DB.prepare(`SELECT id, from_person_id AS fromPersonId, to_person_id AS toPersonId,
-      type FROM relationships ORDER BY created_at`).all<Relationship>(),
+      type, status FROM relationships ORDER BY created_at`).all<Relationship>(),
     env.DB.prepare(`SELECT id, title, body, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
     env.DB.prepare(`SELECT story_id AS storyId, person_id AS personId FROM story_people`).all<{ storyId: string; personId: string }>(),
     env.DB.prepare(`SELECT story_id AS storyId, attachment_id AS attachmentId FROM story_attachments`).all<{ storyId: string; attachmentId: string }>(),
@@ -227,6 +228,17 @@ export async function updatePerson(personId: string, patch: Record<string, unkno
 
 export async function addRelationship(fromPersonId: string, toPersonId: string, relationshipType: "parent" | "spouse", actorEmail: string) {
   return applyProposal({ kind: "add_relationship", summary: "Added a family relationship", fromPersonId, toPersonId, relationshipType }, actorEmail);
+}
+
+export async function setRelationshipStatus(relationshipId: string, status: string | null, actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE relationships SET status = ? WHERE id = ? AND type = 'spouse'").bind(status, relationshipId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "set_relationship_status", status ? `Marked a marriage as ${status}` : "Cleared a marriage status", JSON.stringify({ relationshipId, status }), now),
+  ]);
+  return readTree();
 }
 
 export async function removeRelationship(relationshipId: string, actorEmail: string) {

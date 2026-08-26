@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildFamilyLayout, buildGenerations } from "../../lib/tree-layout";
+import { Silhouette } from "./TreeViews";
 
 const cardDateFormat = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 function cardDate(value: string | null) {
@@ -10,10 +11,6 @@ function cardDate(value: string | null) {
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return value;
   return cardDateFormat.format(new Date(Date.UTC(year, month - 1, day)));
-}
-
-function genderGlyph(person: Person) {
-  return person.gender === "female" ? "♀" : person.gender === "male" ? "♂" : "•";
 }
 
 export function clampScale(scale: number) { return Math.max(0.5, Math.min(3, scale)); }
@@ -123,7 +120,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
         if (!a || !b) return null;
         const adjacent = Math.abs(a.x - b.x) <= SLOT * 1.2 && a.y === b.y;
         const lift = Math.min(a.y, b.y) - 75;
-        return { id: link.id, a, b, path: adjacent ? `M ${a.x} ${a.y} L ${b.x} ${b.y}` : `M ${a.x} ${a.y} L ${a.x} ${lift} L ${b.x} ${lift} L ${b.x} ${b.y}` };
+        return { id: link.id, a, b, status: link.status ?? null, path: adjacent ? `M ${a.x} ${a.y} L ${b.x} ${b.y}` : `M ${a.x} ${a.y} L ${a.x} ${lift} L ${b.x} ${lift} L ${b.x} ${b.y}` };
       })
       .filter((line): line is NonNullable<typeof line> => Boolean(line));
     // parent hooks: the bar spans the children; the drop comes from the couple
@@ -308,7 +305,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     </div>
     <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
       <svg className="tree-connectors">
-        {spouseLines.map((line) => <path className="spouse-connector" key={line.id} d={line.path} fill="none" />)}
+        {spouseLines.map((line) => <path className={`spouse-connector${line.status ? " is-ended" : ""}`} key={line.id} d={line.path} fill="none" />)}
         {hooks.map((hook) => <g className="parent-connector" key={hook.key}>
           <line x1={hook.dropX} y1={hook.parentY} x2={hook.dropX} y2={hook.junctionY} />
           <line x1={hook.barLeft} y1={hook.junctionY} x2={hook.barRight} y2={hook.junctionY} />
@@ -316,7 +313,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
           {hook.farLines.map((farLine, index) => <path key={index} d={farLine.path} fill="none" />)}
         </g>)}
       </svg>
-      {visibleTree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {visibleTree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
       {[...primaryChildren.keys()].filter((id) => visibleSet.has(id) && positions.has(id)).map((id) => {
         const p = positions.get(id)!;
         const isFolded = collapsed.has(id);

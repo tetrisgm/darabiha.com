@@ -21,6 +21,8 @@ export type Relationship = {
   fromPersonId: string;
   toPersonId: string;
   type: "parent" | "spouse";
+  /** spouse links only: null means married; "divorced" | "widowed" otherwise */
+  status?: string | null;
 };
 
 export type Story = {

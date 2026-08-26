@@ -270,6 +270,8 @@ export interface RelationMaps {
   parentsOf: Map<string, string[]>;
   childrenOf: Map<string, string[]>;
   spousesOf: Map<string, string[]>;
+  /** sorted "idA|idB" -> spouse-link status (null while married) */
+  spouseStatus: Map<string, string | null>;
   byId: Map<string, Person>;
 }
 
@@ -278,6 +280,7 @@ export function buildRelationMaps(tree: FamilyTree): RelationMaps {
   const parentsOf = new Map<string, string[]>();
   const childrenOf = new Map<string, string[]>();
   const spousesOf = new Map<string, string[]>();
+  const spouseStatus = new Map<string, string | null>();
   for (const link of tree.relationships) {
     if (link.type === "parent") {
       parentsOf.set(link.toPersonId, [...(parentsOf.get(link.toPersonId) ?? []), link.fromPersonId]);
@@ -285,7 +288,8 @@ export function buildRelationMaps(tree: FamilyTree): RelationMaps {
     } else {
       spousesOf.set(link.fromPersonId, [...(spousesOf.get(link.fromPersonId) ?? []), link.toPersonId]);
       spousesOf.set(link.toPersonId, [...(spousesOf.get(link.toPersonId) ?? []), link.fromPersonId]);
+      spouseStatus.set([link.fromPersonId, link.toPersonId].sort().join("|"), link.status ?? null);
     }
   }
-  return { parentsOf, childrenOf, spousesOf, byId: new Map(tree.people.map((person) => [person.id, person])) };
+  return { parentsOf, childrenOf, spousesOf, spouseStatus, byId: new Map(tree.people.map((person) => [person.id, person])) };
 }
