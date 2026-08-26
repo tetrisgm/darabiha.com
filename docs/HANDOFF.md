@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":56,"build":"57e1abb","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":57,"build":"7172d8a","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - `/legacy-family-tree` returns the corrected 183 KB outline reconstruction; `/legacy-family-tree-data.json` returns 407 people, 680 relationships (543 parent, 137 spouse), 14 documents, nine photograph records, and zero identity warnings; `/legacy-photos/*.jpg` serves the eight unique photograph files.
 - `/api/auth/apple` returns 302 to Apple with the Darabiha callback URL.
@@ -27,10 +27,11 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–56 (2026-08-26)
+### Versions 54–57 (2026-08-26)
 
 - **Version 54** (`02432f1`): an Editorial Luxury design pass across the whole site — Plus Jakarta Sans body + Cormorant Garamond display (Inter removed), a warm paper/ink/sage token palette in `app/globals.css` `:root`, a fixed grain overlay in `app/layout.tsx`, a floating island action bar, double-bezel pedigree cards, staggered rise-in entrances, a shimmer skeleton on `[aria-busy]`, and consistent custom cubic-bezier motion. It also made person navigation real browser history: `openPerson` pushes `?p=<id>` with `pushState`, popstate walks back/forward, and a `?p` URL restores the drawer after the tree loads. Fill-in became a full searchable list of every incomplete card with seeded forms.
 - **Version 55** (`e40fd09`): fixed the user-reported List-view crash — `buildDescentModel` had been deleted along with the Fan view and the untypechecked build shipped it as a runtime `ReferenceError`, which the localStorage view persistence made sticky across refreshes. The function was restored, two latent type errors fixed, `npx tsc --noEmit` added to the release gates, and `app/error.tsx` now clears the saved view and the `?p` URL before reset so an error page can never trap the visitor.
+- **Version 57** (`7172d8a`): the Fill-in view is now a sortable table — a header row (First name, Last name, Born, Gen, Missing) sorts on click and reverses on a second click, defaulting to family name; sorting by generation groups rows under generation headings, and a select filters to a single generation. Generation numbers come from the spouse-aware `buildGenerations`, so married-in relatives stand on their spouse's row. The family name is the last non-parenthesized token of the display name (parenthesized alias/marker tokens are skipped). The relatives context line moved into a row's expanded form. Clicking the **Darabiha** wordmark returns to the Family view. Data fix: `Mahtab Abarghoui (2)` was renamed to `Mahtab Abarghoui` through the audited update path — the `(2)` was the legacy archive's same-name marker, now noted in her biography; she is the only Mahtab Abarghoui in the tree.
 - **Version 56** (`57e1abb`): the profile drawer opens BESIDE the chat rail (`.person-drawer-backdrop` `inset: 0 auto 0 430px`, full-width again under `main.chat-collapsed`) so the conversation stays available while a record is open. Both chats show a context chip naming the open person — the editor chat prefixes its message so shared details apply to that person, the public chat prefixes `/api/ask` so questions are answered about them, and the chip's × closes the record. The profile ‹ › history arrows were also moved into `PersonModalV2`; an earlier insert had accidentally placed them in the Add-person dialog.
 
 ## Product behavior
