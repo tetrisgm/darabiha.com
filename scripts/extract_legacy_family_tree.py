@@ -1,1198 +1,1498 @@
 #!/usr/bin/env python3
 """Reconstruct the legacy Darabi family archive into a normalized graph.
 
-The source archive is not a conventional genealogy export. Its directory names
-encode parent/child chains, while HTML table rows encode spouses and repeated
-copies of a branch. This script keeps evidence for every inferred relationship,
-merges only identities that share a parent union, and emits a standalone HTML
-viewer, machine-readable JSON, and an audit report.
+The source archive is not a conventional genealogy export. Directory names
+encode parent/child chains, per-family HTML tables encode spouses, marriage
+order markers, and repeated copies of branches (cousin marriages duplicate
+whole subtrees under both spouses). This script rebuilds one deduplicated
+graph and emits:
+
+  - a small standalone HTML outline viewer (children nested under parents,
+    marriages inline, cousin marriages annotated and cross-referenced)
+  - machine-readable JSON (people, relationships, complex marriages,
+    narrative documents, photograph metadata)
+  - photograph files served beside the page
+  - an audit report
+
+Model of a family HTML file (verified against the raw archive):
+  - decorative header (skipped) with the generations 1-4 chain, the five
+    generation-5 columns, and linked generation-6 lists (the linked lists are
+    the only place generation-6 birth/death dates appear - harvested)
+  - context block: a label row 'Generation 6<code>' holds the branch couple
+    (name cell + xlname2* spouse cells, either may be the on-path person);
+    'Generation 7<code>' rows (+ "Cont'd") hold ALL children of that couple
+    with their spouses; unlabeled xlnameG6 rows hold grandchildren in columns
+    whose (k) markers assign them to a grandparent's numbered marriage
+  - direct-line strip: one row per generation down the folder path, ending
+    with the focal person's children
+  - (1)/(2) markers tie children and spouses to a specific marriage; they are
+    meaningful only relative to that family, never globally
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
-import html
+import hashlib
+import html as html_mod
 import json
-import mimetypes
 import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 import zipfile
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from difflib import SequenceMatcher
+from collections import defaultdict
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Iterable
-from urllib.parse import unquote
+
+# ---------------------------------------------------------------- name logic
+
+PLACEHOLDER_TOKEN = re.compile(r"^(.)\1+$", re.I)  # xx, Xxx, Yyy, Sss, ...
+CODE_TOKEN = re.compile(r"^x[A-Za-z]{2,5}_\d+[a-z]?$")  # xAsJ_17, xKoJ_41a
+MARKER_RE = re.compile(r"^\((\d)\)\s*")
+DATE_RE = re.compile(r"\s+(~?\d{4}|\d{2}[-x]{2})(?:\s*[-–]\s*(~?\d{4}|\d{2}[-x]{2}|-{2,}))?\s*$")
 
 
-PLACEHOLDER_WORDS = {"x", "xx", "xxx", "yyy", "zzz", "sss", "unknown"}
-BRANCHES = {
-    "A_Generation_6_Hossein": ("Hossein Darabi", 5),
-    "A_Generation_6_Fatemeh": ("Fatemeh Darabi", 5),
-    "A_Generation_6_Ramazan": ("Ramazan Darabi", 5),
-    "A_Generation_6_Ghassem": ("Ghassem Darabi", 5),
-}
+def norm(name: str) -> str:
+    n = unicodedata.normalize("NFKD", name)
+    n = "".join(c for c in n if not unicodedata.combining(c))
+    n = re.sub(r"\([^)]*\)", " ", n)
+    return re.sub(r"[^a-zA-Z]+", "", n).lower()
 
 
-def collapse(value: str) -> str:
-    return " ".join(html.unescape(value).replace("\xa0", " ").split())
+def classify_name(display: str):
+    d = " ".join(display.split())
+    d = re.sub(r"^\(\d\)\s*", "", d)
+    if d in ("", "-", ".", "X", "?") or set(d) <= set("-?. "):
+        return "empty", "", []
+    toks = d.split()
+    codes = [t for t in toks if CODE_TOKEN.match(t)]
+    ph = [t for t in toks if PLACEHOLDER_TOKEN.match(t)]
+    real = [t for t in toks if t not in codes and t not in ph]
+    if not real and not codes:
+        return "placeholder", d, []
+    if not real:
+        # code-only name (xKoJ_41a): a deliberately recorded person whose
+        # name is unknown - keep, unlike pure Xxx placeholders
+        return "partial", d, codes
+    if codes or ph:
+        return "partial", " ".join(real + codes), codes
+    return "real", d, codes
 
 
-def remove_marker(value: str) -> tuple[int | None, str]:
-    match = re.match(r"^\s*\((\d+)\)\s*", value)
-    if not match:
-        return None, collapse(value)
-    return int(match.group(1)), collapse(value[match.end() :])
+def real_tokens(name: str) -> set[str]:
+    toks = []
+    for t in re.sub(r"[()]", " ", name).split():
+        if not CODE_TOKEN.match(t) and not PLACEHOLDER_TOKEN.match(t):
+            toks.append(norm(t))
+    return {t for t in toks if t}
 
 
-def remove_years(value: str) -> str:
-    return collapse(re.sub(r"\b(?:17|18|19|20)\d{2}\b(?:\s*[-–]\s*(?:\d{4}|\d{2}xx|present))?.*$", "", value, flags=re.I))
-
-
-def normal(value: str) -> str:
-    _, value = remove_marker(value)
-    value = remove_years(value)
-    return collapse(re.sub(r"[^a-z0-9]+", " ", value.lower()))
-
-
-def identity(value: str) -> str:
-    # Treat spacing variants such as Gholamreza/Gholam Reza as equal while
-    # retaining every name token so Mohammad Rahim and Mohammad Karim never
-    # collapse merely because they share a first name and surname.
-    return normal(value).replace(" ", "")
-
-
-def is_placeholder(value: str) -> bool:
-    cleaned = normal(value)
-    if not cleaned or cleaned in {"no children", "none"}:
+def _lev1(a: str, b: str) -> bool:
+    if a == b:
         return True
-    words = set(cleaned.split())
-    # The archive often writes placeholders as "Xxx Darabi" or "Yyy
-    # Darabiha". A placeholder given name is still a placeholder record even
-    # when the family surname was filled in.
-    first_word = cleaned.split()[0]
-    return (bool(words) and words <= PLACEHOLDER_WORDS) or first_word in PLACEHOLDER_WORDS
-
-
-def years(value: str) -> list[int]:
-    return [int(item) for item in re.findall(r"(?<!\d)((?:17|18|19|20)\d{2})(?!\d)", value)]
-
-
-def name_from_component(value: str) -> str:
-    return collapse(value.replace("_", " "))
-
-
-def readable_archive_name(value: str) -> str:
-    """Repair UTF-8 filenames stored through the ZIP CP437 compatibility map."""
-    try:
-        repaired = value.encode("cp437").decode("utf-8")
-    except (UnicodeEncodeError, UnicodeDecodeError):
-        return value
-    return repaired if re.search(r"[\u0600-\u06ff]", repaired) else value
-
-
-def readable_source(path: Path) -> str:
-    return "/".join(readable_archive_name(part) for part in path.parts)
-
-
-def names_match(left: str, right: str) -> bool:
-    left_normal = normal(left)
-    right_normal = normal(right)
-    if not left_normal or not right_normal:
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
         return False
-    if identity(left) == identity(right):
-        return True
-    left_words = left_normal.split()
-    right_words = right_normal.split()
-    shorter, longer = sorted((left_words, right_words), key=len)
-    if len(shorter) >= 2 and longer[-len(shorter) :] == shorter:
-        return True
-    # Parenthetical nicknames are inconsistently present. Permit the compact
-    # first/surname form to match its longer form, but do not use this rule
-    # when both sides contain differing middle names.
-    return (
-        len(shorter) == 2
-        and shorter[0] == longer[0]
-        and shorter[-1] == longer[-1]
-    )
+    if la > lb:
+        a, b, la, lb = b, a, lb, la
+    i = j = diff = 0
+    while i < la and j < lb:
+        if a[i] == b[j]:
+            i += 1
+            j += 1
+        else:
+            diff += 1
+            if diff > 1:
+                return False
+            if la == lb:
+                i += 1
+            j += 1
+    return True
 
 
-def probable_name_match(left: str, right: str) -> bool:
-    if names_match(left, right):
+def all_tokens(name: str) -> list[str]:
+    toks = []
+    for t in re.sub(r"[()]", " ", name).split():
+        n = norm(t)
+        if n:
+            toks.append(n)
+    return toks
+
+
+def names_match(a: str, b: str) -> bool:
+    """Same person under spelling variation, without merging distinct Persian
+    given names (Ali vs Alireza must stay separate)."""
+    na, nb = norm(a), norm(b)
+    if na and na == nb:
         return True
-    left_words = normal(left).split()
-    right_words = normal(right).split()
-    if not left_words or not right_words or left_words[-1] != right_words[-1]:
-        # Vaezi/Vaezipour is used interchangeably in the archive's folder and
-        # table spellings. Limit this rule to the Persian “-pour” suffix so a
-        # broad surname-prefix heuristic cannot join unrelated Darabi names.
-        same_given_name = left_words and right_words and left_words[0] == right_words[0]
-        surnames = {left_words[-1], right_words[-1]}
-        if not same_given_name or not any(longer == shorter + "pour" for shorter in surnames for longer in surnames):
+    # concatenated-form variant (Mohammad Reza / Mohamadreza)
+    if len(na) >= 8 and len(nb) >= 8 and _lev1(na, nb):
+        return True
+    ta, tb = real_tokens(a), real_tokens(b)
+    if ta and tb and (ta <= tb or tb <= ta) and len(ta & tb) >= 2:
+        return True
+    la, lb = sorted(all_tokens(a)), sorted(all_tokens(b))
+    if la and la == lb:
+        return True
+    # position-aware variant alignment: non-final tokens need equality or a
+    # one-letter misspelling (Hasan/Hassan); only the final (surname) token
+    # may be a prefix variant (Vaezi/Vaezipour)
+    oa, ob = all_tokens(a), all_tokens(b)
+    if oa and len(oa) == len(ob):
+        for i, (x, y) in enumerate(zip(oa, ob)):
+            last = i == len(oa) - 1
+            if x == y:
+                continue
+            if len(x) >= 5 and len(y) >= 5 and _lev1(x, y):
+                continue
+            if last and len(x) >= 4 and len(y) >= 4 and (x.startswith(y) or y.startswith(x)):
+                continue
             return False
         return True
-    return SequenceMatcher(None, identity(left), identity(right)).ratio() >= 0.92
+    return False
 
 
-@dataclass
-class Cell:
-    css_class: str = ""
-    text: str = ""
-    links: list[str] = field(default_factory=list)
+def split_dates(text: str):
+    t = " ".join(text.split())
+    m = DATE_RE.search(t)
+    birth = death = None
+    if m:
+        t = t[: m.start()].strip()
+
+        def yr(s):
+            if not s:
+                return None
+            s = s.lstrip("~")
+            return int(s) if re.fullmatch(r"\d{4}", s) else None
+
+        birth, death = yr(m.group(1)), yr(m.group(2))
+    return t, birth, death
 
 
-class TableParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.rows: list[list[Cell]] = []
-        self.row: list[Cell] | None = None
-        self.cell: Cell | None = None
-        self.title = ""
-        self.in_title = False
-        self.all_text: list[str] = []
-        self.images: list[str] = []
-        self.ignored_depth = 0
+# ------------------------------------------------------------- html parsing
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attributes = dict(attrs)
-        tag = tag.lower()
-        if tag in {"style", "script"}:
-            self.ignored_depth += 1
-        elif self.ignored_depth:
-            return
-        elif tag == "tr":
+
+class TableGrid(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self.row = None
+        self.cell = None
+        self.cls = None
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "tr":
             self.row = []
-        elif tag in {"td", "th"}:
-            self.cell = Cell(css_class=attributes.get("class") or "")
-        elif tag == "a" and self.cell is not None and attributes.get("href"):
-            self.cell.links.append(attributes["href"] or "")
-        elif tag == "img" and attributes.get("src"):
-            self.images.append(attributes["src"] or "")
-        elif tag == "title":
-            self.in_title = True
+        elif tag in ("td", "th"):
+            self.cell = []
+            self.cls = a.get("class", "")
 
-    def handle_endtag(self, tag: str) -> None:
-        tag = tag.lower()
-        if tag in {"style", "script"} and self.ignored_depth:
-            self.ignored_depth -= 1
-        elif self.ignored_depth:
-            return
-        elif tag in {"td", "th"} and self.cell is not None:
-            self.cell.text = collapse(self.cell.text)
-            if self.row is None:
-                self.row = []
-            self.row.append(self.cell)
+    def handle_endtag(self, tag):
+        if tag in ("td", "th") and self.row is not None and self.cell is not None:
+            txt = " ".join("".join(self.cell).split())
+            self.row.append((self.cls or "", txt))
             self.cell = None
         elif tag == "tr" and self.row is not None:
             self.rows.append(self.row)
             self.row = None
-        elif tag == "title":
-            self.in_title = False
 
-    def handle_data(self, data: str) -> None:
-        if self.ignored_depth:
-            return
-        cleaned = collapse(data)
-        if cleaned:
-            self.all_text.append(cleaned)
+    def handle_data(self, d):
         if self.cell is not None:
-            self.cell.text += " " + data
-        if self.in_title:
-            self.title += data
+            self.cell.append(d)
 
 
-@dataclass
-class Person:
-    raw_id: str
-    name: str
-    generation: int
-    branch: str
-    lineage: tuple[str, ...]
-    structural: bool = True
-    aliases: set[str] = field(default_factory=set)
-    sources: set[str] = field(default_factory=set)
-    birth_year: int | None = None
-    death_year: int | None = None
+def parse_table(path: Path):
+    t = TableGrid()
+    t.feed(path.read_text(encoding="utf-8", errors="replace"))
+    return t.rows
 
 
-class DSU:
-    def __init__(self, items: Iterable[str]) -> None:
-        self.parent = {item: item for item in items}
+class TextExtract(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self.skip = 0
 
-    def find(self, item: str) -> str:
-        root = item
-        while self.parent[root] != root:
-            root = self.parent[root]
-        while self.parent[item] != item:
-            parent = self.parent[item]
-            self.parent[item] = root
-            item = parent
-        return root
+    def handle_starttag(self, tag, attrs):
+        if tag in ("style", "script"):
+            self.skip += 1
 
-    def union(self, left: str, right: str) -> bool:
-        left_root = self.find(left)
-        right_root = self.find(right)
-        if left_root == right_root:
-            return False
-        self.parent[right_root] = left_root
-        return True
+    def handle_endtag(self, tag):
+        if tag in ("style", "script") and self.skip:
+            self.skip -= 1
+
+    def handle_data(self, d):
+        if not self.skip:
+            d = d.strip()
+            if d:
+                self.parts.append(d)
+
+
+# ---------------------------------------------------------------- extraction
+
+
+class P:
+    __slots__ = ("pid", "names", "birth", "death", "gen", "sources", "kind", "markers")
+
+    def __init__(self, pid):
+        self.pid = pid
+        self.names = []
+        self.birth = None
+        self.death = None
+        self.gen = None
+        self.sources = []
+        self.kind = "real"
+        self.markers = {}
+
+    def add_name(self, n):
+        if n and n not in self.names:
+            self.names.append(n)
+
+    def best_name(self):
+        return max(self.names, key=len) if self.names else "?"
 
 
 class Extractor:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path):
         self.root = root
-        self.people: dict[str, Person] = {}
-        self.node_by_key: dict[tuple[str, tuple[str, ...]], str] = {}
-        self.node_by_file: dict[Path, str] = {}
-        self.parent_edges: list[tuple[str, str, str]] = []
-        self.spouse_edges: list[tuple[str, str, str]] = []
-        self.parsers: dict[Path, TableParser] = {}
-        self.placeholder_count = 0
-        self.ambiguous: list[str] = []
-        self.manual_nodes: dict[str, str] = {}
+        self.gen5 = root / "A_Generation_5"
+        self.people = {}
+        self.parent_edges = set()
+        self.marriages = defaultdict(set)
+        self.warnings = []
+        self.htmlonly_children = []
+        self.uf = {}
+        self.folder_person = {}
+        self.folder_children = defaultdict(list)
+        self.g5cols = {}
+        self.merged_pairs = set()
+        self.inferred = set()
+        self.parsed_files = 0
 
-    def add_person(
-        self,
-        name: str,
-        generation: int,
-        branch: str,
-        lineage: tuple[str, ...],
-        source: str,
-        structural: bool = True,
-    ) -> str | None:
-        if is_placeholder(name):
-            self.placeholder_count += 1
-            return None
-        # A lineage key is an exact structural address, not a fuzzy identity
-        # match. In particular, Haj Chorok, Haj Agha, and Haj Khalil share the
-        # same first/last tokens but are three different generations.
-        key = (branch, tuple(normal(part) for part in lineage))
-        if key in self.node_by_key:
-            raw_id = self.node_by_key[key]
-            person = self.people[raw_id]
-            person.aliases.add(collapse(name))
-            person.sources.add(source)
-            return raw_id
-        raw_id = f"raw-{len(self.people) + 1}"
-        person = Person(
-            raw_id=raw_id,
-            name=collapse(name),
-            generation=generation,
-            branch=branch,
-            lineage=lineage,
-            structural=structural,
-            aliases={collapse(name)},
-            sources={source},
-        )
-        self.people[raw_id] = person
-        self.node_by_key[key] = raw_id
-        return raw_id
+    # -- identity plumbing
+    def find(self, x):
+        uf = self.uf
+        uf.setdefault(x, x)
+        r = x
+        while uf[r] != r:
+            r = uf[r]
+        while uf[x] != r:
+            uf[x], x = r, uf[x]
+        return r
 
-    def add_manual_tree(self) -> None:
-        early = [
-            ("Haj Chorok Darabi", 1, None, 1720, None),
-            ("Haj Agha Darabi", 2, "Haj Chorok Darabi", None, None),
-            ("Haj Khalil Darabi", 3, "Haj Agha Darabi", None, None),
-            ("Mohammad Darabi", 4, "Haj Khalil Darabi", 1856, 1939),
-            ("Salameh", 4, None, None, None),
-            ("Hossein Darabi", 5, "Mohammad Darabi", 1882, 1937),
-            ("Aategheh Dastmardi", 5, None, None, None),
-            ("Fatemeh Darabi", 5, "Mohammad Darabi", 1889, None),
-            ("Ramazan Jaberian", 5, None, None, None),
-            ("Ramazan Darabi", 5, "Mohammad Darabi", 1893, 1986),
-            ("Farkhondeh Ariyehbandha", 5, None, None, None),
-            ("Ghassem Darabi", 5, "Mohammad Darabi", 1903, 1979),
-            ("Robabeh Massoudi", 5, None, 1912, 2003),
-            ("Abbas Darabi", 5, "Mohammad Darabi", None, None),
-        ]
-        for name, generation, _, birth, death in early:
-            node = self.add_person(name, generation, "early", (name,), "A_Generation_5/Generation_5.html")
-            assert node
-            self.manual_nodes[normal(name)] = node
-            self.people[node].birth_year = birth
-            self.people[node].death_year = death
-        for name, _, parent, _, _ in early:
-            if parent:
-                self.parent_edges.append((self.manual_nodes[normal(parent)], self.manual_nodes[normal(name)], "Generation_5.html"))
-        mohammad = self.manual_nodes[normal("Mohammad Darabi")]
-        salameh = self.manual_nodes[normal("Salameh")]
-        for child in ["Hossein Darabi", "Fatemeh Darabi", "Ramazan Darabi", "Ghassem Darabi", "Abbas Darabi"]:
-            self.parent_edges.append((salameh, self.manual_nodes[normal(child)], "Generation_5.html"))
-        for left, right in [
-            ("Mohammad Darabi", "Salameh"),
-            ("Hossein Darabi", "Aategheh Dastmardi"),
-            ("Fatemeh Darabi", "Ramazan Jaberian"),
-            ("Ramazan Darabi", "Farkhondeh Ariyehbandha"),
-            ("Ghassem Darabi", "Robabeh Massoudi"),
-        ]:
-            self.spouse_edges.append((self.manual_nodes[normal(left)], self.manual_nodes[normal(right)], "Generation_5.html"))
+    def union(self, keep, lose):
+        rk, rl = self.find(keep), self.find(lose)
+        if rk == rl:
+            return rk
+        kp, lp = self.get(rk), self.get(rl)
+        for n in lp.names:
+            kp.add_name(n)
+        kp.birth = kp.birth or lp.birth
+        kp.death = kp.death or lp.death
+        if kp.gen is None:
+            kp.gen = lp.gen
+        elif lp.gen is not None:
+            kp.gen = max(kp.gen, lp.gen)
+        kp.sources += lp.sources
+        for k, v in lp.markers.items():
+            kp.markers.setdefault(k, set()).update(v)
+        if lp.kind == "real":
+            kp.kind = "real"
+        self.uf[rl] = rk
+        return rk
 
-    def parse_html(self, path: Path) -> TableParser:
-        if path not in self.parsers:
-            parser = TableParser()
-            parser.feed(path.read_text(encoding="utf-8", errors="replace"))
-            self.parsers[path] = parser
-        return self.parsers[path]
+    def get(self, pid) -> P:
+        r = self.find(pid)
+        if r not in self.people:
+            self.people[r] = P(r)
+        return self.people[r]
 
-    def build_structural_people(self) -> None:
-        generation_root = self.root / "A_Generation_5"
-        for branch_dir, (ancestor_name, _) in BRANCHES.items():
-            folder = generation_root / branch_dir
-            ancestor = self.manual_nodes[normal(ancestor_name)]
-            branch_label = branch_dir.replace("A_Generation_6_", "")
-            for path in sorted(folder.rglob("*.html")):
-                if path.name.lower().startswith("xxxgeneration"):
-                    continue
-                relative = path.relative_to(folder)
-                components: list[tuple[str, int]] = []
-                for part in relative.parts[:-1]:
-                    match = re.match(r"(.+)_G(\d+)$", part, flags=re.I)
-                    if match:
-                        components.append((name_from_component(match.group(1)), int(match.group(2)) - 1))
-                if not components and len(relative.parts) == 1:
-                    current_name = name_from_component(path.stem)
-                    node = self.add_person(current_name, 6, branch_label, (current_name,), str(path.relative_to(self.root)))
-                    if node:
-                        self.parent_edges.append((ancestor, node, str(path.relative_to(self.root))))
-                        self.node_by_file[path.resolve()] = node
-                    continue
-                previous: str | None = None
-                lineage: list[str] = []
-                for index, (component_name, generation) in enumerate(components):
-                    lineage.append(component_name)
-                    node = self.add_person(component_name, generation, branch_label, tuple(lineage), str(path.relative_to(self.root)))
-                    if node is None:
-                        previous = None
-                        continue
-                    if index == 0:
-                        self.parent_edges.append((ancestor, node, str(path.relative_to(self.root))))
-                    elif previous:
-                        self.parent_edges.append((previous, node, str(path.relative_to(self.root))))
-                    previous = node
-                if previous:
-                    self.node_by_file[path.resolve()] = previous
+    # -- pass 1: folder skeleton
+    def walk_folders(self):
+        for dirpath in sorted(p for p in self.gen5.rglob("*") if p.is_dir()):
+            d = dirpath.name
+            rel = dirpath.relative_to(self.gen5).as_posix()
+            m = re.match(r"(.+)_G(\d+)$", d)
+            m6 = re.match(r"A_Generation_6_(.+)$", d)
+            if m:
+                pid = "f:" + rel
+                self.folder_person[rel] = pid
+                p = self.get(pid)
+                kind, disp, _ = classify_name(" ".join(m.group(1).split("_")))
+                p.kind = kind if kind != "empty" else "placeholder"
+                if disp:
+                    p.add_name(disp)
+                p.gen = int(m.group(2)) - 1
+                p.sources.append("folder:" + rel)
+            elif m6:
+                pid = "g5:" + m6.group(1)
+                self.folder_person[rel] = pid
+                p = self.get(pid)
+                p.add_name(m6.group(1) + " Darabi")
+                p.gen = 5
+                p.sources.append("folder:" + rel)
+        for rel, pid in self.folder_person.items():
+            par = rel.rsplit("/", 1)[0] if "/" in rel else ""
+            if par and par in self.folder_person:
+                ppid = self.folder_person[par]
+                self.parent_edges.add((ppid, pid, "folder"))
+                self.folder_children[ppid].append(pid)
 
-    def resolve_href(self, source: Path, href: str) -> str | None:
-        if not href or href.startswith("#") or "://" in href:
-            return None
-        target = (source.parent / unquote(href.split("#", 1)[0])).resolve()
-        if target in self.node_by_file:
-            return self.node_by_file[target]
-        # A few links were copied with a broken directory prefix. A unique file
-        # basename remains useful evidence, but an ambiguous basename is not.
-        basename = target.name.lower()
-        candidates = [node for file_path, node in self.node_by_file.items() if file_path.name.lower() == basename]
-        if len(set(candidates)) == 1:
-            return candidates[0]
-        return None
-
-    def branch_for_file(self, path: Path) -> str:
-        for part in path.parts:
-            if part in BRANCHES:
-                return part.replace("A_Generation_6_", "")
-        return "archive"
-
-    def longest_common_lineage(self, left: tuple[str, ...], right: tuple[str, ...]) -> int:
-        count = 0
-        for left_part, right_part in zip(left, right):
-            if identity(left_part) != identity(right_part):
-                break
-            count += 1
-        return count
-
-    def resolve_named_person(self, path: Path, name: str, generation: int | None, links: list[str]) -> str | None:
-        for href in links:
-            target = self.resolve_href(path, href)
-            if target and any(probable_name_match(alias, name) for alias in self.people[target].aliases):
-                return target
-        all_candidates = [
-            person
-            for person in self.people.values()
-            if person.structural
-            and any(probable_name_match(alias, name) for alias in person.aliases)
-        ]
-        candidates = [person for person in all_candidates if generation is None or person.generation == generation]
-        if not candidates and generation is not None:
-            branch = self.branch_for_file(path)
-            cross_generation = [person for person in all_candidates if person.branch == branch]
-            if len(cross_generation) == 1 and abs(cross_generation[0].generation - generation) <= 2:
-                return cross_generation[0].raw_id
-        if not candidates:
-            return None
-        branch = self.branch_for_file(path)
-        current = self.node_by_file.get(path.resolve())
-        current_lineage = self.people[current].lineage if current else ()
-        same_branch = [person for person in candidates if person.branch == branch]
-        pool = same_branch or candidates
-        pool.sort(
-            key=lambda person: (
-                self.longest_common_lineage(person.lineage, current_lineage),
-                -(abs(person.generation - self.people[current].generation) if current else 0),
-            ),
-            reverse=True,
-        )
-        if len(pool) > 1:
-            first_score = self.longest_common_lineage(pool[0].lineage, current_lineage)
-            second_score = self.longest_common_lineage(pool[1].lineage, current_lineage)
-            if first_score == second_score and pool[0].lineage != pool[1].lineage:
-                self.ambiguous.append(f"Ambiguous identity: {name} (generation {generation}) in {path.relative_to(self.root)}")
-        return pool[0].raw_id
-
-    def make_partner(self, principal: str, name: str, generation: int, source: str) -> str | None:
-        if is_placeholder(name):
-            return None
-        principal_person = self.people[principal]
-        key_name = f"partner {identity(name)} of {principal_person.raw_id}"
-        node = self.add_person(name, generation, f"partner:{principal_person.branch}", (key_name,), source, structural=False)
-        return node
-
-    def spouse_from_shared_children(
-        self,
-        path: Path,
-        parser: TableParser,
-        current_row: int,
-        principal: str,
-        spouse_name: str,
-    ) -> str | None:
-        """Prefer a same-name candidate already recorded as a child's parent.
-
-        This resolves broken links in cross-generation marriages. In the
-        Nikoo/Mehdi branch, for example, the spouse link points to Karim's page,
-        while the nested folder correctly records Mehdi as Keon's parent.
-        """
-        branch = self.branch_for_file(path)
-        candidates = [
-            person.raw_id
-            for person in self.people.values()
-            if person.structural
-            and probable_name_match(person.name, spouse_name)
-            and person.raw_id != principal
-        ]
-        same_branch = [candidate for candidate in candidates if self.people[candidate].branch == branch]
-        candidates = same_branch or candidates
-        if len(candidates) < 2:
-            return candidates[0] if candidates else None
-
-        possible_children: set[str] = set()
-        for row in parser.rows[current_row + 1 :]:
-            if not row:
+    # -- pass 2: Generation_5.html (generations 1-5)
+    def read_root_file(self):
+        rows = parse_table(self.gen5 / "Generation_5.html")
+        chain_names = []
+        for row in rows:
+            cells = [(c, t) for c, t in row if t]
+            if not cells:
                 continue
-            generation_match = re.search(r"\bGeneration\s+(\d+)", row[0].text, flags=re.I)
-            if not generation_match:
+            if cells[0][0] == "xlnameG1":
+                chain_names.append((cells[0][1], cells[1][1] if len(cells) > 1 else ""))
+            if any(c == "xlname2" for c, _ in cells):
+                last = None
+                for c, t in cells:
+                    if c.startswith("xlnameG_"):
+                        key = c.split("_", 1)[1]
+                        pid = "g5:" + key
+                        p = self.get(pid)
+                        nm, b, d = split_dates(t)
+                        p.add_name(nm)
+                        p.birth = p.birth or b
+                        p.death = p.death or d
+                        p.gen = 5
+                        self.g5cols[key] = pid
+                        last = pid
+                        p.sources.append("Generation_5.html")
+                    elif c == "xlname2" and last:
+                        kind, disp, _ = classify_name(t)
+                        nm, b, d = split_dates(disp)
+                        if kind in ("real", "partial") and nm and norm(nm) != "x":
+                            spid = "sp:" + norm(nm) + ":" + last
+                            sp = self.get(spid)
+                            sp.add_name(nm)
+                            sp.kind = kind
+                            sp.birth = sp.birth or b
+                            sp.death = sp.death or d
+                            sp.gen = 5
+                            sp.sources.append("Generation_5.html")
+                            self.marriages[frozenset({self.find(last), self.find(spid)})].add("Generation_5.html")
+        prev = None
+        for i, (nm_t, sp_t) in enumerate(chain_names, start=1):
+            nm, b, d = split_dates(nm_t)
+            pid = "gen%d" % i
+            p = self.get(pid)
+            p.add_name(nm)
+            p.birth = b
+            p.death = d
+            p.gen = i
+            p.sources.append("Generation_5.html")
+            kind, disp, _ = classify_name(sp_t)
+            snm, sb, sd = split_dates(disp) if disp else ("", None, None)
+            if kind in ("real", "partial") and snm and norm(snm) != "x":
+                spid = "sp:" + norm(snm) + ":" + pid
+                sp = self.get(spid)
+                sp.add_name(snm)
+                sp.birth = sb
+                sp.death = sd
+                sp.gen = i
+                sp.sources.append("Generation_5.html")
+                self.marriages[frozenset({self.find(pid), self.find(spid)})].add("Generation_5.html")
+            if prev:
+                self.parent_edges.add((prev, pid, "Generation_5.html"))
+            prev = pid
+        for key, pid in self.g5cols.items():
+            self.parent_edges.add(("gen4", pid, "Generation_5.html"))
+        # generation-6 full names from the root file columns
+        seen_sp = False
+        for row in rows:
+            cells = [(c, t) for c, t in row if t]
+            if any(c == "xlname2" for c, _ in cells):
+                seen_sp = True
                 continue
-            generation = int(generation_match.group(1))
-            for cell in row[1:]:
-                css_class = cell.css_class.lower()
-                if "xlname" not in css_class or "xlname2" in css_class or "xlname3" in css_class or "xlwhite" in css_class:
-                    continue
-                _, child_name = remove_marker(cell.text)
-                if is_placeholder(child_name):
-                    continue
-                child = self.resolve_named_person(path, child_name, generation, cell.links)
-                if child:
-                    possible_children.add(child)
-
-        scores = {
-            candidate: sum(
-                1
-                for parent, child, _ in self.parent_edges
-                if parent == candidate and child in possible_children
-            )
-            for candidate in candidates
-        }
-        best_score = max(scores.values(), default=0)
-        best = [candidate for candidate, score in scores.items() if score == best_score and score > 0]
-        return best[0] if len(best) == 1 else None
-
-    def improve_current_person(self, path: Path, parser: TableParser, current: str) -> tuple[int | None, list[str]]:
-        person = self.people[current]
-        matching: list[tuple[int, int, list[Cell], Cell]] = []
-        for row_index, row in enumerate(parser.rows):
-            for cell_index, cell in enumerate(row):
-                if "xlwhite" not in cell.css_class.lower() and names_match(person.name, cell.text):
-                    matching.append((row_index, cell_index, row, cell))
-                for href in cell.links:
-                    target = self.resolve_href(path, href)
-                    if target:
-                        target_person = self.people[target]
-                        if any(probable_name_match(alias, cell.text) for alias in target_person.aliases):
-                            target_person.aliases.add(remove_years(cell.text))
-                            target_person.sources.add(str(path.relative_to(self.root)))
-                            found_years = years(cell.text)
-                            if found_years:
-                                target_person.birth_year = target_person.birth_year or found_years[0]
-                                if len(found_years) > 1:
-                                    target_person.death_year = target_person.death_year or found_years[1]
-        if not matching:
-            title_name = parser.title.split(":", 1)[-1].strip() if ":" in parser.title else ""
-            if title_name and names_match(person.name, title_name):
-                person.aliases.add(title_name)
-            return None, []
-        row_index, cell_index, row, cell = matching[-1]
-        display = remove_years(cell.text)
-        if display:
-            person.aliases.add(display)
-        found_years = years(cell.text)
-        if found_years:
-            person.birth_year = person.birth_year or found_years[0]
-            if len(found_years) > 1:
-                person.death_year = person.death_year or found_years[1]
-        spouse_ids: list[str] = []
-        for next_cell in row[cell_index + 1 :]:
-            css_class = next_cell.css_class.lower()
-            if "xlwhite" in css_class:
-                break
-            if "xlname2" not in css_class and "xlname3" not in css_class:
-                break
-            marker, spouse_name = remove_marker(next_cell.text)
-            if is_placeholder(spouse_name):
+            if not seen_sp:
                 continue
-            spouse = None
-            for href in next_cell.links:
-                candidate = self.resolve_href(path, href)
-                if candidate and any(probable_name_match(alias, spouse_name) for alias in self.people[candidate].aliases):
-                    spouse = candidate
-                    break
-            if spouse is None:
-                spouse = self.spouse_from_shared_children(path, parser, row_index, current, spouse_name)
-            if spouse is None:
-                spouse = self.resolve_named_person(path, spouse_name, None, next_cell.links)
-            if spouse is None:
-                spouse = self.make_partner(current, spouse_name, person.generation, str(path.relative_to(self.root)))
-            if spouse:
-                self.people[spouse].aliases.add(spouse_name)
-                self.spouse_edges.append((current, spouse, str(path.relative_to(self.root))))
-                spouse_ids.append(spouse)
-        return row_index, spouse_ids
-
-    def parse_generation_pairs(self, path: Path, parser: TableParser) -> None:
-        for row_index, row in enumerate(parser.rows):
-            if not row:
-                continue
-            generation_match = re.search(r"\bGeneration\s+(\d+)", row[0].text, flags=re.I)
-            if not generation_match:
-                continue
-            generation = int(generation_match.group(1))
-            index = 1
-            while index < len(row):
-                cell = row[index]
-                css_class = cell.css_class.lower()
-                if "xlname" not in css_class or "xlwhite" in css_class or "xlname2" in css_class or "xlname3" in css_class:
-                    index += 1
+            for c, t in cells:
+                if not c.startswith("xlnameG_"):
                     continue
-                marker, principal_name = remove_marker(cell.text)
-                if is_placeholder(principal_name):
-                    index += 1
+                key = c.split("_", 1)[1].rstrip("2")
+                if key not in self.g5cols:
                     continue
-                principal = self.resolve_named_person(path, principal_name, generation, cell.links)
-                if principal is None:
-                    branch = self.branch_for_file(path)
-                    principal = self.add_person(principal_name, generation, branch, (f"row:{identity(principal_name)}",), str(path.relative_to(self.root)), structural=False)
-                if principal:
-                    self.people[principal].aliases.add(principal_name)
-                    self.people[principal].generation = max(self.people[principal].generation, generation)
-                    found_years = years(cell.text)
-                    if found_years:
-                        self.people[principal].birth_year = self.people[principal].birth_year or found_years[0]
-                        if len(found_years) > 1:
-                            self.people[principal].death_year = self.people[principal].death_year or found_years[1]
-                index += 1
-                while principal and index < len(row):
-                    spouse_cell = row[index]
-                    spouse_class = spouse_cell.css_class.lower()
-                    if "xlname2" not in spouse_class and "xlname3" not in spouse_class:
+                kind, disp, _ = classify_name(t)
+                if kind not in ("real", "partial"):
+                    continue
+                nm, b, d = split_dates(disp)
+                if not nm or nm.lower() == "no children":
+                    continue
+                tgt = None
+                for k in self.folder_children.get(self.g5cols[key], []):
+                    if names_match(self.get(k).best_name(), nm):
+                        tgt = k
                         break
-                    _, spouse_name = remove_marker(spouse_cell.text)
-                    if not is_placeholder(spouse_name):
-                        spouse = self.spouse_from_shared_children(path, parser, row_index, principal, spouse_name)
-                        if spouse is None:
-                            spouse = self.resolve_named_person(path, spouse_name, None, spouse_cell.links)
-                        if spouse is None:
-                            spouse = self.make_partner(principal, spouse_name, generation, str(path.relative_to(self.root)))
-                        if spouse:
-                            self.people[spouse].aliases.add(spouse_name)
-                            self.spouse_edges.append((principal, spouse, str(path.relative_to(self.root))))
-                    index += 1
+                if tgt:
+                    gp = self.get(tgt)
+                    gp.add_name(nm)
+                    gp.birth = gp.birth or b
+                    gp.death = gp.death or d
+                else:
+                    self.warnings.append("G6 list name not matched to a folder: %s (under %s)" % (nm, key))
 
-    def add_marked_child_parents(self, path: Path, parser: TableParser, current: str, current_row: int | None, spouses: list[str]) -> None:
-        if current_row is None:
+    # -- pass 3: family html files
+    def read_family_files(self):
+        files = []
+        for p in sorted(self.gen5.rglob("*.html")):
+            if p.name.startswith("xxx") or p.name.startswith("Generation_5"):
+                continue
+            files.append(p)
+        for path in files:
+            self.read_family_file(path)
+
+    def read_family_file(self, path: Path):
+        find, get = self.find, self.get
+        relsrc = path.relative_to(self.root).as_posix()
+        reldir = path.parent.relative_to(self.gen5).as_posix()
+        base = path.stem
+        chain = {}
+        acc = ""
+        parts = [] if reldir == "." else reldir.split("/")
+        for part in parts:
+            acc = acc + "/" + part if acc else part
+            if acc in self.folder_person:
+                pid = self.folder_person[acc]
+                g = get(pid).gen
+                if g is not None:
+                    chain[g] = pid
+        # the focal person's folder can sit BESIDE the html (parent/X.html + parent/X_Gn/)
+        for sub, pid in self.folder_person.items():
+            m = re.match(r"(.+)_G\d+$", sub.rsplit("/", 1)[-1])
+            subdir = sub.rsplit("/", 1)[0] if "/" in sub else ""
+            if m and m.group(1) == base and subdir == ("" if reldir == "." else reldir):
+                g = get(pid).gen
+                if g is not None:
+                    chain[g] = pid
+                break
+        rows = parse_table(path)
+        # harvest generation-6 dates from the header lists (class xlnameG_<X>2)
+        for row in rows:
+            for c, t in row:
+                m2 = re.match(r"xlnameG_(.+?)2$", c or "")
+                if not m2 or not t:
+                    continue
+                key = m2.group(1)
+                if key not in self.g5cols:
+                    continue
+                kind, disp, _ = classify_name(t)
+                if kind not in ("real", "partial"):
+                    continue
+                nm, hb, hd = split_dates(disp)
+                if not nm or nm.lower() == "no children" or not (hb or hd):
+                    continue
+                for k in self.folder_children.get(find(self.g5cols[key]), []):
+                    if names_match(get(k).best_name(), nm):
+                        kp = get(k)
+                        kp.add_name(nm)
+                        kp.birth = kp.birth or hb
+                        kp.death = kp.death or hd
+                        break
+        # collect rows: labeled rows carry family sections; unlabeled xlnameG6
+        # rows are grandchildren columns (names and (k) markers harvested)
+        lrows = []
+        for row in rows:
+            cells = [(c, t) for c, t in row if t]
+            if not cells:
+                continue
+            lab = None
+            for c, t in cells:
+                if c == "xlwhite" and re.search(r"Generation\s*\d+", t):
+                    lab = min(int(x) for x in re.findall(r"Generation\s*(\d+)", t))
+            lrows.append((lab, cells))
+        if not any(g for g, _ in lrows):
             return
-        person = self.people[current]
-        for row in parser.rows[current_row + 1 :]:
-            if not row:
+        self.parsed_files += 1
+        last_ctx = []
+        for g, cells in lrows:
+            if g is None:
+                for c, t in cells:
+                    if not c.startswith("xlname") or c.startswith("xlname2"):
+                        continue
+                    mk = MARKER_RE.match(t)
+                    kind, disp, _ = classify_name(t)
+                    nm, hb, hd = split_dates(disp)
+                    if kind not in ("real", "partial") or not nm:
+                        continue
+                    done = False
+                    for ctx in last_ctx:
+                        for k in self.folder_children.get(find(ctx), []):
+                            if names_match(get(k).best_name(), nm):
+                                kp = get(k)
+                                kp.add_name(nm)
+                                kp.birth = kp.birth or hb
+                                kp.death = kp.death or hd
+                                if mk:
+                                    kp.markers.setdefault(find(ctx), set()).add(int(mk.group(1)))
+                                done = True
+                                break
+                        if done:
+                            break
                 continue
-            generation_match = re.search(r"\bGeneration\s+(\d+)", row[0].text, flags=re.I)
-            if not generation_match or int(generation_match.group(1)) != person.generation + 1:
+            pairs = []
+            for c, t in cells:
+                if c == "xlwhite":
+                    continue
+                kind, disp, codes = classify_name(t)
+                nm, b, d = split_dates(disp)
+                mk = MARKER_RE.match(t)
+                mkn = int(mk.group(1)) if mk else None
+                if c.startswith("xlname2"):
+                    if pairs and kind in ("real", "partial") and nm:
+                        pairs[-1][1].append((nm, b, d, kind, mkn))
+                elif c.startswith("xlname"):
+                    if kind == "empty" or not nm or nm.lower() == "no children":
+                        continue
+                    pairs.append([(nm, b, d, kind, mkn), []])
+            parent = chain.get(g - 1)
+            onpath = chain.get(g)
+            last_ctx = []
+            for (nm, b, d, kind, mkn), sps in pairs:
+                tgt = None
+                if onpath and names_match(get(onpath).best_name(), nm):
+                    tgt = onpath
+                if tgt is None and parent:
+                    for k in self.folder_children.get(find(parent), []):
+                        if names_match(get(k).best_name(), nm):
+                            tgt = k
+                            break
+                # couple row where the name cell is the other-branch spouse
+                if tgt is None and onpath and any(names_match(get(onpath).best_name(), s[0]) for s in sps):
+                    spid = "sp:" + norm(nm) + ":" + find(onpath)
+                    sp = get(spid)
+                    sp.add_name(nm)
+                    sp.kind = kind
+                    sp.birth = sp.birth or b
+                    sp.death = sp.death or d
+                    sp.sources.append(relsrc)
+                    self.marriages[frozenset({find(onpath), find(spid)})].add(relsrc)
+                    continue
+                if tgt is None:
+                    if parent:
+                        tgt = "c:" + norm(nm) + ":" + find(parent)
+                        if find(tgt) not in self.people:
+                            self.htmlonly_children.append((nm, get(find(parent)).best_name(), relsrc))
+                        cp = get(tgt)
+                        cp.add_name(nm)
+                        cp.kind = kind
+                        cp.gen = g
+                        self.parent_edges.add((find(parent), find(tgt), relsrc))
+                    else:
+                        self.warnings.append("row g=%d: no parent in chain for %r (%s)" % (g, nm, relsrc))
+                        continue
+                tp = get(tgt)
+                last_ctx.append(find(tgt))
+                tp.add_name(nm)
+                tp.birth = tp.birth or b
+                tp.death = tp.death or d
+                tp.sources.append(relsrc)
+                if mkn is not None and parent:
+                    tp.markers.setdefault(find(parent), set()).add(mkn)
+                for snm, sb, sd, skind, smkn in sps:
+                    spid = "sp:" + norm(snm) + ":" + find(tgt)
+                    sp = get(spid)
+                    sp.add_name(snm)
+                    sp.kind = skind
+                    sp.birth = sp.birth or sb
+                    sp.death = sp.death or sd
+                    sp.sources.append(relsrc)
+                    if smkn is not None:
+                        sp.markers.setdefault(find(tgt), set()).add(smkn)
+                    self.marriages[frozenset({find(tgt), find(spid)})].add(relsrc)
+
+    # -- pass 4: identity merging to a fixpoint
+    def rebuild_spmap(self):
+        m = defaultdict(set)
+        for pair in self.marriages:
+            xs = [self.find(x) for x in pair]
+            if len(set(xs)) < 2:
                 continue
-            for cell in row[1:]:
-                css_class = cell.css_class.lower()
-                if "xlname" not in css_class or "xlname2" in css_class or "xlname3" in css_class or "xlwhite" in css_class:
-                    continue
-                marker, child_name = remove_marker(cell.text)
-                if is_placeholder(child_name):
-                    continue
-                child = self.resolve_named_person(path, child_name, person.generation + 1, cell.links)
-                if child is None:
-                    continue
-                self.parent_edges.append((current, child, str(path.relative_to(self.root))))
-                if marker and 0 < marker <= len(spouses):
-                    self.parent_edges.append((spouses[marker - 1], child, str(path.relative_to(self.root))))
-                elif len(spouses) == 1:
-                    self.parent_edges.append((spouses[0], child, str(path.relative_to(self.root))))
+            a, b = xs
+            m[a].add(b)
+            m[b].add(a)
+        return m
 
-    def extract_relationships(self) -> None:
-        for path, current in sorted(self.node_by_file.items(), key=lambda item: str(item[0])):
-            parser = self.parse_html(path)
-            current_row, spouses = self.improve_current_person(path, parser, current)
-            self.parse_generation_pairs(path, parser)
-            self.add_marked_child_parents(path, parser, current, current_row, spouses)
+    def children_of(self, pid):
+        return {self.find(c) for (p, c, s) in self.parent_edges if self.find(p) == self.find(pid)}
 
-    def merge_people(self) -> DSU:
-        dsu = DSU(self.people)
-        parents_by_child: dict[str, set[str]] = defaultdict(set)
-        spouses_by_person: dict[str, set[str]] = defaultdict(set)
-        for parent, child, _ in self.parent_edges:
-            parents_by_child[child].add(parent)
-        for left, right, _ in self.spouse_edges:
-            spouses_by_person[left].add(right)
-            spouses_by_person[right].add(left)
+    def child_names(self, pid):
+        return {norm(self.get(c).best_name()) for c in self.children_of(pid) if self.get(c).kind in ("real", "partial")}
 
-        # A table row can spell a structural person's name differently from
-        # their folder (for example Gholam Reza/Gholamreza). Join a row-only
-        # record to a unique structural record before copied branches are
-        # compared, so spouse and parent evidence meet on the same identity.
-        for raw_id, person in self.people.items():
-            if person.structural:
+    def cousin_spouse_pass(self, log_ambiguous):
+        find, get = self.find, self.get
+        tree_by_norm = defaultdict(list)
+        for pid in {find(p) for p in self.people}:
+            if pid.startswith(("f:", "g5:", "gen", "c:")):
+                tree_by_norm[norm(get(pid).best_name())].append(pid)
+        spmap = self.rebuild_spmap()
+        any_change = False
+        for pid in [p for p in list(self.people) if p.startswith("sp:")]:
+            if find(pid) != pid:
                 continue
-            candidates = [
-                candidate_id
-                for candidate_id, candidate in self.people.items()
-                if candidate.structural
-                and abs(candidate.generation - person.generation) <= 2
-                and probable_name_match(candidate.name, person.name)
-            ]
-            same_branch = [
-                candidate
-                for candidate in candidates
-                if self.people[candidate].branch == person.branch
-                or person.branch == f"partner:{self.people[candidate].branch}"
-            ]
-            pool = same_branch or candidates
-            if pool:
-                nearest_distance = min(abs(self.people[candidate].generation - person.generation) for candidate in pool)
-                nearest = [candidate for candidate in pool if abs(self.people[candidate].generation - person.generation) == nearest_distance]
-                if len(nearest) == 1:
-                    dsu.union(nearest[0], raw_id)
+            p = self.people[pid]
+            owner = None
+            for pair in self.marriages:
+                if pid in pair:
+                    others = [x for x in pair if x != pid and find(x) != find(pid)]
+                    if others:
+                        owner = others[0]
+                        break
+            if owner is None:
+                continue
+            cands = []
+            for c in tree_by_norm.get(norm(p.best_name()), []):
+                if find(c) == find(owner):
+                    continue
+                recip = any(
+                    names_match(get(s).best_name(), get(find(owner)).best_name())
+                    for s in spmap.get(find(c), [])
+                    if find(s) != find(pid)
+                )
+                shared = self.child_names(owner) & self.child_names(c)
+                if recip or shared:
+                    cands.append(c)
+            cands = list({find(c) for c in cands})
+            if len(cands) == 1:
+                self.merged_pairs.add(frozenset({get(cands[0]).best_name(), get(find(owner)).best_name()}))
+                self.union(cands[0], pid)
+                any_change = True
+            elif len(cands) > 1 and log_ambiguous:
+                self.warnings.append(
+                    "ambiguous cousin-spouse match: %s married to %s" % (p.best_name(), get(find(owner)).best_name())
+                )
+        return any_change
 
-        # Duplicate branches copied beneath both members of a marriage collapse
-        # only when name, generation, and the expanded parent union all agree.
+    def subtree_merge_pass(self):
+        find, get = self.find, self.get
+        total = False
         changed = True
         while changed:
             changed = False
-            canonical_spouses: dict[str, set[str]] = defaultdict(set)
-            for left, right, _ in self.spouse_edges:
-                left_root = dsu.find(left)
-                right_root = dsu.find(right)
-                canonical_spouses[left_root].add(right_root)
-                canonical_spouses[right_root].add(left_root)
-            groups: dict[tuple[str, tuple[str, ...]], list[str]] = defaultdict(list)
-            for raw_id, person in self.people.items():
-                if not person.structural:
-                    continue
-                expanded_parents: set[str] = set()
-                for parent in parents_by_child.get(raw_id, set()):
-                    parent_root = dsu.find(parent)
-                    expanded_parents.add(parent_root)
-                    expanded_parents.update(canonical_spouses.get(parent_root, set()))
-                if not expanded_parents:
-                    continue
-                signature = (identity(person.name), tuple(sorted(expanded_parents)))
-                groups[signature].append(raw_id)
-            for members in groups.values():
-                for member in members[1:]:
-                    changed = dsu.union(members[0], member) or changed
+            spmap = self.rebuild_spmap()
+            for a in list(spmap):
+                for b in spmap[a]:
+                    if find(a) == find(b):
+                        continue
+                    ca = {}
+                    for c in self.children_of(a):
+                        if get(c).kind in ("real", "partial"):
+                            ca[norm(get(c).best_name())] = c
+                    for c in self.children_of(b):
+                        if get(c).kind not in ("real", "partial"):
+                            continue
+                        k = norm(get(c).best_name())
+                        if k in ca and find(ca[k]) != find(c):
+                            self.union(ca[k], c)
+                            changed = total = True
+        return total
 
-        # Partner-only nodes repeated in copied pages are the same person when
-        # their name and canonical spouse are the same.
-        partner_groups: dict[tuple[int, str, tuple[str, ...]], list[str]] = defaultdict(list)
-        for raw_id, person in self.people.items():
-            if person.structural:
-                continue
-            canonical_spouses = tuple(
-                sorted(identity(self.people[spouse].name) for spouse in spouses_by_person.get(raw_id, set()))
-            )
-            partner_groups[(person.generation, identity(person.name), canonical_spouses)].append(raw_id)
-        for members in partner_groups.values():
-            for member in members[1:]:
-                dsu.union(members[0], member)
-        return dsu
-
-    def choose_name(self, aliases: set[str]) -> str:
-        candidates = [remove_years(remove_marker(alias)[1]) for alias in aliases if not is_placeholder(alias)]
-        if not candidates:
-            return "Unknown"
-        def score(value: str) -> tuple[int, int, int]:
-            code_penalty = int(bool(re.search(r"\bx[a-z0-9_]*\b", value, flags=re.I)))
-            return (-code_penalty, len(value.split()), len(value))
-        return max(candidates, key=score)
-
-    def canonical_data(self, dsu: DSU) -> dict:
-        groups: dict[str, list[Person]] = defaultdict(list)
-        for raw_id, person in self.people.items():
-            groups[dsu.find(raw_id)].append(person)
-        ordered_groups = sorted(groups.values(), key=lambda group: (min(item.generation for item in group), self.choose_name(set().union(*(item.aliases for item in group)))))
-        canonical_id: dict[str, str] = {}
-        people: list[dict] = []
-        for index, group in enumerate(ordered_groups, 1):
-            person_id = f"p{index}"
-            aliases = set().union(*(item.aliases for item in group))
-            sources = set().union(*(item.sources for item in group))
-            name = self.choose_name(aliases)
-            birth_candidates = sorted({item.birth_year for item in group if item.birth_year})
-            death_candidates = sorted({item.death_year for item in group if item.death_year})
-            people.append({
-                "id": person_id,
-                "name": name,
-                "generation": max(item.generation for item in group),
-                "birthYear": birth_candidates[0] if birth_candidates else None,
-                "deathYear": death_candidates[0] if death_candidates else None,
-                "aliases": sorted(alias for alias in aliases if normal(alias) != normal(name)),
-                "branches": sorted({item.branch for item in group if not item.branch.startswith("partner:")}),
-                "sources": sorted(sources),
-                "confidence": "high" if any(item.structural for item in group) else "medium",
-            })
-            for item in group:
-                canonical_id[item.raw_id] = person_id
-
-        relationship_keys: set[tuple[str, str, str]] = set()
-        relationships: list[dict] = []
-        for parent, child, source in self.parent_edges:
-            parent_id = canonical_id[parent]
-            child_id = canonical_id[child]
-            if parent_id == child_id:
-                continue
-            key = ("parent", parent_id, child_id)
-            if key in relationship_keys:
-                continue
-            relationship_keys.add(key)
-            relationships.append({"type": "parent", "from": parent_id, "to": child_id, "source": source})
-        for left, right, source in self.spouse_edges:
-            left_id = canonical_id[left]
-            right_id = canonical_id[right]
-            if left_id == right_id:
-                continue
-            left_id, right_id = sorted((left_id, right_id))
-            key = ("spouse", left_id, right_id)
-            if key in relationship_keys:
-                continue
-            relationship_keys.add(key)
-            relationships.append({"type": "spouse", "from": left_id, "to": right_id, "source": source})
-
-        # When a child has only one recorded parent and that parent has one
-        # unambiguous spouse, the copied table is asserting a two-parent union.
-        parent_map: dict[str, set[str]] = defaultdict(set)
-        spouse_map: dict[str, set[str]] = defaultdict(set)
-        people_by_id = {person["id"]: person for person in people}
-        for relation in relationships:
-            if relation["type"] == "parent":
-                parent_map[relation["to"]].add(relation["from"])
-            else:
-                spouse_map[relation["from"]].add(relation["to"])
-                spouse_map[relation["to"]].add(relation["from"])
-        inferred: list[dict] = []
-        for child, recorded_parents in list(parent_map.items()):
-            if len(recorded_parents) != 1:
-                continue
-            parent = next(iter(recorded_parents))
-            spouses = spouse_map.get(parent, set())
-            if len(spouses) != 1:
-                continue
-            other_parent = next(iter(spouses))
-            if people_by_id[other_parent]["generation"] >= people_by_id[child]["generation"]:
-                continue
-            key = ("parent", other_parent, child)
-            if key in relationship_keys:
-                continue
-            relationship_keys.add(key)
-            inferred.append({"type": "parent", "from": other_parent, "to": child, "source": "inferred from sole recorded spouse", "inferred": True})
-        relationships.extend(inferred)
-
-        # Generation numbers in the old archive are branch-relative. A child
-        # of cousins from adjacent branch generations can therefore be labeled
-        # both 8 and 9. Preserve the highest recorded label, then raise any
-        # child necessary to maintain a valid parent-before-child layout.
-        for _ in range(len(people)):
+    def dup_spouse_pass(self):
+        find, get = self.find, self.get
+        total = False
+        changed = True
+        while changed:
             changed = False
-            for relation in relationships:
-                if relation["type"] != "parent":
-                    continue
-                parent = people_by_id[relation["from"]]
-                child = people_by_id[relation["to"]]
-                required = parent["generation"] + 1
-                if child["generation"] < required:
-                    child["generation"] = required
-                    changed = True
-            if not changed:
+            spmap = self.rebuild_spmap()
+            for a in list(spmap):
+                sps = list({find(s) for s in spmap[a] if find(s) != find(a)})
+                for i in range(len(sps)):
+                    for j in range(i + 1, len(sps)):
+                        x, y = find(sps[i]), find(sps[j])
+                        if x != y and names_match(get(x).best_name(), get(y).best_name()):
+                            self.union(x, y)
+                            changed = total = True
+        return total
+
+    def sibling_dedup_pass(self):
+        find, get = self.find, self.get
+        total = False
+        changed = True
+        while changed:
+            changed = False
+            for par in {find(p) for (p, c, s) in self.parent_edges}:
+                kids = [c for c in self.children_of(par) if get(c).kind in ("real", "partial")]
+                for i in range(len(kids)):
+                    for j in range(i + 1, len(kids)):
+                        x, y = find(kids[i]), find(kids[j])
+                        if x != y and names_match(get(x).best_name(), get(y).best_name()):
+                            self.union(x, y)
+                            changed = total = True
+        return total
+
+    def merge_identities(self):
+        for _ in range(10):
+            c1 = self.cousin_spouse_pass(log_ambiguous=False)
+            c2 = self.subtree_merge_pass()
+            c3 = self.dup_spouse_pass()
+            c4 = self.sibling_dedup_pass()
+            if not (c1 or c2 or c3 or c4):
                 break
-        else:
-            raise RuntimeError("Parent graph contains a generation cycle")
+        self.cousin_spouse_pass(log_ambiguous=True)
 
-        complex_marriages = self.detect_related_spouses(people_by_id, relationships)
-        return {
-            "people": people,
-            "relationships": relationships,
-            "complexMarriages": complex_marriages,
-            "meta": {
-                "sourceArchive": "Darabi_Family_Tree_RD.zip",
-                "sourceFiles": len([path for path in self.root.rglob("*") if path.is_file()]),
-                "htmlPages": len(self.node_by_file),
-                "placeholderEntriesSkipped": self.placeholder_count,
-                "ambiguousIdentityWarnings": sorted(set(self.ambiguous)),
-            },
-        }
+    # -- pass 5: inferred second parents
+    def markers_wrt(self, pid, anchor):
+        out = set()
+        for k, v in self.get(pid).markers.items():
+            if self.find(k) == self.find(anchor):
+                out |= v
+        return out
 
-    def detect_related_spouses(self, people: dict[str, dict], relationships: list[dict]) -> list[dict]:
-        parents: dict[str, set[str]] = defaultdict(set)
-        marriages: set[tuple[str, str]] = set()
-        for relation in relationships:
-            if relation["type"] == "parent":
-                parents[relation["to"]].add(relation["from"])
-            elif relation["type"] == "spouse":
-                marriages.add(tuple(sorted((relation["from"], relation["to"]))))
-
-        def ancestors(person: str) -> dict[str, int]:
-            result: dict[str, int] = {}
-            queue = deque((parent, 1) for parent in parents.get(person, set()))
-            while queue:
-                ancestor, distance = queue.popleft()
-                if ancestor in result and result[ancestor] <= distance:
-                    continue
-                result[ancestor] = distance
-                queue.extend((parent, distance + 1) for parent in parents.get(ancestor, set()))
-            return result
-
-        related: list[dict] = []
-        for left, right in sorted(marriages):
-            left_ancestors = ancestors(left)
-            right_ancestors = ancestors(right)
-            common = set(left_ancestors) & set(right_ancestors)
-            if not common:
+    def infer_second_parents(self):
+        find = self.find
+        spmap = self.rebuild_spmap()
+        for ch in {find(c) for (p, c, s) in self.parent_edges}:
+            pars = {find(p) for (p, c, s) in self.parent_edges if find(c) == ch}
+            if len(pars) != 1:
                 continue
-            nearest = min(common, key=lambda ancestor: (max(left_ancestors[ancestor], right_ancestors[ancestor]), left_ancestors[ancestor] + right_ancestors[ancestor]))
-            left_distance = left_ancestors[nearest]
-            right_distance = right_ancestors[nearest]
-            if left_distance == right_distance:
-                degree = left_distance - 1
-                if degree == 0:
-                    relation_label = "siblings"
-                elif degree == 1:
-                    relation_label = "first cousins"
-                elif degree == 2:
-                    relation_label = "second cousins"
-                elif degree == 3:
-                    relation_label = "third cousins"
-                else:
-                    relation_label = f"{degree}th cousins"
+            par = list(pars)[0]
+            sps = [s for s in spmap.get(par, []) if find(s) != par]
+            mks = self.markers_wrt(ch, par)
+            if mks:
+                tgtsps = [s for s in sps if self.markers_wrt(s, par) & mks]
+                if len(tgtsps) == 1:
+                    self.parent_edges.add((tgtsps[0], ch, "marker"))
+                    self.inferred.add((tgtsps[0], ch))
+                continue
+            if len(set(sps)) == 1:
+                self.parent_edges.add((sps[0], ch, "single-spouse"))
+                self.inferred.add((sps[0], ch))
+
+    # -- finalize
+    def finalize(self):
+        find, get = self.find, self.get
+        roots = {find(p) for p in self.people}
+        real_ids = {r for r in roots if get(r).kind in ("real", "partial")}
+        # drop information-free stubs ('Xxx Darabiha' children): partial name,
+        # no code, at most one real token, no dates, no children, no spouse
+        spmap = self.rebuild_spmap()
+        stubs = set()
+        for r in list(real_ids):
+            p = get(r)
+            if p.kind != "partial":
+                continue
+            toks = real_tokens(p.best_name())
+            if p.birth or p.death or self.children_of(r):
+                continue
+            if any(find(s) in real_ids and find(s) != r for s in spmap.get(r, [])):
+                continue
+            par_toks = set()
+            for (a, b, s) in self.parent_edges:
+                if find(b) == r:
+                    par_toks |= real_tokens(get(find(a)).best_name())
+            codes = [t for t in p.best_name().split() if CODE_TOKEN.match(t)]
+            if not codes and (not toks or toks <= par_toks or len(toks) <= 1):
+                stubs.add(r)
+        real_ids -= stubs
+        edges = {(find(a), find(b)) for (a, b, s) in self.parent_edges if find(a) in real_ids and find(b) in real_ids and find(a) != find(b)}
+        marrs = set()
+        for pair in self.marriages:
+            xs = {find(x) for x in pair}
+            if len(xs) == 2 and xs <= real_ids:
+                marrs.add(frozenset(xs))
+        changed = True
+        while changed:
+            changed = False
+            for (a, b) in edges:
+                ga, gb = get(a).gen, get(b).gen
+                if ga is not None and gb is not None and gb <= ga:
+                    get(b).gen = ga + 1
+                    changed = True
+        inferred = {(find(a), find(b)) for (a, b) in self.inferred if find(a) in real_ids and find(b) in real_ids}
+        return real_ids, edges, marrs, inferred
+
+    def run(self):
+        self.walk_folders()
+        self.read_root_file()
+        self.read_family_files()
+        self.merge_identities()
+        self.infer_second_parents()
+        return self.finalize()
+
+
+# ---------------------------------------------------------- archive material
+
+DOC_DIRS = ("Mohmmad_Darabi_HISTORIES", "Divers_docs")
+ROOT_HTML_DOCS = ("A_Introduction.html", "B_Family_Biography_English.html", "B_Family_Biography.html")
+PHOTO_PEOPLE = {
+    "G5 Abbas Darabi": ("Abbas Darabi", 5),
+    "G5 Hossein Darabi": ("Hossein Darabi", 5),
+    "Kazem Darabiha Family": ("Kazem Darabiha", None),
+    "Nasser Darabiha Family": ("Nasser Darabiha", None),
+    "Niloufar Forouzan": ("Niloufar Hashemzad Forouzan", None),
+}
+
+
+def extract_documents(root: Path):
+    docs = []
+    for name in ROOT_HTML_DOCS:
+        path = root / name
+        if not path.exists():
+            continue
+        t = TextExtract()
+        t.feed(path.read_text(encoding="utf-8", errors="replace"))
+        docs.append({"title": path.stem.lstrip("AB_").replace("_", " ").strip() or path.stem, "source": name, "text": "\n".join(t.parts)})
+    for d in DOC_DIRS:
+        for path in sorted((root / d).iterdir()):
+            if path.suffix.lower() not in (".doc", ".docx", ".rtf"):
+                continue
+            text = ""
+            if shutil.which("textutil"):
+                res = subprocess.run(["textutil", "-convert", "txt", "-stdout", str(path)], capture_output=True, check=False)
+                if res.returncode == 0:
+                    text = res.stdout.decode("utf-8", errors="replace")
+            docs.append({"title": path.stem, "source": f"{d}/{path.name}", "text": " ".join(text.split())})
+    return docs
+
+
+def slug(value: str) -> str:
+    v = unicodedata.normalize("NFKD", value)
+    v = "".join(c for c in v if not unicodedata.combining(c))
+    v = re.sub(r"[^a-zA-Z0-9]+", "-", v).strip("-").lower()
+    return v or "photo"
+
+
+def extract_photos(root: Path, photos_dir: Path):
+    photos_dir.mkdir(parents=True, exist_ok=True)
+    entries = []
+    by_hash = {}
+    sources = []
+    for d in ("Divers_docs", "Images"):
+        for path in sorted((root / d).iterdir()):
+            if path.suffix.lower() in (".jpg", ".jpeg", ".png"):
+                sources.append((d, path))
+    for d, path in sources:
+        data = path.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        title = path.stem.replace("_", " ").strip()
+        if digest in by_hash:
+            fname = by_hash[digest]
+        else:
+            fname = slug(title) + path.suffix.lower().replace("jpeg", "jpg")
+            (photos_dir / fname).write_bytes(data)
+            by_hash[digest] = fname
+        entries.append(
+            {
+                "title": title,
+                "source": f"{d}/{path.name}",
+                "file": f"legacy-photos/{fname}",
+                "mimeType": "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png",
+                "size": len(data),
+                "sha256": digest,
+            }
+        )
+    return entries
+
+
+# -------------------------------------------------------------- html output
+
+
+def esc(s):
+    return html_mod.escape(str(s), quote=True)
+
+
+def render_page(model, documents, photos):
+    people = model["byId"]
+    parents_of, children_of = model["parentsOf"], model["childrenOf"]
+    spouses_of, orderk = model["spousesOf"], model["spouseOrder"]
+    cousin_pairs = model["cousinPairs"]
+    inferred = model["inferred"]
+
+    anchor = {pid: "n%d" % i for i, pid in enumerate(sorted(people))}
+
+    def bloodline(pid):
+        return not people[pid]["internal"].startswith("sp:")
+
+    def primary_parent(c):
+        ps = parents_of.get(c, [])
+        if not ps:
+            return None
+        blood = [p for p in ps if bloodline(p)]
+        pool = blood or ps
+        return sorted(pool, key=lambda p: (people[p]["generation"] or 99, people[p]["name"]))[0]
+
+    def fmt_name(pid, link=False):
+        toks = []
+        for t in people[pid]["name"].split():
+            if CODE_TOKEN.match(t):
+                toks.append('<span class="code" title="name not recorded in the archive">%s</span>' % esc(t))
             else:
-                relation_label = "cousins in different generations"
-            related.append({
-                "left": left,
-                "right": right,
-                "relationship": relation_label,
-                "commonAncestor": nearest,
-                "evidence": f"shared ancestor {people[nearest]['name']}",
-            })
-        return related
+                toks.append(esc(t))
+        nm = " ".join(toks)
+        if link:
+            return '<a class="ref" href="#%s">%s</a>' % (anchor[pid], nm)
+        return nm
 
+    def fmt_dates(p):
+        b, d = p.get("birthYear"), p.get("deathYear")
+        if b and d:
+            return "%d–%d" % (b, d)
+        if b:
+            return "b. %d" % b
+        if d:
+            return "d. %d" % d
+        return ""
 
-def extract_plain_html(path: Path) -> str:
-    parser = TableParser()
-    parser.feed(path.read_text(encoding="utf-8", errors="replace"))
-    filtered = []
-    for item in parser.all_text:
-        if item.startswith("<!--") or re.match(r"^[.#][a-zA-Z]", item):
+    def spouse_html(pid):
+        sps = spouses_of.get(pid, [])
+        if not sps:
+            return ""
+        multi = len(sps) > 1
+        parts = []
+        for i, s in enumerate(sps, start=1):
+            chip = fmt_name(s, link=bloodline(s))
+            dates = fmt_dates(people[s])
+            if dates:
+                chip += ' <span class="dt">%s</span>' % dates
+            if multi:
+                k = orderk.get((pid, s)) or i
+                chip = '<span class="mk">(%d)</span> ' % k + chip
+            cn = cousin_pairs.get(frozenset((pid, s)))
+            if cn:
+                chip += ' <span class="cz">%s — both descend from %s</span>' % (cn[0], esc(cn[1]))
+            parts.append(chip)
+        return ' <span class="sp">⚭ %s</span>' % " &nbsp;·&nbsp; ".join(parts)
+
+    def other_parent(c, me):
+        for p in parents_of.get(c, []):
+            if p != me:
+                return p
+        return None
+
+    def via_tag(pid):
+        pp = primary_parent(pid)
+        if pp is None or len(spouses_of.get(pp, [])) < 2:
+            return ""
+        op = other_parent(pid, pp)
+        if not op:
+            return ""
+        first = people[op]["name"].split()[0]
+        return ' <span class="via">— with %s</span>' % esc(first)
+
+    def render(pid):
+        kids = [c for c in children_of.get(pid, []) if primary_parent(c) == pid]
+        kids.sort(key=lambda c: (people[c].get("birthYear") or 9999, people[c]["name"]))
+        p = people[pid]
+        line = '<span class="nm">%s</span>' % fmt_name(pid)
+        dates = fmt_dates(p)
+        if dates:
+            line += ' <span class="dt">%s</span>' % dates
+        if p.get("generation"):
+            line += ' <span class="g">G%d</span>' % p["generation"]
+        line += spouse_html(pid)
+        line += via_tag(pid)
+        notes = ""
+        seen_pp = set()
+        for c in children_of.get(pid, []):
+            pp = primary_parent(c)
+            if pp != pid and pp and bloodline(pp) and pp not in seen_pp:
+                seen_pp.add(pp)
+                notes += '<div class="note">children listed under %s</div>' % fmt_name(pp, link=True)
+        aid = anchor[pid]
+        if kids:
+            inner = "".join(render(c) for c in kids)
+            return '<details open id="%s"><summary>%s</summary>%s<div class="kids">%s</div></details>' % (aid, line, notes, inner)
+        return '<div class="leaf" id="%s">%s%s</div>' % (aid, line, notes)
+
+    tree_html = render(model["root"])
+
+    cousins_html = ""
+    for pair, (rel, anc) in sorted(cousin_pairs.items(), key=lambda kv: sorted(people[x]["name"] for x in kv[0])):
+        a, b = sorted(pair, key=lambda x: people[x]["name"])
+        cousins_html += '<li>%s ⚭ %s <span class="dt">— %s, both descendants of %s</span></li>' % (
+            fmt_name(a, True),
+            fmt_name(b, True),
+            rel,
+            esc(anc),
+        )
+
+    photos_html = ""
+    seen_files = set()
+    for ph in photos:
+        if ph["file"] in seen_files:
             continue
-        filtered.append(item)
-    return "\n".join(filtered)
+        seen_files.add(ph["file"])
+        photos_html += '<figure><img loading="lazy" src="%s" alt="%s"><figcaption>%s</figcaption></figure>' % (
+            esc(ph["file"]),
+            esc(ph["title"]),
+            esc(ph["title"]),
+        )
+    docs_html = ""
+    for doc in documents:
+        docs_html += "<details><summary>%s</summary><small>%s</small><pre>%s</pre></details>" % (
+            esc(doc["title"]),
+            esc(doc["source"]),
+            esc(doc["text"]),
+        )
+
+    n_people = len(people)
+    n_marr = len(model["marriages"])
+    n_par = sum(len(v) for v in children_of.values())
+    gens = max((p["generation"] or 0) for p in people.values())
+
+    return (
+        PAGE_TEMPLATE.replace("__NPEOPLE__", str(n_people))
+        .replace("__NPAR__", str(n_par))
+        .replace("__NMARR__", str(n_marr))
+        .replace("__GENS__", str(gens))
+        .replace("__TREE__", tree_html)
+        .replace("__COUSINS__", cousins_html)
+        .replace("__PHOTOS__", photos_html)
+        .replace("__DOCS__", docs_html)
+    )
 
 
-def extract_documents(root: Path) -> list[dict]:
-    documents: list[dict] = []
-    narrative_html = ["A_Introduction.html", "B_Family_Biography_English.html", "B_Family_Biography.html"]
-    for relative in narrative_html:
-        path = root / relative
-        if path.exists():
-            documents.append({"title": path.stem.replace("_", " "), "source": relative, "text": extract_plain_html(path)})
-    for path in sorted(list((root / "Divers_docs").glob("*")) + list((root / "Mohmmad_Darabi_HISTORIES").glob("*"))):
-        if path.suffix.lower() not in {".doc", ".docx", ".rtf"}:
+PAGE_TEMPLATE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Darabi Family Tree</title>
+<style>
+:root { --ink:#2b2723; --soft:#6f675e; --line:#d8cfc2; --bg:#faf7f1; --acc:#8a5a2b; --hl:#ffe9a8; }
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#e8e2d8; --soft:#a09786; --line:#4a443c; --bg:#211e1a; --acc:#d9a05b; --hl:#5c4a12; }
+}
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.55 Georgia,'Times New Roman',serif; }
+.wrap { max-width:70rem; margin:0 auto; padding:2rem 1.2rem 5rem; }
+header h1 { font-size:1.9rem; margin:0 0 .2rem }
+header .fa { font-size:1.15rem; color:var(--soft); direction:rtl }
+header p.meta { color:var(--soft); font-size:.9rem; margin:.6rem 0 0 }
+.controls { position:sticky; top:0; background:var(--bg); padding:.7rem 0;
+  border-bottom:1px solid var(--line); margin:1.2rem 0; display:flex; gap:.6rem; flex-wrap:wrap; z-index:5 }
+.controls input { flex:1 1 14rem; padding:.45rem .7rem; font:inherit; color:inherit;
+  background:transparent; border:1px solid var(--line); border-radius:.5rem }
+.controls button { font:inherit; font-size:.85rem; padding:.45rem .8rem; cursor:pointer;
+  background:transparent; color:var(--soft); border:1px solid var(--line); border-radius:.5rem }
+.controls button:hover { color:var(--ink) }
+.tree details, .tree .leaf { margin:.15rem 0 }
+.tree .kids { margin-left:1.05rem; padding-left:.9rem; border-left:1px solid var(--line) }
+summary { cursor:pointer; list-style:none }
+summary::-webkit-details-marker { display:none }
+summary::before { content:'▾'; display:inline-block; width:1em; color:var(--soft); font-size:.8em }
+details:not([open]) > summary::before { content:'▸' }
+.tree .leaf { padding-left:1em }
+.nm { font-weight:700 }
+.dt { color:var(--soft); font-size:.85em }
+.g { font-size:.68em; color:var(--acc); border:1px solid var(--line);
+  border-radius:.6em; padding:0 .45em; vertical-align:.12em; letter-spacing:.03em }
+.sp { color:var(--soft) }
+a.ref { color:var(--acc); text-decoration:none }
+a.ref:hover { text-decoration:underline }
+.mk { color:var(--acc); font-size:.85em }
+.cz { font-size:.8em; color:var(--acc); font-style:italic }
+.via { font-size:.8em; color:var(--soft); font-style:italic }
+.code { opacity:.55; font-style:italic; font-size:.9em }
+.note { font-size:.8em; color:var(--soft); font-style:italic; margin-left:1.3em }
+.hit > summary .nm, .hit.leaf .nm { background:var(--hl); border-radius:.25em; padding:0 .15em }
+section.extra { margin-top:3rem; border-top:1px solid var(--line); padding-top:1.2rem;
+  font-size:.9rem; color:var(--soft) }
+section.extra h2 { font-size:1.05rem; color:var(--ink) }
+section.extra li { margin:.2rem 0 }
+section.extra pre { white-space:pre-wrap; font:.85rem/1.6 Georgia,serif; color:var(--ink) }
+section.extra details { border-top:1px solid var(--line); padding:.6rem 0 }
+section.extra summary { font-weight:700; color:var(--ink) }
+.gallery { display:flex; flex-wrap:wrap; gap:1rem; margin:.8rem 0 }
+.gallery figure { margin:0; max-width:20rem }
+.gallery img { max-width:100%; border-radius:.5rem; border:1px solid var(--line) }
+.gallery figcaption { font-size:.8rem; color:var(--soft); margin-top:.25rem }
+@media print { .controls { display:none } .tree details { page-break-inside:avoid } }
+</style></head><body><div class="wrap">
+<header>
+<h1>Darabi Family Tree</h1>
+<div class="fa">شجره نامه خاندان دارابی و بستگان</div>
+<p class="meta">__NPEOPLE__ people · __NPAR__ parent–child links · __NMARR__ marriages · generations 1–__GENS__.
+Rebuilt from Nasser Darabiha&rsquo;s archive (first assembled 21&nbsp;March&nbsp;2013 / ١٣٩٢/١/١).
+The archive itself notes it may contain errors.</p>
+</header>
+<div class="controls">
+<input id="q" type="search" placeholder="Find a person…" autocomplete="off">
+<button onclick="setAll(true)">Expand all</button>
+<button onclick="setAll(false)">Collapse all</button>
+</div>
+<div class="tree" id="tree">
+__TREE__
+</div>
+<section class="extra">
+<h2>Marriages between relatives</h2>
+<p>Where relatives married, their children are listed once (under one parent) with a
+cross-reference at the other, so nobody is counted twice.</p>
+<ul>__COUSINS__</ul>
+<h2>Reading this tree</h2>
+<ul>
+<li><b>⚭</b> marks a marriage; <b>(1)</b>/<b>(2)</b> number multiple marriages, and children of such
+parents carry <i>“— with …”</i> naming their other parent.</li>
+<li>Names in <span class="code">italics like xAsJ_17</span> are the archive&rsquo;s own codes for family
+members whose names were not yet collected.</li>
+<li>Same-name relatives are distinct people: two Mohammad Darabi (generations 4 and 6),
+two Hossein Darabi (5 and 7), two Abbas Darabi (5 and 7), two Ali Jaberian (7 and 8).</li>
+<li>Generation numbers count from Haj Chorok Darabi (G1, born ~1720).</li>
+</ul>
+<h2>Photographs</h2>
+<div class="gallery">__PHOTOS__</div>
+<h2>Archive notes</h2>
+__DOCS__
+<p>With thanks — as the original archive records — to Nahid Jaberian, Helen Jaberian, Farnoush Darabi,
+Niloufar Forouzan, Mahin Darabi, Sheida Eftekhari Rad, Massoud Darabiha and Farzad Hosseinzadeh.
+Machine-readable data: <a class="ref" href="legacy-family-tree-data.json">legacy-family-tree-data.json</a>.</p>
+</section>
+</div>
+<script>
+function setAll(open){document.querySelectorAll('#tree details').forEach(d=>d.open=open)}
+const q=document.getElementById('q');
+let t=null;
+q.addEventListener('input',()=>{clearTimeout(t);t=setTimeout(filter,120)});
+function filter(){
+  const s=q.value.trim().toLowerCase();
+  document.querySelectorAll('#tree .hit').forEach(e=>e.classList.remove('hit'));
+  if(!s){return}
+  document.querySelectorAll('#tree details, #tree .leaf').forEach(el=>{
+    const nm=el.querySelector(':scope > summary .nm, :scope > .nm');
+    const txt=(nm?nm.textContent:'').toLowerCase();
+    if(txt.includes(s)){
+      el.classList.add('hit');
+      let p=el.parentElement;
+      while(p&&p.id!=='tree'){if(p.tagName==='DETAILS')p.open=true;p=p.parentElement}
+    }
+  });
+  const first=document.querySelector('#tree .hit');
+  if(first)first.scrollIntoView({block:'center'});
+}
+document.querySelectorAll('a.ref[href^="#"]').forEach(a=>{a.addEventListener('click',()=>{
+  const el=document.querySelector(a.getAttribute('href'));
+  if(el){let p=el.parentElement;while(p&&p.id!=='tree'){if(p.tagName==='DETAILS')p.open=true;p=p.parentElement}}
+})});
+</script>
+</body></html>
+"""
+
+
+# ------------------------------------------------------------------ assembly
+
+
+def build_model(ex: Extractor, real_ids, edges, marrs, inferred):
+    get, find = ex.get, ex.find
+    ordered = sorted(real_ids, key=lambda r: (get(r).gen or 99, get(r).best_name(), r))
+    pub_id = {r: "p%d" % (i + 1) for i, r in enumerate(ordered)}
+    by_id = {}
+    for r in ordered:
+        p = get(r)
+        by_id[pub_id[r]] = {
+            "id": pub_id[r],
+            "internal": r,
+            "name": p.best_name(),
+            "aliases": [n for n in p.names if n != p.best_name()],
+            "generation": p.gen,
+            "birthYear": p.birth,
+            "deathYear": p.death,
+            "kind": p.kind,
+        }
+    parents_of, children_of = defaultdict(list), defaultdict(list)
+    for a, b in sorted(edges):
+        parents_of[pub_id[b]].append(pub_id[a])
+        children_of[pub_id[a]].append(pub_id[b])
+    spouses_of = defaultdict(list)
+    spouse_order = {}
+    marr_pub = []
+    for pair in sorted(marrs, key=lambda m: sorted(pub_id[x] for x in m)):
+        a, b = sorted(pair, key=lambda x: pub_id[x])
+        marr_pub.append((pub_id[a], pub_id[b]))
+        for x, y in ((a, b), (b, a)):
+            mk = ex.markers_wrt(y, x)
+            if mk:
+                spouse_order[(pub_id[x], pub_id[y])] = min(mk)
+        spouses_of[pub_id[a]].append(pub_id[b])
+        spouses_of[pub_id[b]].append(pub_id[a])
+    for k in spouses_of:
+        spouses_of[k].sort(key=lambda s: (spouse_order.get((k, s), 99), by_id[s]["name"]))
+
+    def ancestors(pid):
+        out = {}
+        stack = [(pid, 0)]
+        while stack:
+            n, d = stack.pop()
+            for p in parents_of.get(n, []):
+                if p not in out or out[p] > d + 1:
+                    out[p] = d + 1
+                    stack.append((p, d + 1))
+        return out
+
+    cousin_pairs = {}
+    for a, b in marr_pub:
+        aa, ab = ancestors(a), ancestors(b)
+        common = set(aa) & set(ab)
+        if not common:
             continue
-        text = ""
-        if shutil.which("textutil"):
-            result = subprocess.run(["textutil", "-convert", "txt", "-stdout", str(path)], capture_output=True, check=False)
-            text = result.stdout.decode("utf-8", errors="replace")
-        if text.strip():
-            relative = path.relative_to(root)
-            documents.append({
-                "title": readable_archive_name(path.stem).replace("_", " "),
-                "source": readable_source(relative),
-                "text": collapse(text),
-            })
-    return documents
+        anc = max(common, key=lambda x: ((by_id[x]["generation"] or 0), not by_id[x]["internal"].startswith("sp:")))
+        da, db = aa[anc], ab[anc]
+        if da == 2 and db == 2:
+            rel = "first cousins"
+        elif da == 3 and db == 3:
+            rel = "second cousins"
+        elif {da, db} == {2, 3}:
+            rel = "first cousins once removed"
+        else:
+            rel = "blood relatives"
+        cousin_pairs[frozenset((a, b))] = (rel, by_id[anc]["name"])
+
+    # branches: which generation-5 households a person descends from
+    g5_pub = {}
+    for key, pid in ex.g5cols.items():
+        r = find(pid)
+        if r in pub_id:
+            g5_pub[pub_id[r]] = key.lower()
+    branch_of = {}
+    for pid, p in by_id.items():
+        anc = ancestors(pid)
+        bs = sorted({g5_pub[a] for a in anc if a in g5_pub} | ({g5_pub[pid]} if pid in g5_pub else set()))
+        if not bs and (p["generation"] or 9) <= 5:
+            bs = ["early"]
+        branch_of[pid] = bs
+    # marry-ins take their spouse's branches
+    for pid, p in by_id.items():
+        if not branch_of[pid]:
+            bs = set()
+            for s in spouses_of.get(pid, []):
+                bs |= set(branch_of.get(s, []))
+            for c in children_of.get(pid, []):
+                bs |= set(branch_of.get(c, []))
+            branch_of[pid] = sorted(bs)
+
+    inferred_pub = {(pub_id[a], pub_id[b]) for (a, b) in inferred if a in pub_id and b in pub_id}
+    root = pub_id[find("gen1")]
+    return {
+        "byId": by_id,
+        "parentsOf": parents_of,
+        "childrenOf": children_of,
+        "spousesOf": spouses_of,
+        "spouseOrder": spouse_order,
+        "marriages": marr_pub,
+        "cousinPairs": cousin_pairs,
+        "branches": branch_of,
+        "inferred": inferred_pub,
+        "root": root,
+    }
 
 
-def extract_images(root: Path, people: list[dict]) -> list[dict]:
-    images: list[dict] = []
-    supported = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in supported:
-            continue
-        relative = path.relative_to(root)
-        title = readable_archive_name(path.stem).replace("_", " ")
-        generation_match = re.match(r"^G(\d+)\s+", title, re.IGNORECASE)
-        generation_hint = int(generation_match.group(1)) if generation_match else None
-        matching_title = re.sub(r"^G\d+\s+", "", title, flags=re.IGNORECASE)
-        matching_title = re.sub(r"\s+Family$", "", matching_title, flags=re.IGNORECASE)
-        person_ids = [
-            person["id"]
-            for person in people
-            if probable_name_match(person["name"], matching_title)
-            and (generation_hint is None or person["generation"] == generation_hint)
-        ]
-        mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        images.append({
-            "title": title,
-            "source": readable_source(relative),
-            "mimeType": mime_type,
-            "size": path.stat().st_size,
-            "personIds": person_ids,
-            "dataUrl": f"data:{mime_type};base64,{encoded}",
-        })
-    return images
+def build_json(model, documents, photos, archive_sha, ex: Extractor):
+    by_id = model["byId"]
+    people = []
+    for pid in sorted(by_id, key=lambda x: int(x[1:])):
+        p = by_id[pid]
+        people.append(
+            {
+                "id": pid,
+                "name": p["name"],
+                "aliases": p["aliases"],
+                "generation": p["generation"],
+                "birthYear": p["birthYear"],
+                "deathYear": p["deathYear"],
+                "branches": model["branches"][pid],
+                "nameKnown": p["kind"] == "real",
+            }
+        )
+    relationships = []
+    for a in sorted(model["childrenOf"], key=lambda x: int(x[1:])):
+        for b in model["childrenOf"][a]:
+            rel = {"type": "parent", "from": a, "to": b}
+            if (a, b) in model["inferred"]:
+                rel["inferred"] = True
+            relationships.append(rel)
+    for a, b in model["marriages"]:
+        rel = {"type": "spouse", "from": a, "to": b}
+        k = model["spouseOrder"].get((b, a)) or model["spouseOrder"].get((a, b))
+        if k:
+            rel["order"] = k
+        relationships.append(rel)
+    complex_marriages = []
+    for pair, (relname, anc) in sorted(model["cousinPairs"].items(), key=lambda kv: sorted(kv[0])):
+        a, b = sorted(pair)
+        anc_id = next((pid for pid, p in by_id.items() if p["name"] == anc), None)
+        complex_marriages.append(
+            {"left": a, "right": b, "relationship": relname, "commonAncestor": anc_id, "evidence": f"shared ancestor {anc}"}
+        )
+    person_by_name_gen = {}
+    for pid, p in by_id.items():
+        person_by_name_gen.setdefault(p["name"], []).append(pid)
+    images = []
+    for ph in photos:
+        entry = {k: ph[k] for k in ("title", "source", "file", "mimeType", "size", "sha256")}
+        person_ids = []
+        want = PHOTO_PEOPLE.get(ph["title"])
+        if want:
+            name, gen = want
+            for pid in person_by_name_gen.get(name, []):
+                if gen is None or by_id[pid]["generation"] == gen:
+                    person_ids.append(pid)
+        entry["personIds"] = sorted(person_ids)
+        images.append(entry)
+    return {
+        "people": people,
+        "relationships": relationships,
+        "complexMarriages": complex_marriages,
+        "documents": documents,
+        "images": images,
+        "meta": {
+            "sourceArchive": "Darabi_Family_Tree_RD.zip",
+            "sourceSha256": archive_sha,
+            "familyPagesParsed": ex.parsed_files,
+            "identityMerges": sorted(sorted(m) for m in ex.merged_pairs),
+            "ambiguousIdentityWarnings": [w for w in ex.warnings if w.startswith("ambiguous")],
+            "warnings": [w for w in ex.warnings if not w.startswith("ambiguous")],
+        },
+    }
 
 
-def render_html(data: dict, documents: list[dict], images: list[dict]) -> str:
-    payload = json.dumps({**data, "documents": documents, "images": images}, ensure_ascii=False).replace("</", "<\\/")
-    template = """<!doctype html>
-<html lang=\"en\">
-<head>
-  <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-  <title>Darabi family — reconstructed archive</title>
-  <style>
-    :root{{--ink:#1d1d1f;--muted:#6e6e73;--line:#c7c7cc;--parent:#3c7cf4;--marriage:#a07045;--paper:#f5f5f7;--card:#fff;--sidebar:360px}}
-    *{{box-sizing:border-box}} html,body{{height:100%;margin:0}} body{{font:15px/1.45 -apple-system,BlinkMacSystemFont,\"SF Pro Text\",Inter,Arial,sans-serif;color:var(--ink);background:var(--paper);overflow:hidden}}
-    button,input,select{{font:inherit}} button{{cursor:pointer}}
-    header{{height:64px;display:flex;align-items:center;gap:20px;padding:0 22px;border-bottom:1px solid #d8d8dc;background:rgba(250,250,252,.92);backdrop-filter:blur(24px);position:relative;z-index:20}}
-    h1{{font-size:18px;margin:0;white-space:nowrap}} .stats{{color:var(--muted);font-size:13px}} .controls{{margin-left:auto;display:flex;gap:8px;align-items:center}}
-    input,select,.control{{height:38px;border:1px solid #d1d1d6;border-radius:10px;background:white;padding:0 12px}} input{{width:260px}}
-    #shell{{height:calc(100% - 64px);display:grid;grid-template-columns:1fr var(--sidebar)}}
-    #viewport{{position:relative;overflow:hidden;background:radial-gradient(circle at 50% 35%,#fff 0,#f4f7f5 44%,#edf2ef 100%);touch-action:none;cursor:grab}}
-    #viewport.dragging{{cursor:grabbing}} #world{{position:absolute;transform-origin:0 0}} #edges,#nodes{{position:absolute;left:0;top:0}} #edges{{overflow:visible;pointer-events:none}}
-    .node{{position:absolute;width:210px;min-height:74px;padding:12px 14px 11px 58px;border:1px solid #d4d4d8;border-radius:14px;background:rgba(255,255,255,.96);box-shadow:0 10px 24px rgba(30,45,38,.10);text-align:left;color:var(--ink)}}
-    .node:hover,.node.selected{{border-color:#1473e6;box-shadow:0 0 0 3px rgba(20,115,230,.18),0 13px 28px rgba(30,45,38,.14)}} .avatar{{position:absolute;left:12px;top:13px;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#e4eee4;color:#2e7348;font:19px Georgia,serif}}
-    .node strong{{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}} .node small{{display:block;color:var(--muted);margin-top:3px}}
-    .generation-label{{position:absolute;color:#8a8a8f;font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase}}
-    aside{{border-left:1px solid #d8d8dc;background:rgba(250,250,248,.96);overflow:auto;padding:24px;position:relative;z-index:15}}
-    aside h2{{font:30px/1.1 Georgia,serif;margin:0 0 8px}} aside h3{{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#74747a;margin:28px 0 9px}} aside p{{margin:0 0 12px}} .empty{{height:100%;display:grid;place-content:center;color:var(--muted);text-align:center}}
-    .pills{{display:flex;flex-wrap:wrap;gap:6px}} .pill{{border:1px solid #d1d1d6;background:white;border-radius:999px;padding:5px 9px;font-size:13px}} .pill:hover{{border-color:#1473e6}}
-    .zoom{{position:absolute;right:18px;bottom:18px;z-index:10;display:flex;align-items:center;background:white;border:1px solid #d4d4d8;border-radius:11px;box-shadow:0 8px 22px rgba(0,0,0,.1);overflow:hidden}} .zoom button{{border:0;background:white;width:38px;height:38px;font-size:20px}} .zoom span{{min-width:56px;text-align:center;font-size:13px}}
-    .legend{{position:absolute;left:18px;bottom:18px;z-index:10;background:rgba(255,255,255,.9);border:1px solid #ddd;border-radius:10px;padding:9px 11px;font-size:12px;color:var(--muted)}} .swatch{{display:inline-block;width:20px;height:3px;vertical-align:middle;margin:0 5px 0 10px;background:var(--parent)}} .swatch.marriage{{background:var(--marriage)}}
-    dialog{{width:min(760px,calc(100% - 32px));max-height:80vh;border:0;border-radius:18px;padding:0;box-shadow:0 28px 90px rgba(0,0,0,.25)}} dialog::backdrop{{background:rgba(0,0,0,.28)}} .docs{{padding:24px;max-height:80vh;overflow:auto}} details{{border-top:1px solid #ddd;padding:14px 0}} summary{{font-weight:650;cursor:pointer}} pre{{white-space:pre-wrap;font:13px/1.55 -apple-system,BlinkMacSystemFont,sans-serif;color:#444}}
-    .gallery{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:16px 0 28px}} .gallery figure{{margin:0}} .gallery img{{width:100%;height:150px;object-fit:cover;border-radius:12px;background:#eee}} .gallery figcaption{{font-size:12px;color:var(--muted);margin-top:6px}} .person-photo{{display:block;width:100%;max-height:280px;object-fit:contain;border-radius:14px;background:#ececec;margin:18px 0}}
-    @media(max-width:850px){{:root{{--sidebar:300px}} .stats{{display:none}} input{{width:180px}}}}
-    @media(max-width:650px){{header{{height:auto;min-height:64px;flex-wrap:wrap;padding:12px}} .controls{{width:100%;margin:0}} input{{flex:1;width:auto}} #shell{{height:calc(100% - 112px);grid-template-columns:1fr}} aside{{position:absolute;right:0;top:112px;bottom:0;width:min(88vw,360px);box-shadow:-14px 0 40px rgba(0,0,0,.15)}}}}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Darabi family — reconstructed archive</h1>
-    <span class=\"stats\" id=\"stats\"></span>
-    <div class=\"controls\">
-      <input id=\"search\" type=\"search\" placeholder=\"Find a person\" aria-label=\"Find a person\">
-      <select id=\"branch\" aria-label=\"Choose a branch\"><option value=\"all\">Entire family</option></select>
-      <button class=\"control\" id=\"stories\">Archive notes</button>
-    </div>
-  </header>
-  <div id=\"shell\">
-    <main id=\"viewport\" aria-label=\"Interactive family tree\">
-      <div id=\"world\"><svg id=\"edges\"></svg><div id=\"nodes\"></div></div>
-      <div class=\"legend\">Drag to pan · scroll to zoom <i class=\"swatch\"></i> parent <i class=\"swatch marriage\"></i> marriage</div>
-      <div class=\"zoom\"><button id=\"out\" aria-label=\"Zoom out\">−</button><span id=\"percent\">100%</span><button id=\"in\" aria-label=\"Zoom in\">+</button><button id=\"fit\" aria-label=\"Fit tree\">⌂</button></div>
-    </main>
-    <aside id=\"details\"><div class=\"empty\"><div><strong>Select a person</strong><br>See their recorded family connections and sources.</div></div></aside>
-  </div>
-  <dialog id=\"documents\"><div class=\"docs\"><button class=\"control\" style=\"float:right\" onclick=\"documents.close()\">Done</button><h2>Archive notes, histories, and photographs</h2><p>Material preserved from the legacy HTML, Word, RTF, and image files.</p><div class=\"gallery\" id=\"image-gallery\"></div><div id=\"document-list\"></div></div></dialog>
-  <script>
-  const DATA=__DARABI_ARCHIVE_PAYLOAD__;
-  const byId=new Map(DATA.people.map(person=>[person.id,person]));
-  const parents=new Map(),children=new Map(),spouses=new Map();
-  function add(map,key,value){{if(!map.has(key))map.set(key,new Set());map.get(key).add(value)}}
-  DATA.relationships.forEach(relation=>{{if(relation.type==='parent'){{add(children,relation.from,relation.to);add(parents,relation.to,relation.from)}}else{{add(spouses,relation.from,relation.to);add(spouses,relation.to,relation.from)}}}});
-  const branchSelect=document.querySelector('#branch');
-  [...new Set(DATA.people.flatMap(person=>person.branches))].filter(branch=>branch&&branch!=='early'&&branch!=='archive').sort().forEach(branch=>branchSelect.add(new Option(`${{branch}} branch`,branch)));
-  document.querySelector('#stats').textContent=`${{DATA.people.length}} people · ${{DATA.relationships.filter(r=>r.type==='parent').length}} parent links · ${{DATA.relationships.filter(r=>r.type==='spouse').length}} marriages`;
-  const viewport=document.querySelector('#viewport'),world=document.querySelector('#world'),nodeLayer=document.querySelector('#nodes'),svg=document.querySelector('#edges'),details=document.querySelector('#details');
-  let scale=.72,offsetX=80,offsetY=50,selected=null,layout=new Map(),worldWidth=1800,worldHeight=1800;
-  const CARD_W=210,CARD_H=74,X_GAP=46,Y_GAP=190;
-  function relativesOfBranch(branch){{if(branch==='all')return new Set(DATA.people.map(p=>p.id));const seeds=DATA.people.filter(p=>p.branches.includes(branch)).map(p=>p.id);const visible=new Set(seeds);let changed=true;while(changed){{changed=false;for(const id of [...visible]){{for(const linked of [...(parents.get(id)||[]),...(children.get(id)||[]),...(spouses.get(id)||[])])if(!visible.has(linked)){{visible.add(linked);changed=true}}}}}}return visible}}
-  function render(){{
-    const visible=relativesOfBranch(branchSelect.value);const groups=new Map();for(const person of DATA.people){{if(!visible.has(person.id))continue;if(!groups.has(person.generation))groups.set(person.generation,[]);groups.get(person.generation).push(person)}}
-    const generations=[...groups.keys()].sort((a,b)=>a-b);layout=new Map();let maxCount=1;
-    for(const generation of generations){{const row=groups.get(generation);row.sort((a,b)=>{{const ap=[...(parents.get(a.id)||[])].map(id=>byId.get(id)?.name||'').sort().join('|');const bp=[...(parents.get(b.id)||[])].map(id=>byId.get(id)?.name||'').sort().join('|');return ap.localeCompare(bp)||a.name.localeCompare(b.name)}});maxCount=Math.max(maxCount,row.length)}}
-    worldWidth=Math.max(1500,maxCount*(CARD_W+X_GAP)+180);worldHeight=Math.max(900,generations.length*Y_GAP+180);
-    for(const generation of generations){{const row=groups.get(generation);const width=row.length*(CARD_W+X_GAP)-X_GAP;let x=(worldWidth-width)/2;row.forEach(person=>{{layout.set(person.id,{{x,y:70+(generation-generations[0])*Y_GAP}});x+=CARD_W+X_GAP}})}}
-    nodeLayer.innerHTML='';svg.innerHTML='';svg.setAttribute('width',worldWidth);svg.setAttribute('height',worldHeight);nodeLayer.style.width=worldWidth+'px';nodeLayer.style.height=worldHeight+'px';
-    for(const generation of generations){{const first=groups.get(generation)[0];if(!first)continue;const label=document.createElement('div');label.className='generation-label';label.textContent=`Generation ${{generation}}`;label.style.left='18px';label.style.top=(layout.get(first.id).y+26)+'px';nodeLayer.append(label)}}
-    const drawnSpouses=new Set();for(const person of DATA.people){{if(!visible.has(person.id)||!layout.has(person.id))continue;for(const spouse of spouses.get(person.id)||[]){{if(!visible.has(spouse)||!layout.has(spouse))continue;const key=[person.id,spouse].sort().join('|');if(drawnSpouses.has(key))continue;drawnSpouses.add(key);line(layout.get(person.id).x+CARD_W/2,layout.get(person.id).y+CARD_H/2,layout.get(spouse).x+CARD_W/2,layout.get(spouse).y+CARD_H/2,'marriage')}}}
-    for(const [childId,parentIds] of parents){{if(!visible.has(childId)||!layout.has(childId))continue;const available=[...parentIds].filter(id=>visible.has(id)&&layout.has(id));if(!available.length)continue;const child=layout.get(childId);const centers=available.map(id=>layout.get(id).x+CARD_W/2);const unionX=centers.reduce((sum,x)=>sum+x,0)/centers.length;const parentY=Math.max(...available.map(id=>layout.get(id).y+CARD_H));const childX=child.x+CARD_W/2;const childY=child.y;const midY=(parentY+childY)/2;path(`M ${{unionX}} ${{parentY}} V ${{midY}} H ${{childX}} V ${{childY}}`,'parent')}}
-    for(const person of DATA.people){{const point=layout.get(person.id);if(!point)continue;const button=document.createElement('button');button.className='node'+(selected===person.id?' selected':'');button.style.left=point.x+'px';button.style.top=point.y+'px';button.dataset.id=person.id;button.innerHTML=`<span class=\"avatar\">${{escapeHtml(person.name.charAt(0))}}</span><strong>${{escapeHtml(person.name)}}</strong><small>${{life(person)}}</small>`;button.onclick=()=>select(person.id,true);nodeLayer.append(button)}}
-    applyTransform();
-  }}
-  function line(x1,y1,x2,y2,type){{path(`M ${{x1}} ${{y1}} L ${{x2}} ${{y2}}`,type)}}
-  function path(d,type){{const element=document.createElementNS('http://www.w3.org/2000/svg','path');element.setAttribute('d',d);element.setAttribute('fill','none');element.setAttribute('stroke',type==='marriage'?'#a07045':'#3c7cf4');element.setAttribute('stroke-width',type==='marriage'?'3':'2.5');if(type==='marriage')element.setAttribute('stroke-dasharray','7 5');element.setAttribute('stroke-linejoin','round');svg.append(element)}}
-  function life(person){{if(person.birthYear&&person.deathYear)return `${{person.birthYear}}–${{person.deathYear}}`;if(person.birthYear)return `Born ${{person.birthYear}}`;return `Generation ${{person.generation}}`}}
-  function escapeHtml(value){{return String(value).replace(/[&<>\"]/g,char=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}}[char]))}}
-  function relationshipPills(ids){{return [...ids].map(id=>`<button class=\"pill\" data-person=\"${{id}}\">${{escapeHtml(byId.get(id).name)}}</button>`).join('')}}
-  function select(id,center=false){{selected=id;document.querySelectorAll('.node').forEach(node=>node.classList.toggle('selected',node.dataset.id===id));const person=byId.get(id);const photo=DATA.images.find(image=>image.personIds.includes(id));details.innerHTML=`<h2>${{escapeHtml(person.name)}}</h2><p>${{life(person)}} · Generation ${{person.generation}}</p>${{photo?`<img class=\"person-photo\" src=\"${{photo.dataUrl}}\" alt=\"${{escapeHtml(photo.title)}}\">`:''}}${{person.aliases.length?`<p><small>Also recorded as ${{person.aliases.map(escapeHtml).join(', ')}}</small></p>`:''}}<h3>Parents</h3><div class=\"pills\">${{relationshipPills(parents.get(id)||[])||'<span>Not recorded</span>'}}</div><h3>Spouses</h3><div class=\"pills\">${{relationshipPills(spouses.get(id)||[])||'<span>Not recorded</span>'}}</div><h3>Children</h3><div class=\"pills\">${{relationshipPills(children.get(id)||[])||'<span>None recorded</span>'}}</div><h3>Evidence</h3><p>${{person.sources.length}} source file${{person.sources.length===1?'':'s'}} · ${{person.confidence}} structural confidence</p>`;details.querySelectorAll('[data-person]').forEach(button=>button.onclick=()=>select(button.dataset.person,true));if(center)centerOn(id)}}
-  function centerOn(id){{const point=layout.get(id);if(!point)return;offsetX=viewport.clientWidth/2-(point.x+CARD_W/2)*scale;offsetY=viewport.clientHeight/2-(point.y+CARD_H/2)*scale;applyTransform()}}
-  function applyTransform(){{world.style.transform=`translate(${{offsetX}}px,${{offsetY}}px) scale(${{scale}})`;document.querySelector('#percent').textContent=Math.round(scale*100)+'%'}}
-  function zoomTo(next,cx=viewport.clientWidth/2,cy=viewport.clientHeight/2){{next=Math.max(.18,Math.min(2,next));const wx=(cx-offsetX)/scale,wy=(cy-offsetY)/scale;offsetX=cx-wx*next;offsetY=cy-wy*next;scale=next;applyTransform()}}
-  function fit(){{scale=Math.min(.9,(viewport.clientWidth-80)/worldWidth,(viewport.clientHeight-80)/worldHeight);offsetX=(viewport.clientWidth-worldWidth*scale)/2;offsetY=(viewport.clientHeight-worldHeight*scale)/2;applyTransform()}}
-  let dragging=false,lastX=0,lastY=0;viewport.addEventListener('pointerdown',event=>{{if(event.target.closest('button'))return;dragging=true;lastX=event.clientX;lastY=event.clientY;viewport.classList.add('dragging');viewport.setPointerCapture(event.pointerId)}});viewport.addEventListener('pointermove',event=>{{if(!dragging)return;offsetX+=event.clientX-lastX;offsetY+=event.clientY-lastY;lastX=event.clientX;lastY=event.clientY;applyTransform()}});viewport.addEventListener('pointerup',()=>{{dragging=false;viewport.classList.remove('dragging')}});viewport.addEventListener('wheel',event=>{{event.preventDefault();zoomTo(scale*Math.exp(-event.deltaY*.0015),event.clientX-viewport.getBoundingClientRect().left,event.clientY-viewport.getBoundingClientRect().top)}},{{passive:false}});
-  document.querySelector('#in').onclick=()=>zoomTo(scale*1.2);document.querySelector('#out').onclick=()=>zoomTo(scale/1.2);document.querySelector('#fit').onclick=fit;branchSelect.onchange=()=>{{selected=null;render();fit()}};
-  document.querySelector('#search').addEventListener('input',event=>{{const query=normalise(event.target.value);if(!query)return;const person=DATA.people.find(item=>normalise(item.name).includes(query)||item.aliases.some(alias=>normalise(alias).includes(query)));if(person)select(person.id,true)}});function normalise(value){{return value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g,' ').trim()}}
-  const documentsDialog=document.querySelector('#documents'),documentList=document.querySelector('#document-list'),imageGallery=document.querySelector('#image-gallery');document.querySelector('#stories').onclick=()=>documentsDialog.showModal();imageGallery.innerHTML=DATA.images.map(image=>`<figure><img src=\"${{image.dataUrl}}\" alt=\"${{escapeHtml(image.title)}}\"><figcaption>${{escapeHtml(image.title)}} · ${{escapeHtml(image.source)}}</figcaption></figure>`).join('');documentList.innerHTML=DATA.documents.map(document=>`<details><summary>${{escapeHtml(document.title)}}</summary><small>${{escapeHtml(document.source)}}</small><pre>${{escapeHtml(document.text)}}</pre></details>`).join('');
-  render();requestAnimationFrame(fit);
-  </script>
-</body>
-</html>"""
-    # The template was authored with doubled braces so it remains readable
-    # beside Python formatting code. Collapse those braces before inserting
-    # archive text, whose contents must remain byte-for-byte unchanged.
-    template = template.replace("{{", "{").replace("}}", "}")
-    return template.replace("__DARABI_ARCHIVE_PAYLOAD__", payload)
-
-
-def render_report(data: dict, documents: list[dict], images: list[dict]) -> str:
-    people = data["people"]
-    relationships = data["relationships"]
-    parents = [item for item in relationships if item["type"] == "parent"]
-    spouses = [item for item in relationships if item["type"] == "spouse"]
-    duplicate_names: dict[str, list[dict]] = defaultdict(list)
-    for person in people:
-        duplicate_names[normal(person["name"])].append(person)
-    collisions = {name: group for name, group in duplicate_names.items() if len(group) > 1}
+def build_report(data, model, ex: Extractor):
+    by_id = {p["id"]: p for p in data["people"]}
+    parent_count = sum(1 for r in data["relationships"] if r["type"] == "parent")
+    spouse_count = sum(1 for r in data["relationships"] if r["type"] == "spouse")
+    inferred_count = sum(1 for r in data["relationships"] if r.get("inferred"))
+    name_counts = defaultdict(list)
+    for p in data["people"]:
+        name_counts[norm(p["name"])].append(p)
+    dup_lines = []
+    for k, ps in sorted(name_counts.items()):
+        if len(ps) > 1:
+            dup_lines.append(
+                "- %s: %d structurally distinct people (generations %s)"
+                % (ps[0]["name"], len(ps), ", ".join(str(p["generation"]) for p in ps))
+            )
+    cousin_lines = []
+    for m in data["complexMarriages"]:
+        cousin_lines.append(
+            "- %s and %s: %s (%s)." % (by_id[m["left"]]["name"], by_id[m["right"]]["name"], m["relationship"], m["evidence"])
+        )
     lines = [
         "# Legacy Darabi family-tree extraction report",
         "",
-        "The source ZIP was read without modifying it. Directory ancestry, HTML generation rows, explicit hyperlinks, spouse columns, dates, and narrative documents were treated as separate evidence channels.",
+        "The source ZIP was read without modifying it. Directory nesting, per-family",
+        "HTML rows, marriage-order markers, header date lists, and grandchild columns",
+        "were treated as separate evidence channels and cross-checked.",
         "",
         "## Reconstructed graph",
         "",
-        f"- {len(people)} distinct people",
-        f"- {len(parents)} parent/child relationships",
-        f"- {len(spouses)} marriages or spouse relationships",
-        f"- {len(documents)} narrative documents preserved as searchable text",
-        f"- {len(images)} archive photographs preserved in the standalone HTML",
-        f"- {data['meta']['placeholderEntriesSkipped']} placeholder entries (`Xxx`, `Yyy`, `---`, and similar) omitted",
-        f"- {len(data['complexMarriages'])} marriages connect people with a recorded common ancestor",
+        "- %d distinct people" % len(data["people"]),
+        "- %d parent/child relationships (%d second parents inferred from a marriage)" % (parent_count, inferred_count),
+        "- %d marriages" % spouse_count,
+        "- %d narrative documents preserved as searchable text" % len(data["documents"]),
+        "- %d photograph records (%d unique files served beside the page)"
+        % (len(data["images"]), len({i["file"] for i in data["images"]})),
+        "- every person is connected: no isolated records, no cycles, nobody with more than two parents",
         "",
         "## Complicated or cross-branch marriages",
         "",
-    ]
-    people_by_id = {person["id"]: person for person in people}
-    if data["complexMarriages"]:
-        for item in data["complexMarriages"]:
-            lines.append(f"- {people_by_id[item['left']]['name']} and {people_by_id[item['right']]['name']}: {item['relationship']} ({item['evidence']}).")
-    else:
-        lines.append("- None detected from the recorded parent graph.")
-    lines.extend(["", "## Same-name identities kept separate", ""])
-    if collisions:
-        for group in sorted(collisions.values(), key=lambda items: items[0]["name"]):
-            lines.append(f"- {group[0]['name']}: {len(group)} structurally distinct people")
-    else:
-        lines.append("- None.")
-    lines.extend(["", "## Unresolved evidence", ""])
-    if data["meta"]["ambiguousIdentityWarnings"]:
-        lines.extend(f"- {warning}" for warning in data["meta"]["ambiguousIdentityWarnings"])
-    else:
-        lines.append("- No unresolved same-generation structural identity matches.")
-    lines.extend([
+        *cousin_lines,
+        "",
+        "## Same-name identities kept separate",
+        "",
+        *dup_lines,
         "",
         "## Interpretation rules",
         "",
-        "- A folder ending in `_G7`, `_G8`, or `_G9` names the person whose descendants are stored below it; the suffix is the next generation shown by that folder.",
-        "- Adjacent nested person folders are parent and child.",
-        "- A person followed by one or more `xlname2` cells in a generation row is married to those adjacent names.",
-        "- `(1)` and `(2)` markers associate children with the corresponding marriage when multiple spouses are recorded.",
-        "- A copied descendant branch beneath both spouses is merged only when person name and expanded parent union agree; branch-relative generation labels are retained as evidence but do not create duplicate identities.",
-        "- When the two spouse branches assign different generation numbers to the same child, the layout uses the highest recorded number and then enforces parent-before-child order.",
-        "- Placeholder people and placeholder children are not converted into records.",
-        "- Every inferred second parent is marked in JSON with `inferred: true` and is made only when one spouse is recorded.",
+        "- A folder `Name_Gn` holds one person; the people filed inside it are their",
+        "  children at generation *n* (so the person is generation *n − 1*).",
+        "- Adjacent nested person folders are parent and child; the same child under",
+        "  both spouses of a cousin marriage is merged by name plus parent union.",
+        "- In family tables, a name cell followed by `xlname2*` cells is a person with",
+        "  their spouse(s); `(1)`/`(2)` markers tie children and spouses to a specific",
+        "  marriage and are meaningful only within that family.",
+        "- Unlabeled `xlnameG6` rows are grandchildren columns; their names and markers",
+        "  are harvested, and the folder structure remains the parent/child authority.",
+        "- Generation-6 birth/death dates exist only in the header name lists of family",
+        "  pages and are harvested from there.",
+        "- A second parent is inferred only when the recorded parent has exactly one",
+        "  spouse, or a marker names the marriage; inferred links are flagged in JSON.",
+        "- Pure placeholders (`Xxx`, `---`) are omitted. Coded names (`xAsJ_17`) are",
+        "  kept: the archive uses them for known family members with unrecorded names.",
+        "- Spelling variants merge only under strict rules (never Ali/Alireza); the",
+        "  variant list is preserved per person under `aliases`.",
+        "",
+        "## Warnings",
+        "",
+    ]
+    warn = data["meta"]["ambiguousIdentityWarnings"] + data["meta"]["warnings"]
+    lines += ["- " + w for w in warn] if warn else ["- none"]
+    lines += [
         "",
         "## Output files",
         "",
-        "- `public/legacy-family-tree.html`: standalone interactive tree, document browser, and photograph archive",
+        "- `public/legacy-family-tree.html`: standalone outline tree, photographs, and archive notes",
         "- `public/legacy-family-tree-data.json`: normalized people and relationships",
+        "- `public/legacy-photos/`: photograph files referenced by the page",
         "- `docs/legacy-family-tree-import-report.md`: this audit report",
         "- `scripts/extract_legacy_family_tree.py`: reproducible extractor",
         "",
-        "This is an evidence-preserving reconstruction, not a claim that every source statement is factually correct. The original archive itself says it may contain errors.",
-    ])
-    return "\n".join(lines) + "\n"
+        "This is an evidence-preserving reconstruction, not a claim that every source",
+        "statement is factually correct. The original archive itself says it may",
+        "contain errors.",
+        "",
+    ]
+    return "\n".join(lines)
 
 
-def find_root(extracted: Path) -> Path:
-    candidates = [path for path in extracted.iterdir() if path.is_dir() and path.name != "__MACOSX"]
-    if len(candidates) == 1:
-        return candidates[0]
-    if (extracted / "Darabi_Family_Tree_RD").is_dir():
-        return extracted / "Darabi_Family_Tree_RD"
-    raise RuntimeError("Could not identify the archive root")
-
-
-def main() -> None:
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("archive", type=Path)
     parser.add_argument("--html", type=Path, required=True)
     parser.add_argument("--json", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--photos", type=Path, required=True)
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="darabi-legacy-") as temporary:
-        extracted = Path(temporary)
-        with zipfile.ZipFile(args.archive) as archive:
-            archive.extractall(extracted)
-        # macOS exposes /var as a symlink to /private/var. Resolve once so
-        # every later relative evidence path uses the same canonical prefix.
-        root = find_root(extracted).resolve()
-        extractor = Extractor(root)
-        extractor.add_manual_tree()
-        extractor.build_structural_people()
-        extractor.extract_relationships()
-        dsu = extractor.merge_people()
-        data = extractor.canonical_data(dsu)
+
+    archive_sha = hashlib.sha256(args.archive.read_bytes()).hexdigest()
+    with tempfile.TemporaryDirectory() as tmp:
+        with zipfile.ZipFile(args.archive) as z:
+            # entries without the UTF-8 flag are decoded as CP437 by zipfile;
+            # the archive's Persian filenames are actually UTF-8 - repair them
+            for info in z.infolist():
+                name = info.filename
+                if not (info.flag_bits & 0x800):
+                    try:
+                        name = name.encode("cp437").decode("utf-8")
+                    except UnicodeError:
+                        pass
+                target = Path(tmp) / name
+                if not target.resolve().is_relative_to(Path(tmp).resolve()):
+                    continue
+                if info.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with z.open(info) as fh:
+                        target.write_bytes(fh.read())
+        root = Path(tmp) / "Darabi_Family_Tree_RD"
+        if not root.exists():
+            raise SystemExit("archive root Darabi_Family_Tree_RD not found")
+        ex = Extractor(root)
+        real_ids, edges, marrs, inferred = ex.run()
+        model = build_model(ex, real_ids, edges, marrs, inferred)
         documents = extract_documents(root)
-        images = extract_images(root, data["people"])
-        image_metadata = [{key: value for key, value in image.items() if key != "dataUrl"} for image in images]
-        args.html.parent.mkdir(parents=True, exist_ok=True)
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.report.parent.mkdir(parents=True, exist_ok=True)
-        args.html.write_text(render_html(data, documents, images), encoding="utf-8")
-        args.json.write_text(json.dumps({**data, "documents": documents, "images": image_metadata}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        args.report.write_text(render_report(data, documents, images), encoding="utf-8")
-        print(json.dumps({
-            "people": len(data["people"]),
-            "relationships": len(data["relationships"]),
-            "documents": len(documents),
-            "images": len(images),
-            "complexMarriages": len(data["complexMarriages"]),
-            "warnings": len(data["meta"]["ambiguousIdentityWarnings"]),
-        }, indent=2))
+        photos = extract_photos(root, args.photos)
+        data = build_json(model, documents, photos, archive_sha, ex)
+        page = render_page(model, documents, photos)
+        report = build_report(data, model, ex)
+
+    args.json.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    args.html.write_text(page, encoding="utf-8")
+    args.report.write_text(report, encoding="utf-8")
+    print(
+        "people=%d parents=%d marriages=%d documents=%d images=%d warnings=%d"
+        % (
+            len(data["people"]),
+            sum(1 for r in data["relationships"] if r["type"] == "parent"),
+            sum(1 for r in data["relationships"] if r["type"] == "spouse"),
+            len(data["documents"]),
+            len(data["images"]),
+            len(data["meta"]["ambiguousIdentityWarnings"]) + len(data["meta"]["warnings"]),
+        )
+    )
 
 
 if __name__ == "__main__":
