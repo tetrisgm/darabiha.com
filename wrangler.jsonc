@@ -8,7 +8,8 @@
     "PUBLIC_ORIGIN": "https://darabiha.com",
     "APPLE_CLIENT_ID": "com.darabiha.family",
     "APPLE_TEAM_ID": "52WM463HR2",
-    "APPLE_KEY_ID": "J6958HV8HB"
+    "APPLE_KEY_ID": "J6958HV8HB",
+    "GOOGLE_CLIENT_ID": "609728074887-19vq3ijncoivuu1udt6b3p2ugg6c86gr.apps.googleusercontent.com"
   },
   "assets": { "directory": "dist/client" },
   "routes": [
