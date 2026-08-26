@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildGenerations, buildRelationMaps } from "../../lib/tree-layout";
 
@@ -21,6 +21,17 @@ function years(person: Person | undefined) {
 export function Silhouette({ gender }: { gender: Person["gender"] }) {
   return <span className={`ped-portrait ped-${gender ?? "unknown"}`} aria-hidden="true">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
+  </span>;
+}
+
+/** Safari on macOS will not reliably draw native hand/grab cursors over
+ * these cards (the documented pathology in docs/HANDOFF.md), so the stage
+ * paints its own cursor layer exactly like the Tree canvas does. */
+function PedCursor({ mode, cursorRef }: { mode: "grab" | "grabbing" | "pointer"; cursorRef: React.RefObject<HTMLSpanElement | null> }) {
+  return <span ref={cursorRef} className="tree-custom-cursor" data-mode={mode} data-visible="false" aria-hidden="true">
+    <svg viewBox="0 0 32 32" focusable="false">
+      {mode === "pointer" ? <path d="M9.5 3.5a2 2 0 0 1 4 0v9.1l1.1-1.4a2.1 2.1 0 0 1 3.4 2.4l.6-.8a2.1 2.1 0 0 1 3.5 2.2l.4-.4a2 2 0 0 1 3.4 1.9l-1.4 7.2a6.5 6.5 0 0 1-6.4 5.3h-2.7a7 7 0 0 1-5.7-3L5.8 20a2.2 2.2 0 0 1 3.4-2.7l.3.3V3.5Z" /> : mode === "grabbing" ? <path d="M8.3 12.4a2.2 2.2 0 0 1 3.4-1.8 2.3 2.3 0 0 1 4.1-.9 2.3 2.3 0 0 1 4.2.7 2.2 2.2 0 0 1 3.8 1.5l1 6.1a8.5 8.5 0 0 1-8.4 9.9h-.8a8.5 8.5 0 0 1-8.3-6.8l-.9-4.4a2.2 2.2 0 0 1 1.9-4.3Z" /> : <path d="M7.8 13.8V8.1a2 2 0 0 1 4 0v4.1-6.4a2 2 0 0 1 4 0v6-7.1a2 2 0 0 1 4 0v7.6-5.1a2 2 0 0 1 4 0v10.4a10 10 0 0 1-10 10h-.4a8.4 8.4 0 0 1-7.7-5L3.9 18a2.2 2.2 0 0 1 3.9-2v-2.2Z" />}
+    </svg>
   </span>;
 }
 
@@ -66,10 +77,88 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
       if (grandfather) links.push([parentKey, `${parentKey}-gf`]);
       if (grandmother) links.push([parentKey, `${parentKey}-gm`]);
     }
-    return { focal, father, mother, spouses, children, siblings, childGroups, grandSlots, links };
+    // One more generation on each side, so panning after a re-center always
+    // has content to reveal: great-grandparents to the right, grandchildren
+    // to the left (recorded people only, no ghost slots at this depth).
+    const greatSlots: { person: Person; key: string }[] = [];
+    for (const slot of grandSlots) {
+      if (!slot.person) continue;
+      const greats = (maps.parentsOf.get(slot.person.id) ?? []).map(get).filter(Boolean) as Person[];
+      for (const great of greats) {
+        const key = `${slot.key}-${great.id}`;
+        greatSlots.push({ person: great, key });
+        links.push([slot.key, key]);
+      }
+    }
+    const grandkidGroups: { child: Person; kids: Person[] }[] = [];
+    for (const child of children) {
+      const kids = [...new Set(maps.childrenOf.get(child.id) ?? [])].map(get).filter(Boolean) as Person[];
+      if (!kids.length) continue;
+      kids.sort((a, b) => (Number(a.birthDate?.slice(0, 4)) || 9999) - (Number(b.birthDate?.slice(0, 4)) || 9999) || a.displayName.localeCompare(b.displayName));
+      grandkidGroups.push({ child, kids });
+      for (const kid of kids) links.push([`gc-${kid.id}`, `child-${child.id}`]);
+    }
+    return { focal, father, mother, spouses, children, siblings, childGroups, grandSlots, greatSlots, grandkidGroups, links };
   }, [maps, tree, focusId]);
+  const panRef = useRef<HTMLDivElement>(null);
+  const colRefs = useRef(new Map<string, HTMLDivElement>());
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [panMode, setPanMode] = useState<"idle" | "drag" | "glide">("idle");
+  const dragRef = useRef<{ id: number; x: number; y: number; panX: number; panY: number } | null>(null);
+  const pedCursorRef = useRef<HTMLSpanElement>(null);
+  const [cursorMode, setCursorMode] = useState<"grab" | "grabbing" | "pointer">("grab");
+  const positionPedCursor = (event: React.PointerEvent) => {
+    const cursor = pedCursorRef.current;
+    if (!cursor || event.pointerType === "touch") return;
+    cursor.style.left = `${event.clientX}px`;
+    cursor.style.top = `${event.clientY}px`;
+    cursor.dataset.visible = "true";
+    const target = event.target as Element;
+    setCursorMode(dragRef.current ? "grabbing" : target.closest?.("button, summary") ? "pointer" : "grab");
+  };
+  const hidePedCursor = () => {
+    if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
+  };
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => { setPan({ x: 0, y: 0 }); setPanMode("idle"); });
+    return () => cancelAnimationFrame(frame);
+  }, [focusId]);
+  const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button, summary, select, input, a")) return;
+    dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setPanMode("drag");
+    setCursorMode("grabbing");
+  };
+  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    positionPedCursor(event);
+    const drag = dragRef.current;
+    if (!drag || drag.id !== event.pointerId) return;
+    setPan({ x: drag.panX + event.clientX - drag.x, y: drag.panY + event.clientY - drag.y });
+  };
+  const endPan = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragRef.current = null;
+    setPanMode((mode) => (mode === "drag" ? "idle" : mode));
+    setCursorMode((event.target as Element).closest?.("button, summary") ? "pointer" : "grab");
+  };
+  const wheelPan = (event: React.WheelEvent<HTMLDivElement>) => {
+    setPanMode("idle");
+    setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
+  };
+  const centerColumn = (key: string) => {
+    const column = colRefs.current.get(key);
+    const stage = containerRef.current;
+    if (!column || !stage) return;
+    const stageRect = stage.getBoundingClientRect();
+    const colRect = column.getBoundingClientRect();
+    setPanMode("glide");
+    setPan((current) => ({
+      x: current.x + (stageRect.left + stageRect.width / 2) - (colRect.left + colRect.width / 2),
+      y: current.y,
+    }));
+  };
   useLayoutEffect(() => {
-    const container = containerRef.current;
+    const container = panRef.current;
     if (!container || !model) return;
     const draw = () => {
       const base = container.getBoundingClientRect();
@@ -91,23 +180,25 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
     return () => observer.disconnect();
   }, [model]);
   if (!model) return null;
-  const { focal, father, mother, spouses, children, siblings, childGroups, grandSlots } = model;
+  const { focal, father, mother, spouses, children, siblings, childGroups, grandSlots, greatSlots, grandkidGroups } = model;
   const statusOf = (spouse: Person) => maps.spouseStatus.get([focal.id, spouse.id].sort().join("|")) ?? null;
   const setRef = (key: string) => (element: HTMLDivElement | null) => {
     if (element) slotRefs.current.set(key, element);
     else slotRefs.current.delete(key);
   };
-  const card = (person: Person, key: string, size: "lg" | "md" | "sm", subtitle?: string) =>
-    <div ref={setRef(key)} className={`ped-card ped-card-${size} ${person.id === focal.id ? "is-focal" : ""}`} key={key}>
+  const card = (person: Person, key: string, size: "lg" | "md" | "sm", subtitle?: string) => {
+    const meta = [years(person), subtitle].filter(Boolean).join(" · ");
+    return <div ref={setRef(key)} className={`ped-card ped-card-${size} ${person.id === focal.id ? "is-focal" : ""}`} key={key}>
       <button type="button" onClick={() => onPick(person)}>
         {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
         <span className="ped-copy">
           <strong>{person.displayName}</strong>
-          <span>{years(person) || "dates unknown"}{subtitle ? ` · ${subtitle}` : ""}</span>
+          {meta && <span>{meta}</span>}
           {size === "lg" && place(person) && <span className="ped-place">{place(person)}</span>}
         </span>
       </button>
     </div>;
+  };
   const ghost = (label: string, key: string) =>
     <div ref={setRef(key)} className="ped-card ped-card-sm ped-ghost" key={key}>
       <button type="button" onClick={() => onOpen(focal)} title="Open the record to add this relative">＋ {label}</button>
@@ -120,38 +211,54 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
       </div>
       <p className="focus-hint">Click a person to center the tree on them and open their record.</p>
     </div>
-    <div className="ped-stage" ref={containerRef}>
-      <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
-      <div className="ped-columns">
-        <div className="ped-col ped-col-children">
-          <p className="ped-col-label">Children</p>
-          {children.length === 0 && <p className="ped-none">none recorded</p>}
-          {childGroups.map((group, index) => <div className="ped-group" key={index}>
-            {(childGroups.length > 1 || spouses.length > 1) && <p className="ped-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
-            {group.kids.map((child) => card(child, `child-${child.id}`, "md"))}
-          </div>)}
-        </div>
-        <div className="ped-col ped-col-focal">
-          <div className="ped-couple">
-            {card(focal, "focal", "lg")}
-            {spouses.map((spouse) => <div className="ped-spouse" key={spouse.id}><span className="ped-marriage">⚭</span>{card(spouse, `spouse-${spouse.id}`, "md", statusOf(spouse) ?? undefined)}</div>)}
+    <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
+      onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
+      onPointerEnter={positionPedCursor} onPointerLeave={hidePedCursor}>
+      <PedCursor mode={cursorMode} cursorRef={pedCursorRef} />
+      <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
+        <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
+        <div className="ped-columns">
+          {grandkidGroups.length > 0 && <div className="ped-col ped-col-grandkids" ref={(element) => { if (element) colRefs.current.set("grandkids", element); else colRefs.current.delete("grandkids"); }}>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("grandkids")}>Grandchildren</button>
+            {grandkidGroups.map((group) => <div className="ped-group" key={group.child.id}>
+              {grandkidGroups.length > 1 && <p className="ped-group-label">via {group.child.displayName}</p>}
+              {group.kids.map((kid) => card(kid, `gc-${kid.id}`, "sm"))}
+            </div>)}
+          </div>}
+          <div className="ped-col ped-col-children" ref={(element) => { if (element) colRefs.current.set("children", element); else colRefs.current.delete("children"); }}>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("children")}>Children</button>
+            {children.length === 0 && <p className="ped-none">none recorded</p>}
+            {childGroups.map((group, index) => <div className="ped-group" key={index}>
+              {(childGroups.length > 1 || spouses.length > 1) && <p className="ped-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
+              {group.kids.map((child) => card(child, `child-${child.id}`, "md"))}
+            </div>)}
           </div>
-          {siblings.length > 0 && <details className="ped-siblings">
-            <summary>Siblings ({siblings.length})</summary>
-            {siblings.map((sibling) => card(sibling, `sib-${sibling.id}`, "sm"))}
-          </details>}
-        </div>
-        <div className="ped-col ped-col-parents">
-          <p className="ped-col-label">Parents</p>
-          {father ? card(father, "p-father", "md") : ghost("Add father", "p-father")}
-          {mother ? card(mother, "p-mother", "md") : ghost("Add mother", "p-mother")}
-        </div>
-        <div className="ped-col ped-col-grand">
-          <p className="ped-col-label">Grandparents</p>
-          {grandSlots.length === 0 && <p className="ped-none">—</p>}
-          {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
-            {slot.person ? card(slot.person, slot.key, "sm") : ghost(slot.label, slot.key)}
-          </div>)}
+          <div className="ped-col ped-col-focal" ref={(element) => { if (element) colRefs.current.set("focal", element); else colRefs.current.delete("focal"); }}>
+            <div className="ped-couple">
+              {card(focal, "focal", "lg")}
+              {spouses.map((spouse) => <div className="ped-spouse" key={spouse.id}><span className="ped-marriage">⚭</span>{card(spouse, `spouse-${spouse.id}`, "md", statusOf(spouse) ?? undefined)}</div>)}
+            </div>
+            {siblings.length > 0 && <details className="ped-siblings" open>
+              <summary>Siblings ({siblings.length})</summary>
+              {siblings.map((sibling) => card(sibling, `sib-${sibling.id}`, "sm"))}
+            </details>}
+          </div>
+          <div className="ped-col ped-col-parents" ref={(element) => { if (element) colRefs.current.set("parents", element); else colRefs.current.delete("parents"); }}>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("parents")}>Parents</button>
+            {father ? card(father, "p-father", "md") : ghost("Add father", "p-father")}
+            {mother ? card(mother, "p-mother", "md") : ghost("Add mother", "p-mother")}
+          </div>
+          <div className="ped-col ped-col-grand" ref={(element) => { if (element) colRefs.current.set("grand", element); else colRefs.current.delete("grand"); }}>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("grand")}>Grandparents</button>
+            {grandSlots.length === 0 && <p className="ped-none">—</p>}
+            {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
+              {slot.person ? card(slot.person, slot.key, "sm") : ghost(slot.label, slot.key)}
+            </div>)}
+          </div>
+          {greatSlots.length > 0 && <div className="ped-col ped-col-great" ref={(element) => { if (element) colRefs.current.set("great", element); else colRefs.current.delete("great"); }}>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("great")}>Great-grandparents</button>
+            {greatSlots.map((slot) => card(slot.person, slot.key, "sm"))}
+          </div>}
         </div>
       </div>
     </div>
@@ -410,9 +517,9 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
           <button type="button" className="fill-row-head" onClick={() => { setExpandedId(open ? null : person.id); if (!open) seedForm(person); setNotice(""); }}>
             {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
             <span className="fill-cell">{name.first || "—"}</span>
-            <span className="fill-cell fill-cell-last"><strong>{name.last || "—"}</strong></span>
+            <span className="fill-cell fill-cell-last">{name.last || "—"}</span>
             <span className="fill-cell fill-cell-year">{fillBirthYear(person) ?? "—"}</span>
-            <span className="fill-cell fill-cell-gen">{generation + 1}</span>
+            <span className="fill-cell fill-cell-gen" title={(maps.parentsOf.get(person.id) ?? []).length || (maps.childrenOf.get(person.id) ?? []).length ? undefined : "Placed by marriage — no recorded parents or children"}>{(maps.parentsOf.get(person.id) ?? []).length || (maps.childrenOf.get(person.id) ?? []).length ? generation + 1 : `~${generation + 1}`}</span>
             <span className="fill-row-missing">{missingOf(person).join(" · ")}</span>
           </button>
           {open && <div className="fill-fields">
@@ -428,6 +535,7 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
             {person.biography && <p className="fill-bio">{person.biography}</p>}
             <div className="fill-actions">
               <button type="button" className="fill-save" disabled={busy} onClick={() => save(person)}>{busy ? "Saving…" : "Save"}</button>
+              <button type="button" className="fill-skip" onClick={() => { setExpandedId(null); setForm({}); setNotice(""); }}>Cancel</button>
               <button type="button" className="fill-skip" onClick={() => onOpen(person)}>Open full record</button>
             </div>
           </div>}

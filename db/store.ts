@@ -43,7 +43,7 @@ const schemaStatements = [
 export async function ensureSchema() {
   if (initialized) return;
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
-  for (const column of ["birth_city", "birth_country", "death_city", "death_country", "gender"]) {
+  for (const column of ["birth_city", "birth_country", "death_city", "death_country", "gender", "maiden_name"]) {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
   try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
@@ -108,6 +108,9 @@ export async function setSiteVisibility(value: SiteVisibility, actorEmail: strin
 /** First sign-in of an unknown identity registers it as a viewer, so every
  * account exists in the member list for admins to see and promote. */
 export async function registerViewer(email: string) {
+  // "Only people I add": while the site is members-only, sign-ins do not
+  // self-register - the admins add each email themselves.
+  if ((await getSiteVisibility()) === "members") return;
   const canonical = await resolveMemberEmail(email);
   const existing = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(canonical).first<{ role: MemberRole }>();
   if (existing) return;
@@ -129,7 +132,7 @@ export async function listMembers(): Promise<Member[]> {
   ]);
   return members.results.map((member) => ({
     ...member,
-    links: links.results.filter((link) => link.memberEmail === member.email).map((link) => ({ email: link.email, provider: link.provider })),
+    links: links.results.filter((link) => link.memberEmail === member.email && link.email !== member.email).map((link) => ({ email: link.email, provider: link.provider })),
   }));
 }
 
@@ -144,8 +147,27 @@ export async function resolveMemberEmail(email: string): Promise<string> {
 
 export async function listLinksFor(memberEmail: string): Promise<MemberIdentity[]> {
   await ensureSchema();
-  const result = await env.DB.prepare("SELECT email, provider FROM member_links WHERE member_email = ? ORDER BY created_at").bind(memberEmail.toLowerCase()).all<MemberIdentity>();
+  const result = await env.DB.prepare("SELECT email, provider FROM member_links WHERE member_email = ? AND email != member_email ORDER BY created_at").bind(memberEmail.toLowerCase()).all<MemberIdentity>();
   return result.results;
+}
+
+/** Every provider this account has signed in with - from link rows and the
+ * self-row that recordSignInProvider keeps for the primary identity. */
+export async function listConnectedProviders(memberEmail: string): Promise<string[]> {
+  await ensureSchema();
+  const result = await env.DB.prepare("SELECT DISTINCT provider FROM member_links WHERE member_email = ? AND provider IS NOT NULL").bind(memberEmail.toLowerCase()).all<{ provider: string }>();
+  return result.results.map((row) => row.provider);
+}
+
+/** A self-row (email = member_email) records which provider an identity uses
+ * without affecting resolution; linkIdentity re-points it when the identity
+ * later joins another account. */
+export async function recordSignInProvider(email: string, provider: string) {
+  await ensureSchema();
+  const normalized = email.toLowerCase();
+  const canonical = await resolveMemberEmail(normalized);
+  await env.DB.prepare(`INSERT INTO member_links (email, member_email, provider, created_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET provider = excluded.provider`).bind(normalized, canonical, provider, new Date().toISOString()).run();
 }
 
 export async function getMemberRole(email: string): Promise<MemberRole | null> {
@@ -166,7 +188,7 @@ export async function linkIdentity(identityEmail: string, memberEmail: string, p
   const existing = await env.DB.prepare("SELECT member_email AS memberEmail FROM member_links WHERE email = ?").bind(identity).first<{ memberEmail: string }>();
   if (existing) {
     if (existing.memberEmail === canonical) return;
-    throw new Error("identity_linked_elsewhere");
+    if (existing.memberEmail !== identity) throw new Error("identity_linked_elsewhere");
   }
   const now = new Date().toISOString();
   const identityRow = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(identity).first<{ role: MemberRole }>();
@@ -178,7 +200,8 @@ export async function linkIdentity(identityEmail: string, memberEmail: string, p
     statements.push(env.DB.prepare("UPDATE member_links SET member_email = ? WHERE member_email = ?").bind(canonical, identity));
     statements.push(env.DB.prepare("DELETE FROM members WHERE email = ?").bind(identity));
   }
-  statements.push(env.DB.prepare("INSERT INTO member_links (email, member_email, provider, created_at) VALUES (?, ?, ?, ?)").bind(identity, canonical, provider, now));
+  statements.push(env.DB.prepare(`INSERT INTO member_links (email, member_email, provider, created_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET member_email = excluded.member_email, provider = COALESCE(member_links.provider, excluded.provider)`).bind(identity, canonical, provider, now));
   statements.push(env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(crypto.randomUUID(), actorEmail, "member_link", `Linked ${identity} to ${canonical} as one account`, JSON.stringify({ email: identity, memberEmail: canonical, provider, merged: Boolean(identityRow) }), now));
   await env.DB.batch(statements);
@@ -231,7 +254,7 @@ export async function readTree(): Promise<FamilyTree> {
   await ensureSchema();
   const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult, storyAttachmentsResult] = await Promise.all([
     env.DB.prepare(`SELECT id, display_name AS displayName, gender, given_name AS givenName,
-      family_name AS familyName, birth_date AS birthDate, death_date AS deathDate,
+      family_name AS familyName, maiden_name AS maidenName, birth_date AS birthDate, death_date AS deathDate,
       birth_place AS birthPlace, death_place AS deathPlace, birth_city AS birthCity, birth_country AS birthCountry,
       death_city AS deathCity, death_country AS deathCountry, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
     env.DB.prepare(`SELECT id, from_person_id AS fromPersonId, to_person_id AS toPersonId,
@@ -294,7 +317,7 @@ function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   const displayName = typeof input.displayName === "string" ? input.displayName.trim() : "";
   if (!displayName) throw new Error("A person needs a display name.");
   return {
-    displayName, gender: input.gender === "male" || input.gender === "female" ? input.gender : null, givenName: nullable(input.givenName), familyName: nullable(input.familyName),
+    displayName, gender: input.gender === "male" || input.gender === "female" ? input.gender : null, givenName: nullable(input.givenName), familyName: nullable(input.familyName), maidenName: nullable(input.maidenName),
     birthDate: nullable(input.birthDate), deathDate: nullable(input.deathDate),
     birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), birthCity: nullable(input.birthCity), birthCountry: nullable(input.birthCountry), deathCity: nullable(input.deathCity), deathCountry: nullable(input.deathCountry), biography: nullable(input.biography), photoAttachmentId: nullable(input.photoAttachmentId),
   };
@@ -310,15 +333,15 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
     const personId = crypto.randomUUID(); addedPersonId = personId;
     statements.push(env.DB.prepare(`INSERT INTO people
-      (id, display_name, gender, given_name, family_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, biography, photo_attachment_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .bind(personId, person.displayName, person.gender, person.givenName, person.familyName, person.birthDate,
+      (id, display_name, gender, given_name, family_name, maiden_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, biography, photo_attachment_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(personId, person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate,
         person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, now));
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
-    statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, birth_date = ?,
+    statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, maiden_name = ?, birth_date = ?,
       death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
-      .bind(person.displayName, person.gender, person.givenName, person.familyName, person.birthDate, person.deathDate,
+      .bind(person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate, person.deathDate,
         person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "delete_person") {
     statements.push(

@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createSession, sessionCookie, verifyToken } from "../../../../apple-auth";
-import { linkIdentity, registerViewer } from "../../../../../db/store";
+import { linkIdentity, recordSignInProvider, registerViewer } from "../../../../../db/store";
 
 type State = { nonce: string; returnTo: string; linkTo?: string; exp: number };
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
@@ -45,6 +45,7 @@ export async function GET(request: Request) {
     // Anyone may sign in; a first sign-in registers the account as a viewer
     // and admins assign roles from there.
     await registerViewer(email);
+    await recordSignInProvider(email, "google");
     const session = await createSession({ subject: `google:${payload.sub}`, email, displayName });
     const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
     response.headers.append("set-cookie", sessionCookie(session));

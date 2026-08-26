@@ -56,11 +56,14 @@ test("a person card opens a navigable record", async ({ page }) => {
   await expect(page.locator(".person-modal-v2 h2")).toBeVisible();
 });
 
-test("canvas accepts wheel zoom without scrolling the document", async ({ page }) => {
+test("canvas wheel pans the camera without scrolling the document", async ({ page }) => {
   await openFullTree(page);
   const canvas = page.locator(".family-canvas");
   await canvas.hover();
+  const before = await page.locator(".tree-viewport").evaluate((element) => element.style.transform);
   await page.mouse.wheel(0, -300);
+  await expect.poll(() => page.locator(".tree-viewport").evaluate((element) => element.style.transform)).not.toBe(before);
+  await expect(page.locator(".canvas-zoom-level")).toHaveText("100%");
   await expect(canvas).toHaveCSS("touch-action", "none");
   await expect(page.locator("html")).toHaveCSS("overscroll-behavior", "none");
 });

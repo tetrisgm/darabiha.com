@@ -7,7 +7,7 @@ type Role = "admin" | "editor" | "viewer" | null;
 type Identity = { email: string; provider: string | null };
 type Member = { email: string; role: "admin" | "editor" | "viewer"; addedBy: string; createdAt: string; links: Identity[] };
 type Props = {
-  viewer: { signedIn: boolean; email: string | null; accountEmail: string | null; displayName: string | null; role: Role; links: Identity[] };
+  viewer: { signedIn: boolean; email: string | null; accountEmail: string | null; displayName: string | null; role: Role; links: Identity[]; connectedProviders: string[] };
   siteVisibility: "public" | "members" | null;
   appleSignInPath: string;
   googleSignInPath: string | null;
@@ -66,14 +66,13 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
     }
   };
 
+  const roleRank: Record<string, number> = { admin: 0, editor: 1, viewer: 2 };
   return <main className="settings-page">
     <header className="settings-masthead">
-      <Link className="settings-wordmark" href="/">Darabiha</Link>
-      <Link className="settings-back" href="/">← Back to the tree</Link>
+      <Link className="settings-back-pill" href="/">← Back to the family tree</Link>
     </header>
     <section className="settings-panel">
-      <p className="eyebrow settings-eyebrow">Site settings</p>
-      <h1>Access &amp; members</h1>
+      <h1>Settings</h1>
 
       {authError && <p className="settings-error">{authError}</p>}
 
@@ -85,18 +84,15 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         </div>
       </div>}
 
-      {viewer.signedIn && <div className="settings-card settings-identity">
-        <div>
-          <strong>{viewer.displayName ?? viewer.email}</strong>
-          <span>{viewer.email}{viewer.accountEmail && viewer.accountEmail !== viewer.email ? ` \u00b7 account ${viewer.accountEmail}` : ""}</span>
-        </div>
-        <span className={`settings-role-badge is-${viewer.role ?? "none"}`}>{viewer.role ?? "no access"}</span>
-        <a className="settings-signout" href={signOutPath}>Sign out</a>
-      </div>}
-
       {viewer.signedIn && <div className="settings-card">
-        <h2>Linked sign-ins</h2>
-        <p className="settings-hint">Link your Apple and Google sign-ins so either one lands in this same account — linking works by completing the other provider&rsquo;s sign-in once. The × disconnects a linked sign-in again.</p>
+        <div className="settings-identity">
+          <div>
+            <strong>{viewer.displayName ?? viewer.email}</strong>
+            <span>{viewer.email}{viewer.accountEmail && viewer.accountEmail !== viewer.email ? ` \u00b7 account ${viewer.accountEmail}` : ""}</span>
+          </div>
+          <span className={`settings-role-badge is-${viewer.role ?? "none"}`}>{viewer.role ?? "no access"}</span>
+          <a className="settings-signout" href={signOutPath}>Sign out</a>
+        </div>
         <ul className="settings-identity-list">
           <li><span className="settings-member-email">{viewer.accountEmail}</span><span className="settings-provider">primary</span></li>
           {viewer.links.map((link) => <li key={link.email}>
@@ -113,10 +109,10 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
               }}>×</button>
           </li>)}
         </ul>
-        <div className="settings-signin-row">
-          <a className="settings-signin" href={`${appleSignInPath}&link=1`}> Link an Apple sign-in</a>
-          {googleSignInPath && <a className="settings-signin is-google" href={`${googleSignInPath}&link=1`}><span aria-hidden="true">G</span> Link a Google sign-in</a>}
-        </div>
+        {(!viewer.connectedProviders.includes("apple") || (googleSignInPath && !viewer.connectedProviders.includes("google"))) && <div className="settings-signin-row">
+          {!viewer.connectedProviders.includes("apple") && <a className="settings-signin" href={`${appleSignInPath}&link=1`}> Link an Apple sign-in</a>}
+          {googleSignInPath && !viewer.connectedProviders.includes("google") && <a className="settings-signin is-google" href={`${googleSignInPath}&link=1`}><span aria-hidden="true">G</span> Link a Google sign-in</a>}
+        </div>}
       </div>}
 
       {viewer.signedIn && viewer.role === null && <div className="settings-card">
@@ -131,11 +127,10 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         <p>You can edit the archive — add people, correct records, and attach photos. Managing who has access is reserved for admins.</p>
       </div>}
 
-      {viewer.role === "admin" && visibility && <div className="settings-card">
-        <h2>Site access</h2>
-        <p className="settings-hint">Who can see the archive. Editing is always limited to editors and admins.</p>
-        <div className="settings-visibility">
-          {([["public", "Anyone can visit", "The tree is open to anyone with the link."], ["members", "Visitors must sign in", "First-time visitors sign in with Apple or Google and join as viewers; you can remove anyone below."]] as const).map(([value, label, detail]) =>
+      {viewer.role === "admin" && <div className="settings-card">
+        <h2>Members &amp; access</h2>
+        {visibility && <div className="settings-visibility">
+          {([["public", "Anyone can visit", "The tree is open to anyone with the link."], ["members", "Only people I add", "Visitors must sign in, and only the people listed below can see the archive."]] as const).map(([value, label, detail]) =>
             <button type="button" key={value} className={`settings-visibility-option ${visibility === value ? "is-active" : ""}`} disabled={busy}
               onClick={async () => {
                 if (visibility === value) return;
@@ -155,16 +150,12 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
               <strong>{label}</strong>
               <span>{detail}</span>
             </button>)}
-        </div>
-      </div>}
-
-      {viewer.role === "admin" && <div className="settings-card">
-        <h2>Members</h2>
-        <p className="settings-hint">Everyone who signs in appears here as a viewer. Viewers can browse, editors can change the family records, and admins manage this page.</p>
+        </div>}
+        <p className="settings-hint">Admins manage everything, editors can change the family records, viewers can only browse.</p>
         {notice && <p className="settings-error">{notice}</p>}
         {!members && <p className="settings-hint">Loading the member list…</p>}
         {members && <ul className="settings-members">
-          {members.map((member) => <li key={member.email}>
+          {[...members].sort((a, b) => (roleRank[a.role] ?? 9) - (roleRank[b.role] ?? 9) || a.email.localeCompare(b.email)).map((member) => <li key={member.email}>
             <span className="settings-member-email">
               {member.email}{member.email === viewer.accountEmail ? <em> · you</em> : null}
               {member.links.length > 0 && <span className="settings-member-links">

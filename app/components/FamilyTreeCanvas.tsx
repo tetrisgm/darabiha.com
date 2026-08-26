@@ -271,15 +271,21 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     setIsPanning(false);
     setCursorMode((event.target as Element).closest?.(".tree-card") ? "pointer" : "grab");
   };
-  const zoom = (event: React.WheelEvent<HTMLDivElement>) => {
+  // Two-finger trackpad scroll pans the camera; a pinch arrives as a wheel
+  // event with ctrlKey (metaKey kept for keyboard-modified zoom) and zooms.
+  const wheel = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const factor = event.deltaY > 0 ? .92 : 1.08;
-    const rect = event.currentTarget.getBoundingClientRect();
-    setView((current) => {
-      const cx = event.clientX - rect.left - rect.width / 2;
-      const cy = event.clientY - rect.top - rect.height / 2;
-      return zoomView(current, factor, { x: cx, y: cy });
-    });
+    if (event.ctrlKey || event.metaKey) {
+      const factor = event.deltaY > 0 ? .92 : 1.08;
+      const rect = event.currentTarget.getBoundingClientRect();
+      setView((current) => {
+        const cx = event.clientX - rect.left - rect.width / 2;
+        const cy = event.clientY - rect.top - rect.height / 2;
+        return zoomView(current, factor, { x: cx, y: cy });
+      });
+    } else {
+      setView((current) => ({ ...current, x: current.x - event.deltaX, y: current.y - event.deltaY }));
+    }
   };
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
@@ -294,7 +300,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       <div className="canvas-hit-surface" aria-hidden="true" />
     </div>;
   }
-  return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} data-custom-cursor="true" data-interactive="true" data-panning={isPanning ? "true" : "false"} style={{ cursor: isPanning ? "grabbing" : "grab" }} onKeyDown={keyDown} onPointerEnter={positionCursor} onPointerLeave={hideCursor} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onWheel={zoom}>
+  return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} data-custom-cursor="true" data-interactive="true" data-panning={isPanning ? "true" : "false"} style={{ cursor: isPanning ? "grabbing" : "grab" }} onKeyDown={keyDown} onPointerEnter={positionCursor} onPointerLeave={hideCursor} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onWheel={wheel}>
     <div className="canvas-hit-surface" aria-hidden="true" style={{ cursor: isPanning ? "grabbing" : "grab" }} />
     <div className="canvas-legend" aria-hidden="true"><i className="legend-swatch legend-parent" /> parent <i className="legend-swatch legend-marriage" /> marriage</div>
     <div className="canvas-controls" role="group" aria-label="Canvas zoom controls">

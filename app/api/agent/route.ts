@@ -151,6 +151,7 @@ function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
     gender: args.gender as "male" | "female" | null,
     givenName: args.given_name as string | null,
     familyName: args.family_name as string | null,
+  maidenName: (args.maiden_name as string | null) ?? null,
     birthDate: args.birth_date as string | null,
     deathDate: args.death_date as string | null,
     birthPlace: args.birth_place as string | null,

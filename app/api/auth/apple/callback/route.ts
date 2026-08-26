@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from "jose";
 import { createSession, sessionCookie, verifyToken } from "../../../../apple-auth";
-import { linkIdentity, registerViewer } from "../../../../../db/store";
+import { linkIdentity, recordSignInProvider, registerViewer } from "../../../../../db/store";
 
 type State = { nonce: string; returnTo: string; linkTo?: string; exp: number };
 const appleKeys = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     // Anyone may sign in; a first sign-in registers the account as a viewer
     // and admins assign roles from there.
     await registerViewer(email);
+    await recordSignInProvider(email, "apple");
     const session = await createSession({ subject: payload.sub, email, displayName: email.split("@")[0] });
     const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
     response.headers.append("set-cookie", sessionCookie(session));

@@ -14,6 +14,7 @@ function mergePerson(existing: Omit<Person, "id">, incoming: AddPersonProposal["
     gender: incoming.gender ?? existing.gender,
     givenName: incoming.givenName ?? existing.givenName,
     familyName: incoming.familyName ?? existing.familyName,
+  maidenName: incoming.maidenName ?? existing.maidenName,
     birthDate: incoming.birthDate ?? existing.birthDate,
     deathDate: incoming.deathDate ?? existing.deathDate,
     birthPlace: incoming.birthPlace ?? existing.birthPlace,

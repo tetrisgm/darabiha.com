@@ -4,6 +4,7 @@ export type Person = {
   gender?: "male" | "female" | null;
   givenName: string | null;
   familyName: string | null;
+  maidenName: string | null;
   birthDate: string | null;
   deathDate: string | null;
   birthPlace: string | null;
