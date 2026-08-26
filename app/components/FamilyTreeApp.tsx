@@ -199,7 +199,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       {authError && <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-center text-sm text-red-900">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <header className={`site-action-bar absolute top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8 ${chatCollapsed ? "is-chat-collapsed" : ""}`}>
-        <p className="text-base font-semibold tracking-[-.01em]">Darabiha</p>
+        <button type="button" className="site-wordmark text-base font-semibold tracking-[-.01em]" onClick={() => setViewMode("family")} aria-label="Go to the Family view">Darabiha</button>
         <nav className="archive-view-switcher" aria-label="Archive view">{VIEW_MODES.map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{VIEW_LABELS[mode]}</button>)}</nav>
         <div className="relative flex items-center gap-4">
           <TreeSearch tree={tree} onPick={(person) => openPerson(person)} />

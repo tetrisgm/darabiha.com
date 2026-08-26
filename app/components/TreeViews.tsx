@@ -1,8 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
-import { buildRelationMaps } from "../../lib/tree-layout";
+import { buildGenerations, buildRelationMaps } from "../../lib/tree-layout";
 
 function years(person: Person | undefined) {
   if (!person) return "";
@@ -262,17 +262,28 @@ export function TreeSearch({ tree, onPick }: { tree: FamilyTree; onPick: (person
 
 /** Every incomplete record as a browsable, searchable list of cards; click
  * one to fill its missing details in place. */
+type FillSortKey = "first" | "last" | "birth" | "generation" | "missing";
+
+/** "First name" is everything before the final token; the final token is the
+ * family name. Single-token names have no family name and sort last. */
+function fillNameParts(person: Person) {
+  const tokens = person.displayName.trim().split(/\s+/);
+  return tokens.length > 1 ? { first: tokens.slice(0, -1).join(" "), last: tokens[tokens.length - 1] } : { first: tokens[0] ?? "", last: "" };
+}
+
+function fillBirthYear(person: Person) {
+  const match = (person.birthDate ?? "").match(/\d{4}/);
+  return match ? Number(match[0]) : null;
+}
+
 export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; onSaved: (tree: FamilyTree) => void; onOpen: (person: Person) => void }) {
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
-  const generationOf = useMemo(() => {
-    const depth = new Map(tree.people.map((person) => [person.id, 0]));
-    for (let pass = 0; pass < tree.people.length; pass += 1) {
-      for (const [child, parents] of maps.parentsOf) {
-        for (const parent of parents) depth.set(child, Math.max(depth.get(child) ?? 0, (depth.get(parent) ?? 0) + 1));
-      }
-    }
-    return depth;
-  }, [tree, maps]);
+  // Spouse-aware rows: a married-in relative with no recorded parents stands
+  // on their spouse's generation, not on the founders' row.
+  const generationOf = useMemo(() => buildGenerations(tree).depth, [tree]);
+  const [sortKey, setSortKey] = useState<FillSortKey>("last");
+  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const [genFilter, setGenFilter] = useState("");
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -294,11 +305,30 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
     if (!person.photoAttachmentId) missing.push("photo");
     return missing;
   };
-  const incomplete = tree.people
-    .filter((person) => missingOf(person).length > 0)
-    .sort((a, b) => (generationOf.get(b.id) ?? 0) - (generationOf.get(a.id) ?? 0) || a.displayName.localeCompare(b.displayName));
+  const nameOrder = (a: Person, b: Person) => {
+    const na = fillNameParts(a), nb = fillNameParts(b);
+    return na.last.localeCompare(nb.last) || na.first.localeCompare(nb.first);
+  };
+  const compare = (a: Person, b: Person): number => {
+    if (sortKey === "birth") {
+      const ya = fillBirthYear(a), yb = fillBirthYear(b);
+      // unknown years sink to the bottom in either direction
+      if (ya === null || yb === null) return ya === yb ? nameOrder(a, b) : ya === null ? 1 : -1;
+      return (ya - yb) * sortDir || nameOrder(a, b);
+    }
+    if (sortKey === "generation") return ((generationOf.get(a.id) ?? 0) - (generationOf.get(b.id) ?? 0)) * sortDir || nameOrder(a, b);
+    if (sortKey === "missing") return (missingOf(a).length - missingOf(b).length) * sortDir || nameOrder(a, b);
+    const na = fillNameParts(a), nb = fillNameParts(b);
+    if (sortKey === "first") return na.first.localeCompare(nb.first) * sortDir || na.last.localeCompare(nb.last);
+    if (!na.last !== !nb.last) return na.last ? -1 : 1;
+    return na.last.localeCompare(nb.last) * sortDir || na.first.localeCompare(nb.first);
+  };
+  const incomplete = tree.people.filter((person) => missingOf(person).length > 0).sort(compare);
+  const generations = [...new Set(incomplete.map((person) => generationOf.get(person.id) ?? 0))].sort((a, b) => a - b);
   const needle = query.trim().toLocaleLowerCase();
-  const visible = needle ? incomplete.filter((person) => person.displayName.toLocaleLowerCase().includes(needle)) : incomplete;
+  const visible = incomplete.filter((person) =>
+    (!needle || person.displayName.toLocaleLowerCase().includes(needle)) &&
+    (genFilter === "" || String(generationOf.get(person.id) ?? 0) === genFilter));
   const complete = tree.people.length - incomplete.length;
   const context = (person: Person) => {
     const parents = (maps.parentsOf.get(person.id) ?? []).map((id) => maps.byId.get(id)?.displayName).filter(Boolean);
@@ -346,21 +376,41 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
       <strong>{complete}</strong> of {tree.people.length} records are complete · <strong>{incomplete.length}</strong> with gaps
       {notice && <span className="fill-notice"> · {notice}</span>}
     </div>
-    <input className="fill-search" type="search" placeholder="Find a person to fill in…" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Find a person to fill in" />
+    <div className="fill-controls">
+      <input className="fill-search" type="search" placeholder="Find a person to fill in…" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Find a person to fill in" />
+      <select className="fill-gen-filter" value={genFilter} onChange={(event) => setGenFilter(event.target.value)} aria-label="Filter by generation">
+        <option value="">All generations</option>
+        {generations.map((generation) => <option key={generation} value={String(generation)}>Generation {generation + 1}{generation === 0 ? " · eldest" : ""}</option>)}
+      </select>
+    </div>
+    <div className="fill-table-head" aria-hidden="true">
+      <span />
+      {([["first", "First name"], ["last", "Last name"], ["birth", "Born"], ["generation", "Gen"], ["missing", "Missing"]] as [FillSortKey, string][]).map(([key, label]) =>
+        <button type="button" key={key} className={`fill-th fill-th-${key} ${sortKey === key ? "is-active" : ""}`}
+          onClick={() => { if (sortKey === key) setSortDir(sortDir === 1 ? -1 : 1); else { setSortKey(key); setSortDir(1); } }}>
+          {label}{sortKey === key && <span className="fill-th-dir">{sortDir === 1 ? "▲" : "▼"}</span>}
+        </button>)}
+    </div>
     <div className="fill-list">
-      {visible.length === 0 && <p className="fill-done">No matching incomplete records{needle ? " — try another name" : ". Everything is filled in!"}</p>}
-      {visible.map((person) => {
+      {visible.length === 0 && <p className="fill-done">No matching incomplete records{needle || genFilter ? " — try another name or generation" : ". Everything is filled in!"}</p>}
+      {visible.map((person, index) => {
         const open = expandedId === person.id;
-        return <div className={`fill-row ${open ? "is-open" : ""}`} key={person.id}>
+        const generation = generationOf.get(person.id) ?? 0;
+        const previous = index > 0 ? generationOf.get(visible[index - 1].id) ?? 0 : null;
+        const name = fillNameParts(person);
+        return <Fragment key={person.id}>
+        {sortKey === "generation" && generation !== previous && <p className="fill-gen-head">Generation {generation + 1}{generation === 0 ? " · eldest" : ""}</p>}
+        <div className={`fill-row ${open ? "is-open" : ""}`}>
           <button type="button" className="fill-row-head" onClick={() => { setExpandedId(open ? null : person.id); if (!open) seedForm(person); setNotice(""); }}>
             {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
-            <span className="fill-row-copy">
-              <strong>{person.displayName}</strong>
-              <span>{context(person)}</span>
-            </span>
+            <span className="fill-cell">{name.first || "—"}</span>
+            <span className="fill-cell fill-cell-last"><strong>{name.last || "—"}</strong></span>
+            <span className="fill-cell fill-cell-year">{fillBirthYear(person) ?? "—"}</span>
+            <span className="fill-cell fill-cell-gen">{generation + 1}</span>
             <span className="fill-row-missing">{missingOf(person).join(" · ")}</span>
           </button>
           {open && <div className="fill-fields">
+            <p className="fill-context">{context(person)}</p>
             <div className="fill-field"><label>Name</label>{field("displayName", "Full name")}</div>
             <div className="fill-field"><label>Gender{person.gender ? "" : " · missing"}</label><div className="fill-gender">
               {(["female", "male"] as const).map((option) => <button key={option} type="button" className={form.gender === option ? "is-active" : ""} onClick={() => setForm({ ...form, gender: form.gender === option ? "" : option })}>{option === "female" ? "♀ Female" : "♂ Male"}</button>)}
@@ -375,9 +425,10 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
               <button type="button" className="fill-skip" onClick={() => onOpen(person)}>Open full record</button>
             </div>
           </div>}
-        </div>;
+        </div>
+        </Fragment>;
       })}
     </div>
-    <p className="fill-footnote">Youngest generations first — the people the family knows best. Photos can be added from the full record. Everything saved here flows into the tree, the timeline, and the map.</p>
+    <p className="fill-footnote">Sorted by family name — click a column heading to sort by first name, birth year, generation, or what’s missing, and filter to work through one generation at a time. Photos can be added from the full record. Everything saved here flows into the tree, the timeline, and the map.</p>
   </section>;
 }

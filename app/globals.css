@@ -447,18 +447,31 @@ button { cursor: pointer; }
 .tree-card-portrait svg { width:66%; height:66%; }
 .tree-card-portrait circle, .tree-card-portrait path { fill:currentColor; }
 
-/* fill-in list */
-.fill-search { width:min(34rem,100%); border:1px solid var(--line); border-radius:999px; padding:.55rem 1rem; font-size:.9rem; background:white; }
-.fill-list { width:min(40rem,100%); display:flex; flex-direction:column; gap:.45rem; }
+/* fill-in table */
+.fill-view { --fill-cols: 2.2rem minmax(0,1.1fr) minmax(0,1fr) 3.4rem 2.4rem minmax(7rem,1.1fr); }
+.fill-controls { width:min(52rem,100%); display:flex; align-items:center; gap:.6rem; }
+.fill-search { flex:1; min-width:0; border:1px solid var(--line); border-radius:999px; padding:.55rem 1rem; font-size:.9rem; background:white; }
+.fill-gen-filter { border:1px solid var(--line); border-radius:999px; padding:.5rem .9rem; font-size:.82rem; background:white; color:var(--ink); }
+.fill-table-head { width:min(52rem,100%); display:grid; grid-template-columns:var(--fill-cols); gap:.7rem; align-items:center; padding:0 .9rem; margin-bottom:-.6rem; }
+.fill-th { display:inline-flex; align-items:center; gap:.3rem; padding:.3rem 0; font-size:.62rem; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); text-align:left; justify-self:start; }
+.fill-th:hover { color:var(--ink); }
+.fill-th.is-active { color:var(--accent); }
+.fill-th-dir { font-size:.5rem; }
+.fill-list { width:min(52rem,100%); display:flex; flex-direction:column; gap:.45rem; }
 .fill-row { border:1px solid rgba(84,111,100,.22); border-radius:.9rem; background:rgba(255,255,255,.95); }
 .fill-row.is-open { border-color:var(--accent); box-shadow:0 12px 34px rgba(45,72,57,.12); }
-.fill-row-head { display:flex; width:100%; align-items:center; gap:.7rem; padding:.6rem .9rem; text-align:left; }
+.fill-row-head { display:grid; width:100%; grid-template-columns:var(--fill-cols); align-items:center; gap:.7rem; padding:.6rem .9rem; text-align:left; }
 .fill-row-head .ped-portrait { height:2rem; width:2rem; flex:none; }
-.fill-row-copy { display:flex; flex-direction:column; min-width:0; flex:1; }
-.fill-row-copy strong { font-size:.86rem; }
-.fill-row-copy span { color:var(--muted); font-size:.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.fill-row-missing { color:#a05e18; font-size:.66rem; font-weight:600; text-align:right; flex:none; max-width:9rem; }
+.fill-cell { font-size:.86rem; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fill-cell-year, .fill-cell-gen { color:var(--muted); font-size:.8rem; font-variant-numeric:tabular-nums; }
+.fill-gen-head { width:min(52rem,100%); padding:.8rem .2rem 0; font-size:.68rem; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
+.fill-row-missing { color:#a05e18; font-size:.66rem; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.fill-context { color:var(--muted); font-size:.74rem; margin-bottom:.5rem; }
 .fill-row .fill-fields { padding:0 .9rem .8rem; border-top:1px dashed var(--line); margin-top:.1rem; padding-top:.7rem; }
+@media (max-width: 768px) {
+  .fill-view { --fill-cols: 2.2rem minmax(0,1.1fr) minmax(0,1fr) 3.4rem; }
+  .fill-th-generation, .fill-cell-gen, .fill-th-missing, .fill-row-missing { display:none; }
+}
 
 /* ============ design pass: editorial warmth, depth, and motion ============ */
 
@@ -470,8 +483,9 @@ button { cursor: pointer; }
 body { font-family: var(--font-sans), "Avenir Next", sans-serif; -webkit-font-smoothing: antialiased; }
 h1, h2, h3 { text-wrap: balance; }
 .eyebrow { letter-spacing:.16em; font-size:.62rem; }
-.ped-copy > span, .fill-row-copy span, .outline-years, .tree-card-copy span, .person-facts, .fact-line { font-variant-numeric: tabular-nums; }
-.site-action-bar p.text-base { font-family: var(--font-serif), Georgia, serif; font-size:1.35rem; font-weight:600; letter-spacing:.01em; }
+.ped-copy > span, .fill-cell, .outline-years, .tree-card-copy span, .person-facts, .fact-line { font-variant-numeric: tabular-nums; }
+.site-action-bar .site-wordmark { font-family: var(--font-serif), Georgia, serif; font-size:1.35rem; font-weight:600; letter-spacing:.01em; color:var(--ink); }
+.site-action-bar .site-wordmark:hover { color:var(--accent); }
 
 /* floating island header */
 .site-action-bar { left:446px; right:16px; top:12px; height:3.4rem; border:1px solid rgba(0,0,0,.06); border-bottom:1px solid rgba(0,0,0,.06);
