@@ -103,7 +103,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   // couple's gap, the dash pattern, and every bar length look the same on
   // every screen size; the viewport transform provides pan and zoom.
   const { positions, spouseLines, hooks } = useMemo(() => {
-    if (!ready) return { positions: new Map<string, { x: number; y: number }>(), spouseLines: [] as { id: string; path: string }[], hooks: [] as never[] };
+    if (!ready) return { positions: new Map<string, { x: number; y: number }>(), spouseLines: [] as { id: string; path: string; status: string | null }[], hooks: [] as never[] };
     const SLOT = 270, ROW = 190;
     const tree = visibleTree;
     const layout = buildFamilyLayout(tree);

@@ -178,7 +178,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       const data = await response.json() as { tree?: FamilyTree; error?: string };
       if (!response.ok || !data.tree) throw new Error(data.error || "change_failed");
       setTree(data.tree);
-      const appliedPersonId = item.proposal.kind === "add_person" ? data.tree.people.find((person) => person.displayName === item.proposal.person.displayName)?.id : undefined;
+      const proposal = item.proposal;
+      const appliedPersonId = proposal.kind === "add_person" ? data.tree.people.find((person) => person.displayName === proposal.person.displayName)?.id : undefined;
       setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "applied", appliedPersonId } : candidate));
       return { tree: data.tree };
     } catch (error) {

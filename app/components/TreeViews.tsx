@@ -158,6 +158,27 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
   </section>;
 }
 
+function buildDescentModel(tree: FamilyTree) {
+  const maps = buildRelationMaps(tree);
+  const lineage = new Map(tree.people.map((person) => [person.id, 0]));
+  for (let pass = 0; pass < tree.people.length; pass += 1) {
+    for (const [child, parents] of maps.parentsOf) {
+      for (const parent of parents) lineage.set(child, Math.max(lineage.get(child) ?? 0, (lineage.get(parent) ?? 0) + 1));
+    }
+  }
+  const primary = new Map<string, string>();
+  for (const [child, parents] of maps.parentsOf) {
+    const best = [...parents].sort((a, b) => (lineage.get(b) ?? 0) - (lineage.get(a) ?? 0) || (maps.byId.get(a)?.displayName ?? "").localeCompare(maps.byId.get(b)?.displayName ?? ""))[0];
+    primary.set(child, best);
+  }
+  const kidsOf = new Map<string, string[]>();
+  for (const [child, parent] of primary) kidsOf.set(parent, [...(kidsOf.get(parent) ?? []), child]);
+  for (const kids of kidsOf.values()) {
+    kids.sort((a, b) => (Number(maps.byId.get(a)?.birthDate?.slice(0, 4)) || 9999) - (Number(maps.byId.get(b)?.birthDate?.slice(0, 4)) || 9999) || (maps.byId.get(a)?.displayName ?? "").localeCompare(maps.byId.get(b)?.displayName ?? ""));
+  }
+  return { maps, primary, kidsOf };
+}
+
 /** The whole family as a collapsible indented outline. */
 export function OutlineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
   const model = useMemo(() => {

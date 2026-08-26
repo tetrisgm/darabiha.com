@@ -248,7 +248,7 @@ export async function POST(request: Request) {
             imageCount += 1;
             const extension = path.split(".").pop()?.toLowerCase();
             const mime = extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension}`;
-            const embedded = await saveAttachment(new File([bytes], path, { type: mime }), auth.user.email);
+            const embedded = await saveAttachment(new File([bytes as unknown as BlobPart], path, { type: mime }), auth.user.email);
             stored.push(embedded);
             content.push({ type: "input_text", text: `Embedded image ${file.name}/${path} was preserved as attachment ID ${embedded.id}. Use that ID as a portrait only if the archive explicitly links this image to a person.` });
             content.push({ type: "input_image", image_url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`, detail: "high" });
