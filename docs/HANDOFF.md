@@ -5,21 +5,23 @@ Last updated: 2026-08-25
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 43**, `BUILD_ID=e9c4d31`, Worker deployment `5e7520bb-47cc-4231-ad82-ca979abd7098`.
-- The release implementation is commit `c81b102` (`Complete archive ingestion and family data management`). The production-test and documentation follow-up is `1732627`.
+- The live release is **Version 44**, `BUILD_ID=5c7ed26`, Worker deployment `92932195-1e18-4b5b-a72d-13ed8f264c97`.
+- The release implementation is commit `efeb934` (`Reconstruct legacy Darabi family archive`).
 - `app/authz.ts` intentionally has `TEMPORARY_OPEN_EDITOR = true`. This is the owner-requested testing exception while Nasser’s Apple account is temporarily locked. Every visitor can currently mutate the archive. The Apple implementation and allowlist remain present but are not enforced.
 - Apple enforcement is restored by changing only that constant to `false`, testing all three invited family accounts, incrementing `lib/build.ts`, and deploying. The owner must first confirm that family Apple access is working.
-- Production exposes its uncached identity at `/api/version` and as visible `Version 43` text at the lower-left edge.
+- Production exposes its uncached identity at `/api/version` and as visible `Version 44` text at the lower-left edge.
 
 ## Live state verified on 2026-08-25
 
-- `/api/version` returns `{"version":43,"build":"e9c4d31","deployedAt":"2026-08-25"}`.
+- `/api/version` returns `{"version":44,"build":"5c7ed26","deployedAt":"2026-08-25"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate`.
+- `/legacy-family-tree` returns the complete 14,730,263-byte standalone reconstruction; `/legacy-family-tree-data.json` returns 418 people, 607 relationships, 14 documents, nine image metadata records, and zero identity warnings.
 - `/api/auth/apple` returns 302 to Apple with the Darabiha callback URL.
 - The public D1 tree currently reports **20 people, 21 relationships, and 0 stories**.
 - A case-insensitive exact-name scan currently reports no duplicate display names.
 - `npm test`: 6 files, 13 tests passed.
 - `npm run test:browser`: 24 live tests passed across Chromium and Playwright WebKit.
+- `npm run legacy:validate`: 418 people, 607 relationships, 14 documents, and nine photographs passed graph and payload validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with five known warnings: one unused legacy `PersonModal`, three raw `<img>` warnings, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
@@ -179,8 +181,8 @@ The current Worker has D1, R2, public-origin, and Apple identifier bindings in `
 
 - Versions 2–5 repeatedly changed CSS cursor declarations. Web Inspector reported correct computed cursor values and Playwright WebKit passed, while real Safari on macOS continued to draw the arrow.
 - Version 6 replaced native-cursor reliance with the app-rendered cursor layer and one unambiguous canvas hit surface. Real Safari screenshots verified the open-hand and clickable-card hand on that release.
-- Version 43 retains that fallback. Its automated WebKit cursor, pointer-capture, card-click, wheel containment, and pan tests pass.
-- Version 43 was not separately declared physically verified in real Safari during the archive-management pass. Playwright WebKit is regression coverage, not proof of the macOS cursor or physical trackpad gesture.
+- Version 44 retains that fallback. Its automated WebKit cursor, pointer-capture, card-click, wheel containment, and pan tests pass.
+- Version 44 was not separately declared physically verified in real Safari during the legacy-archive reconstruction. Playwright WebKit is regression coverage, not proof of the macOS cursor or physical trackpad gesture.
 
 ## Known follow-ups and boundaries
 
