@@ -5,23 +5,23 @@ Last updated: 2026-08-25
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 44**, `BUILD_ID=5c7ed26`, Worker deployment `92932195-1e18-4b5b-a72d-13ed8f264c97`.
-- The release implementation is commit `efeb934` (`Reconstruct legacy Darabi family archive`).
+- The live release is **Version 45**, `BUILD_ID=f70ffe1`, Worker deployment `6eef3e2f-cc60-4aeb-af5f-492a2a74f6a6`.
+- The release implementation is commit `f70ffe1` (`Rebuild legacy archive reconstruction after correctness audit`).
 - `app/authz.ts` intentionally has `TEMPORARY_OPEN_EDITOR = true`. This is the owner-requested testing exception while Nasser’s Apple account is temporarily locked. Every visitor can currently mutate the archive. The Apple implementation and allowlist remain present but are not enforced.
 - Apple enforcement is restored by changing only that constant to `false`, testing all three invited family accounts, incrementing `lib/build.ts`, and deploying. The owner must first confirm that family Apple access is working.
-- Production exposes its uncached identity at `/api/version` and as visible `Version 44` text at the lower-left edge.
+- Production exposes its uncached identity at `/api/version` and as visible `Version 45` text at the lower-left edge.
 
 ## Live state verified on 2026-08-25
 
-- `/api/version` returns `{"version":44,"build":"5c7ed26","deployedAt":"2026-08-25"}`.
+- `/api/version` returns `{"version":45,"build":"f70ffe1","deployedAt":"2026-08-25"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate`.
-- `/legacy-family-tree` returns the complete 14,730,263-byte standalone reconstruction; `/legacy-family-tree-data.json` returns 418 people, 607 relationships, 14 documents, nine image metadata records, and zero identity warnings.
+- `/legacy-family-tree` returns the corrected 176 KB outline reconstruction; `/legacy-family-tree-data.json` returns 407 people, 680 relationships (543 parent, 137 spouse), 14 documents, nine photograph records, and zero identity warnings; `/legacy-photos/*.jpg` serves the eight unique photograph files.
 - `/api/auth/apple` returns 302 to Apple with the Darabiha callback URL.
 - The public D1 tree currently reports **20 people, 21 relationships, and 0 stories**.
 - A case-insensitive exact-name scan currently reports no duplicate display names.
 - `npm test`: 6 files, 13 tests passed.
-- `npm run test:browser`: 24 live tests passed across Chromium and Playwright WebKit.
-- `npm run legacy:validate`: 418 people, 607 relationships, 14 documents, and nine photographs passed graph and payload validation.
+- `npm run test:browser`: 24 live tests passed across Chromium and Playwright WebKit. The chromium `a person card opens a navigable record` test is timing-flaky in full parallel runs and passes alone and in per-browser runs.
+- `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with five known warnings: one unused legacy `PersonModal`, three raw `<img>` warnings, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
@@ -30,14 +30,15 @@ Last updated: 2026-08-25
 
 ### Reconstructed legacy archive
 
-- `public/legacy-family-tree.html` is a standalone, read-only reconstruction of Nasser's `Darabi_Family_Tree_RD.zip`; it does not mutate or replace the current D1 tree.
-- `public/legacy-family-tree-data.json` contains 418 normalized people, 466 parent/child links, 141 marriages, five detected related-spouse marriages, 14 preserved narrative documents, and metadata for nine archive photographs. The standalone HTML embeds the photographs so it remains a single portable file.
-- The source ZIP remains outside the repository and is never modified. Its SHA-256 during reconstruction was `ed5e7b3ae3686670e5e536e1ee7949174cca197f15e7cfbafc978764268138ee`. `scripts/extract_legacy_family_tree.py` reproducibly reads it into a temporary directory and regenerates the HTML, JSON, and `docs/legacy-family-tree-import-report.md`.
-- Directory ancestry, generation rows, explicit links, spouse columns, child-marriage markers, and repeated subtrees are independent evidence channels. A subtree copied beneath both spouses is merged by normalized person identity plus its canonical parent union.
-- Archive generation numbers are branch-relative. Where cousin marriages make the same child appear at two levels, identity resolution is independent of generation; the output retains the highest level and raises descendants as needed for a valid parent-before-child layout.
-- Placeholder names such as `Xxx Darabi`, `Yyy Darabiha`, and `---` are omitted. Exact same-name people remain separate when their parents differ.
-- `npm run legacy:validate` checks referential integrity, duplicate edges, parent cycles, generation order, placeholder leakage, parent cardinality, known family chains, and the standalone HTML payload.
-- The audit currently has no cycles, self-links, duplicate relationships, people with more than two parents, placeholder people, or unresolved identity warnings.
+- `public/legacy-family-tree.html` is a read-only reconstruction of Nasser's `Darabi_Family_Tree_RD.zip`; it does not mutate or replace the current D1 tree. Version 45 replaced the first reconstruction after a full correctness audit (2026-08-25): the original had 35 people with zero relationships (the youngest generation was created but never linked), roughly ten spelling-variant duplicate people, missing marker-inferred mothers, and a canvas whose straight same-row marriage lines read as mass marriages.
+- The page is now a small nested outline (about 176 KB): children indented under parents, marriages inline with `⚭`, `(1)`/`(2)` numbering multiple marriages, cousin marriages annotated with the shared ancestor and cross-referenced so nobody is listed twice, plus search, the photographs, and the 14 narrative documents. Photographs live in `public/legacy-photos/` and lazy-load; the page never draws connector lines.
+- `public/legacy-family-tree-data.json` contains 407 normalized people, 543 parent/child links (256 second parents inferred from a single recorded marriage or a marker, flagged `inferred`), 137 marriages, the five related-spouse marriages, the documents, and photograph metadata with person links.
+- The source ZIP remains outside the repository and is never modified. Its SHA-256 is `ed5e7b3ae3686670e5e536e1ee7949174cca197f15e7cfbafc978764268138ee`. `scripts/extract_legacy_family_tree.py` reproducibly regenerates the HTML, JSON, photographs, and `docs/legacy-family-tree-import-report.md` from it. The ZIP stores its Persian filenames without the UTF-8 flag, so the extractor repairs `zipfile`'s CP437 decoding before use.
+- Folder nesting is the parent/child authority; family-table rows supply spouses and dates; `(1)`/`(2)` markers are family-scoped, never global; unlabeled grandchild columns are harvested for fuller names and markers; generation-6 dates exist only in the header name lists. A subtree copied beneath both spouses of a cousin marriage is merged by name plus parent union, iterated to a fixpoint.
+- Pure placeholders (`Xxx Darabi`, `---`) are omitted; coded names (`xAsJ_17 Bemanian`, `xKoJ_41a`) are kept as the archive's deliberate unknown-name records. Spelling variants merge only under strict rules — Ali and Alireza Eftekhari Rad are different brothers and must never merge; variant spellings are preserved as `aliases`.
+- Exact same-name people remain separate when their parents differ: two Mohammad Darabi (G4, G6), two Hossein Darabi (G5, G7), two Abbas Darabi (G5, G7), two Ali Jaberian (G7, G8). Paniz Darabi and Paniz Darabiha are likewise different girls.
+- `npm run legacy:validate` checks referential integrity, duplicate edges, parent cycles, generation order, placeholder leakage, parent cardinality, full connectivity (no isolated people — the first reconstruction's failure mode), the audited family facts (Aria Golriz, Karen Kamali, Rojina and Afshin Khavarian, the Eftekhari Rad brothers, Farajollah's marker-split mothers), photograph files on disk, and the page payload.
+- The reconstruction currently has no cycles, self-links, duplicate relationships, people with more than two parents, isolated people, placeholder leakage, or identity warnings.
 
 ### Tree and navigation
 
@@ -181,8 +182,8 @@ The current Worker has D1, R2, public-origin, and Apple identifier bindings in `
 
 - Versions 2–5 repeatedly changed CSS cursor declarations. Web Inspector reported correct computed cursor values and Playwright WebKit passed, while real Safari on macOS continued to draw the arrow.
 - Version 6 replaced native-cursor reliance with the app-rendered cursor layer and one unambiguous canvas hit surface. Real Safari screenshots verified the open-hand and clickable-card hand on that release.
-- Version 44 retains that fallback. Its automated WebKit cursor, pointer-capture, card-click, wheel containment, and pan tests pass.
-- Version 44 was not separately declared physically verified in real Safari during the legacy-archive reconstruction. Playwright WebKit is regression coverage, not proof of the macOS cursor or physical trackpad gesture.
+- Version 45 retains that fallback unchanged (the legacy-archive rebuild did not touch the canvas). Its automated WebKit cursor, pointer-capture, card-click, wheel containment, and pan tests pass.
+- Version 45 was not separately declared physically verified in real Safari. Playwright WebKit is regression coverage, not proof of the macOS cursor or physical trackpad gesture.
 
 ## Known follow-ups and boundaries
 
