@@ -78,14 +78,14 @@ test("canvas zoom controls change and reset the zoom percentage", async ({ page 
 });
 
 test("zoom controls do not show the canvas hand cursor", async ({ page }) => {
-  await page.goto("/");
+  await openFullTree(page);
   const zoomIn = page.getByRole("button", { name: "Zoom in" });
   await zoomIn.hover();
   await expect(page.locator(".tree-custom-cursor")).toHaveAttribute("data-visible", "false");
 });
 
 test("canvas and cards expose distinct cursor affordances", async ({ page }) => {
-  await page.goto("/");
+  await openFullTree(page);
   await expect(page.locator(".family-canvas")).toHaveAttribute("data-interactive", "true");
   await expect(page.locator(".family-canvas")).toHaveCSS("cursor", "none");
   await expect(page.locator(".canvas-hit-surface")).toHaveCSS("cursor", "none");
@@ -97,7 +97,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("49");
+  expect(version).toBe("50");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);

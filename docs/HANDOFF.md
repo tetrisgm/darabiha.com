@@ -5,26 +5,26 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 49**, `BUILD_ID=2623767`, Worker deployment `ab573c2c-32c9-48c2-92ac-d65681ead6b5`.
-- The release spans commits `6543b81..2623767` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout with one-meaning-per-line connectors and fixed pixel geometry, and the root page was fitted into the Worker CPU budget.
+- The live release is **Version 50**, `BUILD_ID=1d48e04`, Worker deployment `c5fd5225-f010-4634-86a8-0bf5bceb71f8`.
+- The release spans commits `6543b81..1d48e04` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout with one-meaning-per-line connectors and fixed pixel geometry, the root page was fitted into the Worker CPU budget, and the archive gained Family/Fan/List views, person search, and branch folding.
 - `app/authz.ts` intentionally has `TEMPORARY_OPEN_EDITOR = true`. This is the owner-requested testing exception while Nasser’s Apple account is temporarily locked. Every visitor can currently mutate the archive. The Apple implementation and allowlist remain present but are not enforced.
 - Apple enforcement is restored by changing only that constant to `false`, testing all three invited family accounts, incrementing `lib/build.ts`, and deploying. The owner must first confirm that family Apple access is working.
-- Production exposes its uncached identity at `/api/version` and as visible `Version 49` text at the lower-left edge.
+- Production exposes its uncached identity at `/api/version` and as visible `Version 50` text at the lower-left edge.
 - **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":49,"build":"2623767","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":50,"build":"1d48e04","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - `/legacy-family-tree` returns the corrected 183 KB outline reconstruction; `/legacy-family-tree-data.json` returns 407 people, 680 relationships (543 parent, 137 spouse), 14 documents, nine photograph records, and zero identity warnings; `/legacy-photos/*.jpg` serves the eight unique photograph files.
 - `/api/auth/apple` returns 302 to Apple with the Darabiha callback URL.
 - The public D1 tree currently reports **409 people, 682 relationships (545 parent, 137 spouse), and 0 stories** — the corrected legacy archive merged with the previously hand-entered records (see “Main tree data” below).
 - A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
 - `npm test`: 6 files, 16 tests passed.
-- `npm run test:browser`: 24 live tests passed across Chromium and Playwright WebKit, twice consecutively. Tests that inspect cards now wait for the client-side tree fetch (`.tree-card` waitFor) before counting or clicking.
+- `npm run test:browser`: 24 live tests passed across Chromium and Playwright WebKit, twice consecutively. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
-- `npm run lint` exits successfully with five known warnings: one unused legacy `PersonModal`, three raw `<img>` warnings, and one exhaustive-dependencies warning in the canvas focus effect.
+- `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
 ## Product behavior
@@ -48,6 +48,14 @@ Last updated: 2026-08-26
 - Exact same-name people remain separate when their parents differ: two Mohammad Darabi (G4, G6), two Hossein Darabi (G5, G7), two Abbas Darabi (G5, G7), two Ali Jaberian (G7, G8). Paniz Darabi and Paniz Darabiha are likewise different girls.
 - `npm run legacy:validate` checks referential integrity, duplicate edges, parent cycles, generation order, placeholder leakage, parent cardinality, full connectivity (no isolated people — the first reconstruction's failure mode), the audited family facts (Aria Golriz, Karen Kamali, Rojina and Afshin Khavarian, the Eftekhari Rad brothers, Farajollah's marker-split mothers), photograph files on disk, and the page payload.
 - The reconstruction currently has no cycles, self-links, duplicate relationships, people with more than two parents, isolated people, placeholder leakage, or identity warnings.
+
+### Views, search, and navigation
+
+- The header offers six views — **Family** (default), **Full tree**, **Fan**, **List**, **Timeline**, **Map** — plus a person search whose picks open the drawer, set the focal person, and (on the Full tree) unfold and center on them. The chosen view persists in `localStorage` (`darabiha-view`).
+- **Family** (`app/components/TreeViews.tsx FocusFamilyView`): one screen around a focal person — grandparent pairs, parents, the focal couple with `⚭`, sibling chips, and children grouped by marriage when there are several. Clicking a relative re-centers; clicking the focal card opens the drawer. The initial focal person is Nasser Darabiha.
+- **Fan** (`FanChartView`): half-fan ancestor chart, five generations of ahnentafel slots as clickable SVG ring sectors, empty slots muted, children chips beneath to step back down.
+- **List** (`OutlineView`): the whole family as a collapsible indented outline (marriages inline), names opening the drawer.
+- **Full tree** folds deep branches: every parent card carries a chip (`▸ N` folded with the number of people inside, `▾` expanded); branches at generation row 4 and deeper start folded, a control beside the zoom buttons folds/unfolds everything, and focusing a hidden person unfolds their ancestor chain automatically.
 
 ### Tree and navigation
 
