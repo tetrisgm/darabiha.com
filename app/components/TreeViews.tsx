@@ -264,11 +264,17 @@ export function TreeSearch({ tree, onPick }: { tree: FamilyTree; onPick: (person
  * one to fill its missing details in place. */
 type FillSortKey = "first" | "last" | "birth" | "generation" | "missing";
 
-/** "First name" is everything before the final token; the final token is the
- * family name. Single-token names have no family name and sort last. */
+/** "First name" is everything except the family name, which is the final
+ * token that is not a parenthesized alias or archive marker. Single-token
+ * names have no family name and sort last. */
 function fillNameParts(person: Person) {
   const tokens = person.displayName.trim().split(/\s+/);
-  return tokens.length > 1 ? { first: tokens.slice(0, -1).join(" "), last: tokens[tokens.length - 1] } : { first: tokens[0] ?? "", last: "" };
+  let lastIndex = -1;
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    if (!/^\(.*\)$/.test(tokens[index])) { lastIndex = index; break; }
+  }
+  if (tokens.length < 2 || lastIndex <= 0) return { first: tokens.join(" "), last: "" };
+  return { first: tokens.filter((_, index) => index !== lastIndex).join(" "), last: tokens[lastIndex] };
 }
 
 function fillBirthYear(person: Person) {
