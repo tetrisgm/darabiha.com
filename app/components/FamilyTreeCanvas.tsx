@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildFamilyLayout } from "../../lib/tree-layout";
 
@@ -33,13 +33,18 @@ function CanvasCursor({ mode, cursorRef }: { mode: CanvasCursorMode; cursorRef: 
 }
 
 export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPersonId }: { tree: FamilyTree; onSelect: (person: Person) => void; highlightedIds?: string[]; focusPersonId?: string }) {
-  // The tree is hundreds of people; every derived structure is computed once
-  // per tree, never per render frame (panning re-renders on each pointermove).
+  // The canvas is heavy (hundreds of cards and connector segments); rendering
+  // it during the server response repeatedly tripped the Worker CPU limit, so
+  // the server sends a light shell and the tree appears on hydration.
+  const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
+  // Every derived structure is computed once per tree, never per render frame
+  // (panning re-renders on each pointermove).
   const { positions, spouseLines, hooks } = useMemo(() => {
+    if (!ready) return { positions: new Map<string, { x: number; y: number }>(), spouseLines: [] as { id: string; path: string }[], hooks: [] as never[] };
     const SLOT = 30, ROW = 28;
     const layout = buildFamilyLayout(tree);
     const positions = new Map<string, { x: number; y: number }>();
-    for (const [id, slot] of layout.positions) positions.set(id, { x: 50 + (slot.x - layout.width / 2) * SLOT, y: 28 + slot.y * ROW });
+    for (const [id, slot] of layout.positions) positions.set(id, { x: 50 + (slot.x - layout.anchorX) * SLOT, y: 28 + slot.y * ROW });
     // marriages: a straight line between a couple sitting together, a raised
     // elbow between spouses drawn in different family blocks (cousin
     // marriages) so the line never runs through the cards between them
@@ -92,7 +97,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       }];
     });
     return { positions, spouseLines, hooks };
-  }, [tree]);
+  }, [tree, ready]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [cursorMode, setCursorMode] = useState<CanvasCursorMode>("grab");
@@ -167,6 +172,11 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     else if (event.key === "-" || event.key === "_") setView({ ...view, scale: Math.max(.5, view.scale * .9) });
     else if (event.key === "0") setView({ x: 0, y: 0, scale: 1 });
   };
+  if (!ready) {
+    return <div className="family-canvas" role="application" aria-label="Interactive family tree" aria-busy="true" data-interactive="false">
+      <div className="canvas-hit-surface" aria-hidden="true" />
+    </div>;
+  }
   return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} data-custom-cursor="true" data-interactive="true" data-panning={isPanning ? "true" : "false"} style={{ cursor: isPanning ? "grabbing" : "grab" }} onKeyDown={keyDown} onPointerEnter={positionCursor} onPointerLeave={hideCursor} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onWheel={zoom}>
     <div className="canvas-hit-surface" aria-hidden="true" style={{ cursor: isPanning ? "grabbing" : "grab" }} />
     <div className="canvas-controls" role="group" aria-label="Canvas zoom controls">
