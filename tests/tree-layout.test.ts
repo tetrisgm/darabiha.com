@@ -58,6 +58,46 @@ describe("tree generation layout", () => {
     expect(layout.positions.get("child")!.y).toBe(2);
   });
 
+  it("keeps children in the deep family line when a bride's father is recorded", () => {
+    const withInLaw: FamilyTree = {
+      people: [...tree.people, person("bride"), person("bride-father"), person("grandchild3")].map((p) => p),
+      relationships: [
+        ...tree.relationships,
+        { id: "s2", fromPersonId: "bride", toPersonId: "son", type: "spouse" },
+        { id: "p8", fromPersonId: "bride-father", toPersonId: "bride", type: "parent" },
+        { id: "p9", fromPersonId: "son", toPersonId: "grandchild3", type: "parent" },
+        { id: "p10", fromPersonId: "bride", toPersonId: "grandchild3", type: "parent" },
+      ],
+      stories: [],
+    };
+    const layout = buildFamilyLayout(withInLaw);
+    // the grandchild stays under the son (two generations of ancestry), not
+    // under the bride (one recorded generation)
+    expect(layout.primaryParent.get("grandchild3")).toBe("son");
+    const generations = buildGenerations(withInLaw);
+    // the bride's father sits one row above his daughter, not in the top row
+    expect(generations.depth.get("bride")).toBe(1);
+    expect(generations.depth.get("bride-father")).toBe(0);
+    const deep: FamilyTree = {
+      ...withInLaw,
+      relationships: [...withInLaw.relationships, { id: "p11", fromPersonId: "grandchild", toPersonId: "greatgrand", type: "parent" }],
+      people: [...withInLaw.people, person("greatgrand"), person("bride2"), person("bride2-father")],
+    };
+    const deep2: FamilyTree = {
+      ...deep,
+      relationships: [
+        ...deep.relationships,
+        { id: "s3", fromPersonId: "bride2", toPersonId: "grandchild", type: "spouse" },
+        { id: "p12", fromPersonId: "bride2-father", toPersonId: "bride2", type: "parent" },
+        { id: "p13", fromPersonId: "bride2", toPersonId: "greatgrand", type: "parent" },
+      ],
+    };
+    const layout2 = buildFamilyLayout(deep2);
+    expect(layout2.primaryParent.get("greatgrand")).toBe("grandchild");
+    const gens2 = buildGenerations(deep2);
+    expect(gens2.depth.get("bride2-father")).toBe(1);
+  });
+
   it("places a married-in spouse beside their partner instead of the top row", () => {
     const withSpouse: FamilyTree = {
       people: [...tree.people, person("daughter-in-law"), person("grandchild2")],

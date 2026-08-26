@@ -5,16 +5,30 @@ export function buildGenerations(tree: FamilyTree) {
   const parentLinks = tree.relationships.filter((item) => item.type === "parent");
   const spouseLinks = tree.relationships.filter((item) => item.type === "spouse");
   const hasParent = new Set(parentLinks.map((item) => item.toPersonId));
+  const childrenOfRootless = new Map<string, string[]>();
+  for (const link of parentLinks) {
+    if (!hasParent.has(link.fromPersonId)) {
+      childrenOfRootless.set(link.fromPersonId, [...(childrenOfRootless.get(link.fromPersonId) ?? []), link.toPersonId]);
+    }
+  }
   for (let pass = 0; pass < tree.people.length; pass += 1) {
     for (const link of parentLinks) {
       depth.set(link.toPersonId, Math.max(depth.get(link.toPersonId) ?? 0, (depth.get(link.fromPersonId) ?? 0) + 1));
     }
-    // A spouse who married into the family has no recorded parents; show them
-    // beside their partner instead of stacking every such person in row zero.
+    // Spouses share a row: the shallower partner moves down to the deeper
+    // one (a married-in spouse leaves the top row, and a bride with a
+    // recorded father still stands on her husband's row).
     for (const link of spouseLinks) {
       const a = link.fromPersonId, b = link.toPersonId;
-      if (!hasParent.has(a)) depth.set(a, Math.max(depth.get(a) ?? 0, depth.get(b) ?? 0));
-      if (!hasParent.has(b)) depth.set(b, Math.max(depth.get(b) ?? 0, depth.get(a) ?? 0));
+      const shared = Math.max(depth.get(a) ?? 0, depth.get(b) ?? 0);
+      depth.set(a, shared);
+      depth.set(b, shared);
+    }
+    // An in-law parent with no recorded ancestry (a bride's father named in
+    // the biography) sits one row above their shallowest child.
+    for (const [parent, children] of childrenOfRootless) {
+      const shallowest = Math.min(...children.map((child) => depth.get(child) ?? 0));
+      depth.set(parent, Math.max(depth.get(parent) ?? 0, shallowest - 1));
     }
   }
   const groups = new Map<number, Person[]>();
@@ -48,6 +62,15 @@ export interface FamilyLayout {
  */
 export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
   const { depth } = buildGenerations(tree);
+  // ancestry depth over parent edges only (no spouse alignment): how far a
+  // person's recorded ancestor chain reaches up
+  const lineage = new Map(tree.people.map((person) => [person.id, 0]));
+  const parentEdges = tree.relationships.filter((item) => item.type === "parent");
+  for (let pass = 0; pass < tree.people.length; pass += 1) {
+    for (const link of parentEdges) {
+      lineage.set(link.toPersonId, Math.max(lineage.get(link.toPersonId) ?? 0, (lineage.get(link.fromPersonId) ?? 0) + 1));
+    }
+  }
   const byId = new Map(tree.people.map((person) => [person.id, person]));
   const parentsOf = new Map<string, string[]>();
   const childrenOf = new Map<string, string[]>();
@@ -74,12 +97,38 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
   const hasParents = (id: string) => (parentsOf.get(id)?.length ?? 0) > 0;
   const name = (id: string) => byId.get(id)?.displayName ?? "";
 
-  // each child is drawn under exactly one parent
+  // each child is drawn under exactly one parent: the one whose own ancestor
+  // chain reaches deepest into the tree (so a family stays in the main line
+  // rather than migrating under a bride's newly recorded father)
+  const ancestorCount = new Map<string, number>();
+  const countAncestors = (id: string): number => {
+    const cached = ancestorCount.get(id);
+    if (cached !== undefined) return cached;
+    const seen = new Set<string>();
+    const stack = [id];
+    while (stack.length) {
+      const current = stack.pop()!;
+      for (const parent of parentsOf.get(current) ?? []) {
+        if (!seen.has(parent)) {
+          seen.add(parent);
+          stack.push(parent);
+        }
+      }
+    }
+    ancestorCount.set(id, seen.size);
+    return seen.size;
+  };
   const primaryParent = new Map<string, string>();
   for (const [child, parents] of parentsOf) {
     const pool = parents.filter(hasParents);
     const candidates = pool.length ? pool : parents;
-    const best = [...candidates].sort((a, b) => (depth.get(a) ?? 0) - (depth.get(b) ?? 0) || name(a).localeCompare(name(b)))[0];
+    const best = [...candidates].sort(
+      (a, b) =>
+        (lineage.get(b) ?? 0) - (lineage.get(a) ?? 0) ||
+        countAncestors(b) - countAncestors(a) ||
+        (depth.get(a) ?? 0) - (depth.get(b) ?? 0) ||
+        name(a).localeCompare(name(b)),
+    )[0];
     primaryParent.set(child, best);
   }
 
