@@ -473,28 +473,48 @@ class Extractor:
                     chain[g] = pid
                 break
         rows = parse_table(path)
-        # harvest generation-6 dates from the header lists (class xlnameG_<X>2)
+        # harvest dates that exist only in the header lists: generation-6
+        # people (class xlnameG_<X>2) and the generation-5 spouses (the
+        # xlname2 cell right after a generation-5 person)
         for row in rows:
+            pending_g5 = None
             for c, t in row:
                 m2 = re.match(r"xlnameG_(.+?)2$", c or "")
-                if not m2 or not t:
-                    continue
-                key = m2.group(1)
-                if key not in self.g5cols:
-                    continue
-                kind, disp, _ = classify_name(t)
-                if kind not in ("real", "partial"):
-                    continue
-                nm, hb, hd = split_dates(disp)
-                if not nm or nm.lower() == "no children" or not (hb or hd):
-                    continue
-                for k in self.folder_children.get(find(self.g5cols[key]), []):
-                    if names_match(get(k).best_name(), nm):
-                        kp = get(k)
-                        kp.add_name(nm)
-                        kp.birth = kp.birth or hb
-                        kp.death = kp.death or hd
-                        break
+                if m2 and t and m2.group(1) in self.g5cols:
+                    key = m2.group(1)
+                    kind, disp, _ = classify_name(t)
+                    if kind not in ("real", "partial"):
+                        continue
+                    nm, hb, hd = split_dates(disp)
+                    if not nm or nm.lower() == "no children":
+                        continue
+                    if names_match(get(self.g5cols[key]).best_name(), nm):
+                        pending_g5 = self.g5cols[key]
+                        continue
+                    pending_g5 = None
+                    if not (hb or hd):
+                        continue
+                    for k in self.folder_children.get(find(self.g5cols[key]), []):
+                        if names_match(get(k).best_name(), nm):
+                            kp = get(k)
+                            kp.add_name(nm)
+                            kp.birth = kp.birth or hb
+                            kp.death = kp.death or hd
+                            break
+                elif c == "xlname2" and t and pending_g5:
+                    kind, disp, _ = classify_name(t)
+                    nm, hb, hd = split_dates(disp)
+                    if kind in ("real", "partial") and nm and (hb or hd):
+                        for s in self.rebuild_spmap().get(find(pending_g5), []):
+                            if names_match(get(s).best_name(), nm):
+                                sp = get(s)
+                                sp.add_name(nm)
+                                sp.birth = sp.birth or hb
+                                sp.death = sp.death or hd
+                                break
+                    pending_g5 = None
+                else:
+                    pending_g5 = None
         # collect rows: labeled rows carry family sections; unlabeled xlnameG6
         # rows are grandchildren columns (names and (k) markers harvested)
         lrows = []

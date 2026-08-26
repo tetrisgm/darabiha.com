@@ -25,4 +25,21 @@ describe("tree generation layout", () => {
     const result = buildGenerations(tree);
     expect(result.groups.get(1)?.map((person) => person.id)).toEqual(["daughter", "son"]);
   });
+
+  it("places a married-in spouse beside their partner instead of the top row", () => {
+    const withSpouse: FamilyTree = {
+      people: [...tree.people, person("daughter-in-law"), person("grandchild2")],
+      relationships: [
+        ...tree.relationships,
+        { id: "s1", fromPersonId: "daughter-in-law", toPersonId: "son", type: "spouse" },
+        { id: "p6", fromPersonId: "son", toPersonId: "grandchild2", type: "parent" },
+        { id: "p7", fromPersonId: "daughter-in-law", toPersonId: "grandchild2", type: "parent" },
+      ],
+      stories: [],
+    };
+    const result = buildGenerations(withSpouse);
+    expect(result.depth.get("daughter-in-law")).toBe(1);
+    expect(result.depth.get("grandchild2")).toBe(2);
+    expect(result.depth.get("mother")).toBe(0);
+  });
 });
