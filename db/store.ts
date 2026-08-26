@@ -40,6 +40,14 @@ export async function ensureSchema() {
   initialized = true;
 }
 
+// Serialized-tree cache: the public tree endpoint is hit constantly and the
+// Worker CPU budget is tight, so the JSON built by the latest readTree() is
+// reused for a few seconds. Mutations end in readTree(), which refreshes it.
+let treeJsonCache: { body: string; time: number } | null = null;
+export function cachedTreeJson(): string | null {
+  return treeJsonCache && Date.now() - treeJsonCache.time < 10_000 ? treeJsonCache.body : null;
+}
+
 export async function readTree(): Promise<FamilyTree> {
   await ensureSchema();
   const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult, storyAttachmentsResult] = await Promise.all([
@@ -57,11 +65,13 @@ export async function readTree(): Promise<FamilyTree> {
   for (const row of storyPeopleResult.results) links.set(row.storyId, [...(links.get(row.storyId) ?? []), row.personId]);
   const attachmentLinks = new Map<string, string[]>();
   for (const row of storyAttachmentsResult.results) attachmentLinks.set(row.storyId, [...(attachmentLinks.get(row.storyId) ?? []), row.attachmentId]);
-  return {
+  const tree: FamilyTree = {
     people: peopleResult.results,
     relationships: relationshipsResult.results,
     stories: storiesResult.results.map((story) => ({ ...story, personIds: links.get(story.id) ?? [], attachmentIds: attachmentLinks.get(story.id) ?? [] })),
   };
+  treeJsonCache = { body: JSON.stringify(tree), time: Date.now() };
+  return tree;
 }
 
 export async function saveAttachment(file: File, actorEmail: string): Promise<Attachment> {

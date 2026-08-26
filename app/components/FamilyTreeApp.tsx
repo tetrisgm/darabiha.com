@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { TimelineView, WorldMapView } from "./ArchiveViews";
@@ -8,7 +8,7 @@ import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { BUILD_ID, VERSION } from "../../lib/build";
 
 type Props = {
-  initialTree: FamilyTree;
+  initialTree: FamilyTree | null;
   viewer: { signedIn: boolean; canEdit: boolean; displayName: string | null };
   signInPath: string;
   signOutPath: string;
@@ -39,8 +39,20 @@ function formatDate(value: string | null) {
 }
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
+const EMPTY_TREE: FamilyTree = { people: [], relationships: [], stories: [] };
+
 export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOutPath, signInEnabled }: Props) {
-  const [tree, setTree] = useState(initialTree);
+  const [tree, setTree] = useState(initialTree ?? EMPTY_TREE);
+  const [treeLoaded, setTreeLoaded] = useState(Boolean(initialTree));
+  useEffect(() => {
+    if (treeLoaded) return;
+    let cancelled = false;
+    fetch("/api/tree")
+      .then((response) => response.json() as Promise<FamilyTree>)
+      .then((data) => { if (!cancelled) { setTree(data); setTreeLoaded(true); } })
+      .catch(() => { if (!cancelled) setTreeLoaded(true); });
+    return () => { cancelled = true; };
+  }, [treeLoaded]);
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -184,7 +196,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
           <div className="relative h-full min-h-0">
 
             <div className="relative h-full min-h-0 overflow-hidden bg-[#eef4f1]">
-              {viewMode === "tree" && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
+              {viewMode === "tree" && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
+              {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
               {viewMode === "map" && <WorldMapView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
             </div>
