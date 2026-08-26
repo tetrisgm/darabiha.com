@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildGenerations } from "../../lib/tree-layout";
 
+const cardDateFormat = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 function cardDate(value: string | null) {
   if (!value) return null;
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return value;
-  return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+  return cardDateFormat.format(new Date(Date.UTC(year, month - 1, day)));
 }
 
 function genderGlyph(person: Person) {
@@ -32,18 +33,38 @@ function CanvasCursor({ mode, cursorRef }: { mode: CanvasCursorMode; cursorRef: 
 }
 
 export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPersonId }: { tree: FamilyTree; onSelect: (person: Person) => void; highlightedIds?: string[]; focusPersonId?: string }) {
-  const { depth, groups } = buildGenerations(tree);
+  // The tree is hundreds of people; every derived structure is computed once
+  // per tree, never per render frame (panning re-renders on each pointermove).
+  const { positions, spouseLines, parentSets } = useMemo(() => {
+    const { groups } = buildGenerations(tree);
+    const positions = new Map<string, { x: number; y: number }>();
+    for (const [level, row] of groups) row.forEach((person, index) => positions.set(person.id, { x: 50 + (index - (row.length - 1) / 2) * 30, y: 28 + level * 28 }));
+    const spouseLines = tree.relationships
+      .filter((link) => link.type === "spouse")
+      .map((link) => ({ id: link.id, a: positions.get(link.fromPersonId), b: positions.get(link.toPersonId) }))
+      .filter((line): line is { id: string; a: { x: number; y: number }; b: { x: number; y: number } } => Boolean(line.a && line.b));
+    const parentsOfChild = new Map<string, string[]>();
+    for (const link of tree.relationships) {
+      if (link.type !== "parent") continue;
+      parentsOfChild.set(link.toPersonId, [...(parentsOfChild.get(link.toPersonId) ?? []), link.fromPersonId]);
+    }
+    const sets = new Map<string, { parentIds: string[]; children: string[] }>();
+    for (const [childId, parentIds] of parentsOfChild) {
+      const sorted = [...new Set(parentIds)].sort();
+      const key = sorted.join("|");
+      const entry = sets.get(key) ?? { parentIds: sorted, children: [] };
+      entry.children.push(childId);
+      sets.set(key, entry);
+    }
+    return { positions, spouseLines, parentSets: [...sets.values()] };
+  }, [tree]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [cursorMode, setCursorMode] = useState<CanvasCursorMode>("grab");
   const gesture = useRef<{ x: number; y: number; view: typeof view; moved: boolean } | null>(null);
   const cursorRef = useRef<HTMLSpanElement>(null);
   const zoomBy = (factor: number) => setView((current) => zoomView(current, factor, { x: 0, y: 0 }));
-  const point = (person: Person) => {
-    const group = groups.get(depth.get(person.id) ?? 0) ?? [];
-    const index = group.findIndex((item) => item.id === person.id);
-    return { x: 50 + (index - (group.length - 1) / 2) * 30, y: 28 + (depth.get(person.id) ?? 0) * 28 };
-  };
+  const point = (person: Person) => positions.get(person.id) ?? { x: 50, y: 28 };
   const centerOn = (person: Person, animate = true) => {
     const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
     if (!rect) return;
@@ -111,7 +132,6 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     else if (event.key === "-" || event.key === "_") setView({ ...view, scale: Math.max(.5, view.scale * .9) });
     else if (event.key === "0") setView({ x: 0, y: 0, scale: 1 });
   };
-  const parentSets = [...new Map([...new Set(tree.relationships.filter((link) => link.type === "parent").map((link) => link.toPersonId))].map((childId) => { const parentIds = tree.relationships.filter((link) => link.type === "parent" && link.toPersonId === childId).map((link) => link.fromPersonId).sort(); return [`${parentIds.join("|")}`, { children: [childId], parentIds }]; })).values()].map((set) => ({ ...set, children: [...new Set(tree.relationships.filter((link) => link.type === "parent" && set.parentIds.includes(link.fromPersonId)).map((link) => link.toPersonId).filter((childId) => tree.relationships.filter((candidate) => candidate.type === "parent" && candidate.toPersonId === childId).map((candidate) => candidate.fromPersonId).sort().join("|") === set.parentIds.join("|")))] }));
   return <div className="family-canvas" role="application" aria-label="Interactive family tree. Use arrow keys to pan, plus or minus to zoom, and 0 to reset." tabIndex={0} data-custom-cursor="true" data-interactive="true" data-panning={isPanning ? "true" : "false"} style={{ cursor: isPanning ? "grabbing" : "grab" }} onKeyDown={keyDown} onPointerEnter={positionCursor} onPointerLeave={hideCursor} onPointerDown={begin} onPointerMove={move} onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end} onWheel={zoom}>
     <div className="canvas-hit-surface" aria-hidden="true" style={{ cursor: isPanning ? "grabbing" : "grab" }} />
     <div className="canvas-controls" role="group" aria-label="Canvas zoom controls">
@@ -121,8 +141,8 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     </div>
     <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
       <svg className="tree-connectors" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {tree.relationships.filter((link) => link.type === "spouse").map((link) => { const from = tree.people.find((person) => person.id === link.fromPersonId); const to = tree.people.find((person) => person.id === link.toPersonId); if (!from || !to) return null; const a = point(from); const b = point(to); return <line className="spouse-connector" key={link.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} />; })}
-        {parentSets.map(({ children, parentIds }) => { const parents = parentIds.map((id) => tree.people.find((person) => person.id === id)).filter(Boolean) as Person[]; const childPeople = children.map((id) => tree.people.find((person) => person.id === id)).filter(Boolean) as Person[]; if (!parents.length || !childPeople.length) return null; const parentPoints = parents.map(point); const childPoints = childPeople.map(point); const left = Math.min(...childPoints.map((item) => item.x)); const right = Math.max(...childPoints.map((item) => item.x)); const parentLeft = Math.min(...parentPoints.map((item) => item.x)); const parentRight = Math.max(...parentPoints.map((item) => item.x)); const junctionY = Math.min(...childPoints.map((item) => item.y)) - 14; const parentY = parentPoints[0].y; return <g className="parent-connector" key={parentIds.join("|")}><line x1={parentLeft} y1={parentY} x2={parentRight} y2={parentY} /><line x1={(parentLeft + parentRight) / 2} y1={parentY} x2={(parentLeft + parentRight) / 2} y2={junctionY} /><line x1={left} y1={junctionY} x2={right} y2={junctionY} />{childPoints.map((childPoint) => <line key={`${childPoint.x}-${childPoint.y}`} x1={childPoint.x} y1={junctionY} x2={childPoint.x} y2={childPoint.y} />)}</g>; })}
+        {spouseLines.map((line) => <line className="spouse-connector" key={line.id} x1={line.a.x} y1={line.a.y} x2={line.b.x} y2={line.b.y} />)}
+        {parentSets.map(({ children, parentIds }) => { const parentPoints = parentIds.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[]; const childPoints = children.map((id) => positions.get(id)).filter(Boolean) as { x: number; y: number }[]; if (!parentPoints.length || !childPoints.length) return null; const left = Math.min(...childPoints.map((item) => item.x)); const right = Math.max(...childPoints.map((item) => item.x)); const parentLeft = Math.min(...parentPoints.map((item) => item.x)); const parentRight = Math.max(...parentPoints.map((item) => item.x)); const junctionY = Math.min(...childPoints.map((item) => item.y)) - 14; const parentY = parentPoints[0].y; return <g className="parent-connector" key={parentIds.join("|")}><line x1={parentLeft} y1={parentY} x2={parentRight} y2={parentY} /><line x1={(parentLeft + parentRight) / 2} y1={parentY} x2={(parentLeft + parentRight) / 2} y2={junctionY} /><line x1={left} y1={junctionY} x2={right} y2={junctionY} />{childPoints.map((childPoint) => <line key={`${childPoint.x}-${childPoint.y}`} x1={childPoint.x} y1={junctionY} x2={childPoint.x} y2={childPoint.y} />)}</g>; })}
       </svg>
       {tree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); const glyph = genderGlyph(person); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}%`, top: `${p.y}%`, cursor: "pointer" }} key={person.id} onClick={() => { centerOn(person); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-gender" aria-label={glyph === "♀" ? "Female" : glyph === "♂" ? "Male" : "Gender not recorded"}>{glyph}</span><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : person.displayName.slice(0, 1).toUpperCase()}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
     </div>
