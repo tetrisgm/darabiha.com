@@ -72,8 +72,8 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
       const grandparents = (maps.parentsOf.get(parent.id) ?? []).map(get).filter(Boolean) as Person[];
       const grandfather = grandparents.find((gp) => gp.gender === "male") ?? grandparents[0];
       const grandmother = grandparents.find((gp) => gp !== grandfather);
-      grandSlots.push({ parentKey, person: grandfather, key: `${parentKey}-gf`, label: "Add father" });
-      grandSlots.push({ parentKey, person: grandmother, key: `${parentKey}-gm`, label: "Add mother" });
+      grandSlots.push({ parentKey, person: grandfather, key: `${parentKey}-gf`, label: "Add grandfather" });
+      grandSlots.push({ parentKey, person: grandmother, key: `${parentKey}-gm`, label: "Add grandmother" });
       if (grandfather) links.push([parentKey, `${parentKey}-gf`]);
       if (grandmother) links.push([parentKey, `${parentKey}-gm`]);
     }
@@ -103,6 +103,7 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
   const panRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef(new Map<string, HTMLDivElement>());
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
   const [panMode, setPanMode] = useState<"idle" | "drag" | "glide">("idle");
   const dragRef = useRef<{ id: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const pedCursorRef = useRef<HTMLSpanElement>(null);
@@ -143,7 +144,11 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
   };
   const wheelPan = (event: React.WheelEvent<HTMLDivElement>) => {
     setPanMode("idle");
-    setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
+    if (event.ctrlKey || event.metaKey) {
+      setScale((current) => Math.max(0.4, Math.min(2, current * (event.deltaY > 0 ? 0.94 : 1.06))));
+    } else {
+      setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
+    }
   };
   const centerColumn = (key: string) => {
     const column = colRefs.current.get(key);
@@ -167,8 +172,8 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
         const from = slotRefs.current.get(fromKey)?.getBoundingClientRect();
         const to = slotRefs.current.get(toKey)?.getBoundingClientRect();
         if (!from || !to) continue;
-        const x0 = from.right - base.left, y0 = from.top + from.height / 2 - base.top;
-        const x1 = to.left - base.left, y1 = to.top + to.height / 2 - base.top;
+        const x0 = (from.right - base.left) / scale, y0 = (from.top + from.height / 2 - base.top) / scale;
+        const x1 = (to.left - base.left) / scale, y1 = (to.top + to.height / 2 - base.top) / scale;
         const mid = (x0 + x1) / 2;
         next.push(`M ${x0} ${y0} L ${mid} ${y0} L ${mid} ${y1} L ${x1} ${y1}`);
       }
@@ -178,7 +183,7 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
     const observer = new ResizeObserver(draw);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [model]);
+  }, [model, scale]);
   if (!model) return null;
   const { focal, father, mother, spouses, children, siblings, childGroups, grandSlots, greatSlots, grandkidGroups } = model;
   const statusOf = (spouse: Person) => maps.spouseStatus.get([focal.id, spouse.id].sort().join("|")) ?? null;
@@ -199,9 +204,9 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
       </button>
     </div>;
   };
-  const ghost = (label: string, key: string) =>
+  const ghost = (label: string, key: string, target: Person = focal) =>
     <div ref={setRef(key)} className="ped-card ped-card-sm ped-ghost" key={key}>
-      <button type="button" onClick={() => onOpen(focal)} title="Open the record to add this relative">＋ {label}</button>
+      <button type="button" onClick={() => onOpen(target)} title="Open the record to add this relative">＋ {label}</button>
     </div>;
   return <section className="focus-view ped-view" aria-label="Family around one person">
     <div className="focus-toolbar">
@@ -215,7 +220,7 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
       onPointerEnter={positionPedCursor} onPointerLeave={hidePedCursor}>
       <PedCursor mode={cursorMode} cursorRef={pedCursorRef} />
-      <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px)` }}>
+      <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
         <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
         <div className="ped-columns">
           {grandkidGroups.length > 0 && <div className="ped-col ped-col-grandkids" ref={(element) => { if (element) colRefs.current.set("grandkids", element); else colRefs.current.delete("grandkids"); }}>
@@ -252,7 +257,7 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
             <button type="button" className="ped-col-label" onClick={() => centerColumn("grand")}>Grandparents</button>
             {grandSlots.length === 0 && <p className="ped-none">—</p>}
             {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
-              {slot.person ? card(slot.person, slot.key, "sm") : ghost(slot.label, slot.key)}
+              {slot.person ? card(slot.person, slot.key, "sm") : ghost(slot.label, slot.key, slot.parentKey === "p-father" ? father : mother)}
             </div>)}
           </div>
           {greatSlots.length > 0 && <div className="ped-col ped-col-great" ref={(element) => { if (element) colRefs.current.set("great", element); else colRefs.current.delete("great"); }}>

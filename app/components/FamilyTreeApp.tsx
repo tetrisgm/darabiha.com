@@ -135,7 +135,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
       } catch { /* private mode */ }
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [viewer.canEdit]);
   const setViewMode = (mode: ViewMode) => {
     setViewModeState(mode);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
