@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { TimelineView, WorldMapView } from "./ArchiveViews";
@@ -26,33 +26,6 @@ function proposalRank(proposal: ChangeProposal) {
   return 4;
 }
 
-function generationGroups(tree: FamilyTree): Person[][] {
-  if (!tree.people.length) return [];
-  const level = new Map(tree.people.map((person) => [person.id, 0]));
-  const parentLinks = tree.relationships.filter((relationship) => relationship.type === "parent");
-  for (let pass = 0; pass < tree.people.length; pass += 1) {
-    let changed = false;
-    for (const link of parentLinks) {
-      const next = (level.get(link.fromPersonId) ?? 0) + 1;
-      if ((level.get(link.toPersonId) ?? 0) < next) {
-        level.set(link.toPersonId, next);
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
-  for (const link of tree.relationships.filter((relationship) => relationship.type === "spouse")) {
-    const shared = Math.max(level.get(link.fromPersonId) ?? 0, level.get(link.toPersonId) ?? 0);
-    level.set(link.fromPersonId, shared);
-    level.set(link.toPersonId, shared);
-  }
-  const groups: Person[][] = [];
-  for (const person of tree.people) {
-    const index = level.get(person.id) ?? 0;
-    (groups[index] ??= []).push(person);
-  }
-  return groups.filter(Boolean);
-}
 
 function lifeLine(person: Person) {
   if (!person.birthDate && !person.deathDate) return "Dates not recorded";
@@ -84,7 +57,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signInPath, signOut
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  useMemo(() => generationGroups(tree), [tree]);
 
   async function sendMessage() {
     const text = input.trim();
