@@ -15,7 +15,7 @@ const VISIBILITIES: SiteVisibility[] = ["public", "members", "password"];
 
 async function state() {
   return {
-    visibility: await getSiteVisibility(),
+    visibility: await getSiteVisibility(true),
     hasPassword: await hasAccessPassword(),
     shareUrl: (await shareToken()) ? `/api/access?key=${await shareToken()}` : null,
   };
@@ -41,8 +41,13 @@ export async function POST(request: Request) {
     return Response.json(await state());
   }
   if (body?.action === "clear_password") {
+    // Removing the password while the archive is behind it would change who
+    // can see the archive as a side effect of a different request. Say no and
+    // let the admin choose.
+    if ((await getSiteVisibility(true)) === "password") {
+      return Response.json({ error: "password_in_use" }, { status: 400 });
+    }
     await clearAccessPassword(auth.user.email);
-    if ((await getSiteVisibility()) === "password") await setSiteVisibility("members", auth.user.email);
     return Response.json(await state());
   }
   if (body?.action === "new_link") {

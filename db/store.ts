@@ -109,8 +109,12 @@ let visibilityCache: { value: SiteVisibility; time: number } | null = null;
  * guest book and admins can raise or remove anyone). "password": anyone with
  * the family's shared password, or the private link, or a place on the
  * member list. */
-export async function getSiteVisibility(): Promise<SiteVisibility> {
-  if (visibilityCache && Date.now() - visibilityCache.time < 10_000) return visibilityCache.value;
+export async function getSiteVisibility(fresh = false): Promise<SiteVisibility> {
+  // The cache is per-isolate, so a write in one isolate leaves another
+  // holding the old answer for up to ten seconds. That is fine for deciding
+  // whether to let a reader in; it is not fine for a decision that changes
+  // who can see the archive, so those ask for a fresh read.
+  if (!fresh && visibilityCache && Date.now() - visibilityCache.time < 10_000) return visibilityCache.value;
   await ensureSchema();
   const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'visibility'").first<{ value: string }>();
   const value: SiteVisibility = row?.value === "members" ? "members" : row?.value === "password" ? "password" : "public";

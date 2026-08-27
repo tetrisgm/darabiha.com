@@ -53,7 +53,7 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
     try {
       const response = await fetch("/api/site", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json() as { visibility?: "public" | "members" | "password"; hasPassword?: boolean; shareUrl?: string | null; error?: string };
-      if (!response.ok) { setNotice(data.error === "password_too_short" ? "Use at least six characters." : "That could not be saved."); return; }
+      if (!response.ok) { setNotice(data.error === "password_too_short" ? "Use at least six characters." : data.error === "password_in_use" ? "Choose another way in first — the archive is behind this password." : "That could not be saved."); return; }
       setAccess({ hasPassword: Boolean(data.hasPassword), shareUrl: data.shareUrl ?? null });
       if (data.visibility) setVisibility(data.visibility);
       setPassword("");
