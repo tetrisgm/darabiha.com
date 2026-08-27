@@ -196,7 +196,8 @@ export function StatisticsView({ tree, onSelect }: { tree: FamilyTree; onSelect:
 function planLabels(mapped: MappedPlace[], scale: number, boardWidth: number): Map<string, "right" | "left" | "quiet"> {
   if (!boardWidth) return new Map();
   const boardHeight = boardWidth / 2;
-  const LABEL = 132, DISC = 34, ROW = 24;
+  // measured from the rendered labels: 30px tall, at most ~90px wide
+  const LABEL = 132, DISC = 34, ROW = 34;
   const placed: { y: number; from: number; to: number }[] = [];
   const sides: [string, "right" | "left" | "quiet"][] = [];
   const overlaps = (y: number, from: number, to: number) => placed.some((other) =>

@@ -74,8 +74,13 @@ export function mapFamilyPlaces(tree: FamilyTree): { mapped: MappedPlace[]; unma
       const latLon = coordinates || fallbackCoordinates;
       const point = latLon ? toPercent(latLon) : undefined;
       if (!point) { unmapped.add(label); continue; }
-      const key = normalized(label);
+      // One city, one marker: places are grouped by where they ARE, not by how
+      // they were spelled, so "Ghazvin" and "Qazvin, Iran" - or "Tehran" with
+      // and without its country - land on a single pin. The fullest label wins,
+      // which is the one that names the country.
+      const key = `${point[0].toFixed(3)},${point[1].toFixed(3)}`;
       const group = groups.get(key) || { key, label, x: point[0], y: point[1], people: [] };
+      if (label.length > group.label.length) group.label = label;
       if (!group.people.some((candidate) => candidate.id === person.id)) group.people.push(person);
       groups.set(key, group);
     }
