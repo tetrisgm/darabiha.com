@@ -115,7 +115,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("113");
+  expect(version).toBe("114");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
@@ -132,12 +132,22 @@ test("timeline and map are generated from the same public family records", async
   const mapScale = () => page.locator(".world-map-layer").evaluate((element) => Number((element as HTMLElement).style.transform.match(/scale\(([\d.]+)\)/)?.[1] ?? 1));
   await page.getByRole("group", { name: "Map zoom controls" }).getByRole("button", { name: "Zoom in" }).click();
   await expect.poll(mapScale).toBeGreaterThan(1.05);
+  // the map opens framed on the family's places, so the pan is a delta from
+  // wherever that framing put it, not an absolute offset
+  const panOf = () => page.locator(".world-map-layer").evaluate((element) => {
+    const match = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec((element as HTMLElement).style.transform);
+    return { x: Number(match?.[1] ?? 0), y: Number(match?.[2] ?? 0) };
+  });
+  const beforePan = await panOf();
   const mapBox = await page.locator(".world-map").boundingBox();
   await page.mouse.move(mapBox!.x + mapBox!.width / 2, mapBox!.y + mapBox!.height / 2);
   await page.mouse.down();
   await page.mouse.move(mapBox!.x + mapBox!.width / 2 + 80, mapBox!.y + mapBox!.height / 2 + 40, { steps: 3 });
   await page.mouse.up();
-  await expect.poll(() => page.locator(".world-map-layer").evaluate((element) => (element as HTMLElement).style.transform)).toContain("translate(80px, 40px)");
+  await expect.poll(async () => {
+    const now = await panOf();
+    return { dx: Math.round(now.x - beforePan.x), dy: Math.round(now.y - beforePan.y) };
+  }).toEqual({ dx: 80, dy: 40 });
   // a city opens as a list of its people; a row opens the profile; closing it returns to the list
   await page.locator(".map-marker").first().click();
   await expect(page.locator(".place-panel")).toBeVisible();

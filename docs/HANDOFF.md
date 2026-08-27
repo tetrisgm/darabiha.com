@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 112**, `BUILD_ID=83f4a9e`.
+- The live release is **Version 114**, `BUILD_ID=9cbdaf6`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":112,"build":"83f4a9e","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":114,"build":"9cbdaf6","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -29,7 +29,16 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–112 (2026-08-26)
+### Versions 54–114 (2026-08-26)
+
+- **Version 114** (`9cbdaf6`): **questions answer with buttons, and show the photograph they ask about** (owner: "if it's a yes or no, show me a button that says yes and a button that says no"). Each question carries its own `choices` — "Yes, the same person" / "No, someone else"; "Over a hundred" / "83, as recorded"; "Yes, one person" / "No, two people" — and the derived consistency checks generate theirs in `lib/record-checks.ts`. Free text stays only where the answer really is text (the second wife's name) and remains an optional note elsewhere. The 1920-photograph question renders the photograph, resolved to the image several people already share rather than uploading a second copy.
+- **Version 113** (`e9a31da`): four interaction fixes.
+  - **Chat and profile are one column.** The panel was `max(chat-width, 30rem)` while the chat was 330px, so the panel overhung the canvas by 150px and cropped every view behind it. Both are now `var(--chat-width)`, default **480px**, resized together (clamp 420–620). This is the owner's own diagnosis and it removes the crop entirely.
+  - **The Tree view starts centred** instead of flying the camera to the focal person; only a later focus change animates (`enteredView` ref).
+  - **The map opens framed on the family** — the bounding box of recorded places (Paris to Darab) with padding, clamped 1–4× — rather than the whole planet. Labels that collide (Tehran sits beside Qazvin) give way to the busier place and reveal their name on hover (`.map-marker.is-quiet`).
+  - **Hand cursor over every button**, using the pattern ramine.net settled on and the owner pointed at: each interactive element declares `cursor:pointer` **and** hands it down with `button * { cursor: inherit }`, because Safari falls back to `cursor:auto` over a button's positioned or flex children. Disabled buttons get `default`. The custom-cursor canvases still override to `none`.
+  - Suite note: the map-pan test asserted an absolute `translate(80px, 40px)`; framing makes the pan a delta from wherever the framing lands, so it now asserts the delta.
+
 
 - **Version 112** (`83f4a9e`): language names collapse to flags below 1700px so the top bar never crowds the search.
 - **Version 111** (`b77895b`): **clicking a spouse re-centres the tree on her.** Spouses were exempted from re-centring along with the focal person, so clicking Nikoo panned the camera and opened her profile while the canvas still showed her husband's parents and siblings. Only the person already at the centre keeps the layout now. Also: **language moved into the top bar** — "Language:" with a flag per language (the flag stands for the language, not a nationality), names collapsing before flags, the group hiding before the search.
