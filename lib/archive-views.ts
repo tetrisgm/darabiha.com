@@ -18,19 +18,25 @@ export type MappedPlace = {
   people: Person[];
 };
 
-const cityCoordinates: Record<string, [number, number]> = {
-  paris: [49.4, 31.8], tehran: [63.3, 35.9], shiraz: [61.2, 40.6], tabriz: [61.4, 32.9],
-  london: [47.7, 28.5], geneva: [49.6, 32.5], montreal: [28.8, 30.2], toronto: [27.2, 32.1],
-  "new york": [30.5, 33.8], "san francisco": [15.9, 35.1], "los angeles": [15.9, 40.1],
-  washington: [29.2, 35.8], miami: [28.5, 43.9], vancouver: [15.9, 27.6], dubai: [61.8, 43.1],
-  istanbul: [55.1, 34.2], beirut: [57.8, 37.1], rome: [50.4, 36.3], berlin: [51.5, 28.7],
+// Real latitude/longitude, projected with the same equirectangular mapping the
+// generated country outlines use - so markers land where the coastlines say.
+// Alias spellings (Ghazvin, Teheran) map without editing anyone's record.
+const toPercent = ([lat, lon]: [number, number]): [number, number] => [((lon + 180) / 360) * 100, ((90 - lat) / 180) * 100];
+const cityLatLon: Record<string, [number, number]> = {
+  paris: [48.86, 2.35], tehran: [35.69, 51.39], teheran: [35.69, 51.39],
+  qazvin: [36.27, 50.0], ghazvin: [36.27, 50.0], qom: [34.64, 50.88],
+  shiraz: [29.59, 52.58], tabriz: [38.08, 46.29], darab: [28.75, 54.54],
+  saveh: [35.02, 50.36], karbala: [32.62, 44.03],
+  london: [51.51, -0.13], geneva: [46.2, 6.14], montreal: [45.5, -73.57], toronto: [43.65, -79.38],
+  "new york": [40.71, -74.01], "san francisco": [37.77, -122.42], "los angeles": [34.05, -118.24],
+  washington: [38.91, -77.04], miami: [25.76, -80.19], vancouver: [49.28, -123.12], dubai: [25.2, 55.27],
+  istanbul: [41.01, 28.98], beirut: [33.89, 35.5], rome: [41.9, 12.5], berlin: [52.52, 13.4],
 };
-
-const countryCoordinates: Record<string, [number, number]> = {
-  iran: [63.2, 38.2], france: [48.5, 33.4], "united states": [22.8, 36.2], usa: [22.8, 36.2],
-  canada: [22.5, 25.7], "united kingdom": [47.3, 28.5], uk: [47.3, 28.5], germany: [51.2, 30.5],
-  italy: [51.2, 36.9], switzerland: [49.6, 32.5], turkey: [56.2, 35.9], lebanon: [58.2, 37.8],
-  australia: [85.2, 73.1], india: [71.2, 49.5], japan: [87.1, 38.8], china: [78.2, 38.5],
+const countryLatLon: Record<string, [number, number]> = {
+  iran: [32.4, 53.7], france: [46.6, 2.5], "united states": [39.8, -98.6], usa: [39.8, -98.6],
+  canada: [56.1, -106.3], "united kingdom": [54.0, -2.0], uk: [54.0, -2.0], germany: [51.2, 10.4],
+  italy: [42.8, 12.8], switzerland: [46.8, 8.2], turkey: [39.0, 35.2], lebanon: [33.9, 35.9],
+  australia: [-25.3, 133.8], india: [22.6, 79.0], japan: [36.2, 138.3], china: [35.0, 103.0],
 };
 
 const normalized = (value: string) => value.toLocaleLowerCase().normalize("NFKD").replace(/\p{Diacritic}/gu, "").trim();
@@ -63,9 +69,10 @@ export function mapFamilyPlaces(tree: FamilyTree): { mapped: MappedPlace[]; unma
     for (const location of locations) {
       const label = place(location.city, location.country, location.fallback);
       if (!label) continue;
-      const coordinates = location.city ? cityCoordinates[normalized(location.city)] : undefined;
-      const fallbackCoordinates = location.country ? countryCoordinates[normalized(location.country)] : undefined;
-      const point = coordinates || fallbackCoordinates;
+      const coordinates = location.city ? cityLatLon[normalized(location.city)] : undefined;
+      const fallbackCoordinates = location.country ? countryLatLon[normalized(location.country)] : undefined;
+      const latLon = coordinates || fallbackCoordinates;
+      const point = latLon ? toPercent(latLon) : undefined;
       if (!point) { unmapped.add(label); continue; }
       const key = normalized(label);
       const group = groups.get(key) || { key, label, x: point[0], y: point[1], people: [] };

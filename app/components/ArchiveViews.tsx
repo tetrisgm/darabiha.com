@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { buildTimeline, mapFamilyPlaces } from "../../lib/archive-views";
+import { WORLD_COUNTRY_PATHS } from "../../lib/world-map-paths";
 import type { FamilyTree, Person } from "../../lib/types";
 
 function prettyDate(value: string) {
@@ -59,12 +60,7 @@ export function WorldMapView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
       <div className="world-map-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
       <div className="world-map-board">
       <svg viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <path d="M62 120 118 72l100 6 53 43-20 63-50 26-22 83-56-19-23-76-51-29Z" />
-        <path d="m248 310 65 23 45 61-24 85-45-18-31-69Z" />
-        <path d="m410 110 75-42 155 25 68 53-26 47-89 5-45 49-53-26-69 12-38-57Z" />
-        <path d="m485 244 74 9 50 64-35 143-53-26-28-98-42-39Z" />
-        <path d="m698 182 94-44 123 36 24 86-70 51-95-18-35-54Z" />
-        <path d="m802 353 91-12 56 58-27 57-99-10-42-51Z" />
+        {WORLD_COUNTRY_PATHS.map((d, index) => <path d={d} key={index} />)}
       </svg>
       {mapped.map((location) => <button type="button" className="map-marker" style={{ left: `${location.x}%`, top: `${location.y}%` }} key={location.key} onClick={() => onSelect(location.people[0])} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
       {!mapped.length && <p className="map-empty">Add a birth or death city and country to place someone on the map.</p>}
