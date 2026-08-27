@@ -1526,6 +1526,9 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .lang-switch-label, .lang-pick-name { display:none; }
   .lang-switch { gap:.15rem; padding:.12rem; }
 }
-@media (max-width: 1200px) {
+/* The search and the switcher's words go together: below the width where
+   both fit beside a whole tab strip, neither is shown. The chat finds people
+   and the List view is a list of them. */
+@media (max-width: 1500px) {
   .site-action-bar .tree-search { display:none; }
 }
