@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 183**, `BUILD_ID=362f093`.
+- The live release is **Version 185**, `BUILD_ID=9bcc98a`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":183,"build":"362f093","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":185,"build":"9bcc98a","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -31,6 +31,16 @@ Last updated: 2026-08-27
 - `npm run build` passes.
 - `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
+
+### Versions 184–185 (2026-08-27) — sending documents, and the family password
+
+- **The family password is set** (owner supplied it 2026-08-27). It exists only as a keyed digest; nothing stores or returns the plaintext. **The site is still `public`** — setting a password does not turn the gate on, and switching to "Anyone with the password" in Settings → Members & access is the owner's step. The private link is issued and shown there.
+- **Version 184** (`5c0937e`): **the queue had an endpoint and nothing that posted to it.** Attaching files in the chat still went through the archivist synchronously, so the ingestion feature had no way in. The ＋ menu offers a third thing — *Send documents to read* — which queues them and starts the drain immediately.
+  **There is still no timer, and that is not a gap**: only an editor can send a document, and an editor is by definition present when they do, so "as soon as possible" is the upload itself. A scheduled drain would only cover a read that was interrupted, which V185 handles instead.
+- **Version 185** (`9bcc98a`): **an abandoned read stranded its document for good.** A claim that never finished left the row in `reading` and nothing would pick it up again — which happened the first time a document went through the interface: the read outlived the browser that started it. A claim older than ten minutes is treated as abandoned and the document returns to the queue. Verified by recovering the stranded document and reading it.
+  Reading a document takes **longer than a browser tab usually waits** — the tree JSON plus the file through gpt-5. The notice says so.
+
+**Ingestion verified end to end through the interface**: a bilingual note sent from the ＋ menu, queued, read, one change applied, **412 people before and after** — it matched the existing Ramazan Darabi rather than creating a second one.
 
 ### Versions 175–183 (2026-08-27) — the card you click does not move
 
