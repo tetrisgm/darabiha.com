@@ -1504,12 +1504,24 @@ html[lang="fa"] { font-variant-numeric: normal; }
 }
 
 /* Every view must be reachable without discovering a hidden scroll: Apple's
-   line on a segmented control is that its segments are visible. So the strip
-   takes the room it needs and never gives way - what gives way instead, in
-   order, is the language switcher's words, then the search, which the chat
-   and the List view both cover. Measured: all seven tabs visible from an iPad
-   mini in portrait upwards. */
+   line on a segmented control is that its segments are visible, and that a
+   control which cannot show them should be a different control. So the strip
+   takes the room it needs and never gives way - and below the width where it
+   fits whole, it is replaced by a picker rather than clipped. What gives way
+   before either of them is the language switcher's words, then the search,
+   which the chat and the List view both cover. */
 .site-action-bar .archive-view-switcher { flex:none; max-width:none; overflow:visible; }
+.archive-view-picker { display:none; }
+@media (max-width: 1100px) {
+  .site-action-bar .archive-view-switcher { display:none; }
+  .archive-view-picker { display:inline-flex; align-items:center; flex:none; }
+  .archive-view-picker select { appearance:none; border:1px solid var(--line); border-radius:.7rem;
+    background:rgba(44,44,46,.7); color:var(--ink); font:inherit; font-size:.82rem; font-weight:650;
+    min-height:2.75rem; padding:.4rem 2rem .4rem .9rem; }
+  .archive-view-picker { position:relative; }
+  .archive-view-picker::after { content:"⌄"; position:absolute; right:.75rem; top:45%;
+    transform:translateY(-50%); color:var(--muted); font-size:.8rem; pointer-events:none; }
+}
 @media (max-width: 1500px) {
   .lang-switch-label, .lang-pick-name { display:none; }
   .lang-switch { gap:.15rem; padding:.12rem; }

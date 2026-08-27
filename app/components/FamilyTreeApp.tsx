@@ -307,6 +307,16 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
       {authError && <div className="border-b border-[rgba(226,140,115,.35)] bg-[rgba(226,140,115,.12)] px-5 py-3 text-center text-sm text-[#e8a289]">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <header className={`site-action-bar absolute top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8 ${chatCollapsed ? "is-chat-collapsed" : ""}`}>
+        {/* Seven segments do not fit a phone, and Apple's answer to a
+            segmented control that cannot show its segments is a different
+            control - so below the width where the strip fits whole, the views
+            are a picker, which on iOS is the native wheel. */}
+        <label className="archive-view-picker">
+          <span className="sr-only">{t("nav.view")}</span>
+          <select value={viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}>
+            {VIEW_MODES.filter((mode) => mode !== "fill" || viewer.canEdit).map((mode) => <option key={mode} value={mode}>{t(VIEW_KEYS[mode])}</option>)}
+          </select>
+        </label>
         <nav className="archive-view-switcher" aria-label="Archive view">{VIEW_MODES.filter((mode) => mode !== "fill" || viewer.canEdit).map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{t(VIEW_KEYS[mode])}</button>)}</nav>
         <div className="relative flex items-center gap-4">
           <div className="lang-switch" role="group" aria-label={t("settings.language")}>

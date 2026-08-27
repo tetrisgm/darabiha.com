@@ -17,7 +17,7 @@ const en: Dict = {
   "view.family": "Family", "view.tree": "Tree", "view.list": "List", "view.timeline": "Timeline",
   "view.calendar": "Calendar", "view.map": "Map", "view.stats": "Numbers", "view.fill": "Fill in",
   "nav.search": "Find a person…", "nav.signIn": "Sign in", "nav.settings": "Settings", "nav.signOut": "Sign out",
-  "nav.account": "Account menu",
+  "nav.view": "Archive view", "nav.account": "Account menu",
 
   "chat.welcome": "Welcome{name}. Ask about the family, add what you know, or attach documents and photos — I’ll keep the tree up to date.",
   "chat.placeholder": "Ask a question, add what you know, or just chat…",
@@ -94,7 +94,7 @@ const fa: Dict = {
   "view.family": "خانواده", "view.tree": "شجره‌نامه", "view.list": "فهرست", "view.timeline": "گاه‌شمار",
   "view.calendar": "تقویم", "view.map": "نقشه", "view.stats": "آمار", "view.fill": "تکمیل",
   "nav.search": "جست‌وجوی نام…", "nav.signIn": "ورود", "nav.settings": "تنظیمات", "nav.signOut": "خروج",
-  "nav.account": "منوی حساب",
+  "nav.view": "نمای آرشیو", "nav.account": "منوی حساب",
 
   "chat.welcome": "خوش آمدید{name}. درباره‌ی خانواده بپرسید، آنچه می‌دانید بیفزایید، یا سند و عکس پیوست کنید — من شجره‌نامه را به‌روز نگه می‌دارم.",
   "chat.placeholder": "بپرسید، آنچه می‌دانید بنویسید، یا گفت‌وگو کنید…",
@@ -171,7 +171,7 @@ const fr: Dict = {
   "view.family": "Famille", "view.tree": "Arbre", "view.list": "Liste", "view.timeline": "Chronologie",
   "view.calendar": "Calendrier", "view.map": "Carte", "view.stats": "Chiffres", "view.fill": "Compléter",
   "nav.search": "Rechercher une personne…", "nav.signIn": "Se connecter", "nav.settings": "Réglages", "nav.signOut": "Se déconnecter",
-  "nav.account": "Menu du compte",
+  "nav.view": "Vue des archives", "nav.account": "Menu du compte",
 
   "chat.welcome": "Bienvenue{name}. Posez vos questions sur la famille, ajoutez ce que vous savez, ou joignez des documents et des photos — je tiens l’arbre à jour.",
   "chat.placeholder": "Posez une question, ajoutez ce que vous savez, ou discutez…",
