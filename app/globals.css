@@ -1302,3 +1302,21 @@ html[lang="fa"] { font-variant-numeric: normal; }
    still takes the width every other field has. */
 .fill-with-clear { display:flex; align-items:center; gap:.4rem; }
 .fill-with-clear .fill-input { flex:1; min-width:0; }
+
+/* One column on a phone. The chat sidebar had a hard 480px from a later pass
+   that clobbered the min(430px,100vw) rule above, so on a 390pt screen it
+   pushed the header bar - which starts where the sidebar ends - out to
+   1174px. A document that wide makes the browser zoom the whole archive down
+   to a third of its size, record panel included, and nothing on the page
+   looks wrong from the inside: it is the viewport that gave way. */
+@media (max-width: 720px) {
+  .chat-sidebar { width:min(var(--chat-width,480px),100vw); flex:0 0 min(var(--chat-width,480px),100vw); }
+  .site-action-bar,
+  main.has-person .site-action-bar,
+  main.chat-collapsed .site-action-bar,
+  main.chat-collapsed.has-person .site-action-bar { left:0; right:0; }
+  /* the header's own row scrolls instead of widening the page */
+  .site-action-bar { gap:.5rem; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
+  .site-action-bar::-webkit-scrollbar { display:none; }
+  .site-action-bar > * { flex:none; }
+}
