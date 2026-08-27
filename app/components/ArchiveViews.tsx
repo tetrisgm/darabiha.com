@@ -42,6 +42,10 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
   const stageRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const framed = useRef(false);
+  // the opening framing lands a frame after the places arrive, which can be
+  // well after first paint on a slow load; the flag says when the map is done
+  // moving on its own, so a pan measured against it is the reader's alone
+  const [hasFramed, setHasFramed] = useState(false);
   useEffect(() => {
     const board = boardRef.current;
     if (!board) return;
@@ -66,6 +70,7 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
       const boardBox = board.getBoundingClientRect();
       if (!stageBox.width || !boardBox.width) return;
       framed.current = true;
+      setHasFramed(true);
       const xs = mapped.map((place) => place.x / 100), ys = mapped.map((place) => place.y / 100);
       const spanX = Math.max(...xs) - Math.min(...xs), spanY = Math.max(...ys) - Math.min(...ys);
       const midX = (Math.max(...xs) + Math.min(...xs)) / 2, midY = (Math.max(...ys) + Math.min(...ys)) / 2;
@@ -110,7 +115,7 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
   // Full-bleed like the other canvases: the stage is the whole tab, and the
   // 2:1 board (which the marker percentages are calibrated to) covers it.
   return <section className="archive-view family-map-view" aria-label="Family places">
-    <div className="world-map" ref={stageRef} role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"}
+    <div className="world-map" ref={stageRef} role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"} data-framed={hasFramed ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}>
       <div className="canvas-controls map-zoom" role="group" aria-label="Map zoom controls">
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(0.9, { x: 0, y: 0 })} aria-label={t("map.zoomOut")} title={t("map.zoomOut")}>−</button>
