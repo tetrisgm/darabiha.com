@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 135**, `BUILD_ID=2dc1c7e`.
+- The live release is **Version 137**, `BUILD_ID=8467a48`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":135,"build":"2dc1c7e","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":137,"build":"8467a48","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -27,8 +27,17 @@ Last updated: 2026-08-27
   **The default 4 workers are more than this Mac can carry when something else is on it**: with load averages of 5–11 from unrelated processes, the `openFullTree` tests time out at 20s waiting for `.tree-card` while the same tests pass in ~0.9s alone. That is contention, not a regression — check `uptime` before believing a timeout, and run `--workers=1` (about 23-33s for the whole suite) when the machine is busy — a serial pass came back green under a load average of 27, where the parallel default fails at load 5. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
-- `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
+- `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
+
+### Versions 136–137 (2026-08-27)
+
+- **Version 136** (`c79560f`): **the Fill-in view gets the record panel's treatment** (owner: "the fill in view needs the same treatment"). It had drifted out of step with the panel:
+  - a plain "Died" field with no way to undo a death entered by mistake. It carries the same × now, clearing date, place and burial together. `deathCity`, `deathCountry` and `burialPlace` ride in the form without inputs of their own so they round-trip unchanged and the × can empty them all at once.
+  - no field for where a living person lives, though the interview had started asking. There is a "Lives in" field now, offered only to the presumed-living, and **"where they live" counts as a gap in the missing list for the living** — which moves the "N of M records are complete" headline.
+  - the row-click had the Tree view's problem: opening a row closes whichever was open before it, so clicking a row *below* an open one pulled it up under the pointer by the height of the editor that vanished. The clicked row holds its place — the scroll moves by exactly what the row moved (`data-fill-row`, a layout effect on `expandedId`, and `.fill-view` is itself the scroll container).
+  Same release: **a lint error left in the hover preview at V121 and never seen**, because only `tsc` was being run. `setPreviewId(null)` inside an effect chasing `focusId` trips `react-hooks`'s cascading-render rule; a preview belongs to the board it was opened on, so it is keyed `{ id, forFocus }` and retires by definition with no effect at all. Two dead bindings the lint had also been flagging are gone (an unused `ordinal` helper in `family-facts.ts`, `PlacePanel`'s unused `tree` prop). **`npm run lint` is part of the release check, not just `tsc`** — it is the only thing that catches this class.
+- **Version 137** (`8467a48`): **a click no longer previews whoever it puts under the pointer.** Navigating draws a different board, and the card that lands under a pointer which has not moved since the click was previewed a third of a second later, unasked. The click anchors the pointer the same way opening a preview does. Verified: hover previews, moving to open canvas releases, a click navigates and *stays*, and a deliberate move previews again.
 
 ### Versions 134–135 (2026-08-27)
 
