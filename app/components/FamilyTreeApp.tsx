@@ -455,6 +455,8 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   const [relativeQuery, setRelativeQuery] = useState("");
   const [relativeChoice, setRelativeChoice] = useState("");
   const [editingBio, setEditingBio] = useState(false);
+  const [photoShare, setPhotoShare] = useState<string | null>(null);
+  const [shareQuery, setShareQuery] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -468,6 +470,7 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   }, [onClose]);
   const buckets = relatedPeople(tree, person.id);
   const stories = tree.stories.filter((story) => story.personIds.includes(person.id));
+  const photos = person.photoIds ?? (person.photoAttachmentId ? [person.photoAttachmentId] : []);
   async function post(body: Record<string, unknown>) { const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (!response.ok || !data.tree) throw new Error(data.error || "Request failed"); onTreeChange(data.tree); return data.tree; }
   const patchField = (key: string) => async (value: string) => { try { await post({ action: "update", personId: person.id, patch: { [key]: value } }); setNotice("Saved"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save"); } };
   async function removeRelationship(id: string) { try { await post({ action: "remove_relationship", relationshipId: id }); setNotice("Relationship removed"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove relationship"); } }
@@ -540,6 +543,25 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
       </p></div>
       {(person.burialPlace || (canEdit && person.deathDate)) && <div className="person-fact-wide"><span className="eyebrow">Buried</span><p className="fact-line"><InlineText value={person.burialPlace} placeholder="cemetery or resting place" canEdit={canEdit} onSave={patchField("burialPlace")} /></p></div>}
     </div>
+    {(photos.length > 1 || (canEdit && photos.length > 0)) && <div className="person-photos">
+      <div className="relationship-heading"><p className="eyebrow">Photographs</p>{canEdit && <button type="button" className="relationship-add" onClick={() => photoRef.current?.click()} aria-label="Add a photograph">＋</button>}</div>
+      <div className="photo-grid">
+        {photos.map((id) => <div className={`photo-tile ${id === person.photoAttachmentId ? "is-portrait" : ""}`} key={id}>
+          <img src={`/api/photos/${id}`} alt="" loading="lazy" />
+          {canEdit && <div className="photo-tile-actions">
+            {id !== person.photoAttachmentId && <button type="button" onClick={async () => { try { await post({ action: "set_portrait", personId: person.id, attachmentId: id }); setNotice("Portrait set"); } catch { setNotice("Could not set the portrait"); } }}>Portrait</button>}
+            <button type="button" onClick={() => setPhotoShare(id)}>Who else?</button>
+            <button type="button" className="is-danger" onClick={async () => { try { await post({ action: "unlink_photo", personId: person.id, attachmentId: id }); setNotice("Removed from this record"); } catch { setNotice("Could not remove the photograph"); } }}>Remove</button>
+          </div>}
+          {id === person.photoAttachmentId && <span className="photo-tile-badge">Portrait</span>}
+        </div>)}
+      </div>
+      {photoShare && <div className="relative-picker">
+        <input className="modal-input" autoFocus value={shareQuery} placeholder="Who else is in this photograph?" onChange={(event) => setShareQuery(event.target.value)} />
+        {shareQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && !(candidate.photoIds ?? []).includes(photoShare) && candidate.displayName.toLocaleLowerCase().includes(shareQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={async () => { try { await post({ action: "link_photo", personId: candidate.id, attachmentId: photoShare }); setNotice(`Added to ${candidate.displayName}`); setPhotoShare(null); setShareQuery(""); } catch { setNotice("Could not add them to the photograph"); } }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}</span></button>)}</div>}
+        <button type="button" className="fill-skip" onClick={() => { setPhotoShare(null); setShareQuery(""); }}>Done</button>
+      </div>}
+    </div>}
     {(person.biography || canEdit) && <div className="person-biography-block">
       <div className="relationship-heading"><p className="eyebrow">Biography</p></div>
       {editingBio

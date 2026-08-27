@@ -1023,3 +1023,18 @@ main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-ba
   .person-hover-preview { width:min(100%,26rem); }
 }
 .person-modal-v2 .person-facts > .person-fact-wide { grid-column:1/-1; border-left:0 !important; border-top:1px solid var(--line); }
+
+/* photographs: a person can hold many, and one photograph many people */
+.person-photos { margin-top:1.9rem; }
+.photo-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(6.5rem, 1fr)); gap:.5rem; }
+.photo-tile { position:relative; aspect-ratio:1; overflow:hidden; border-radius:.8rem; border:1px solid var(--line); background:var(--card); }
+.photo-tile img { width:100%; height:100%; object-fit:cover; display:block; }
+.photo-tile.is-portrait { border-color:color-mix(in srgb,var(--accent) 55%,transparent); box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent); }
+.photo-tile-badge { position:absolute; left:.35rem; bottom:.35rem; border-radius:999px; background:rgba(20,20,22,.78); color:var(--accent);
+  padding:.1rem .45rem; font-size:.6rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.photo-tile-actions { position:absolute; inset:0; display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:.2rem;
+  padding:.4rem; background:rgba(12,12,14,.82); opacity:0; transition:opacity .18s var(--ease); }
+.photo-tile:hover .photo-tile-actions, .photo-tile:focus-within .photo-tile-actions { opacity:1; }
+.photo-tile-actions button { border-radius:.45rem; background:rgba(255,255,255,.1); color:var(--ink); padding:.25rem; font-size:.66rem; font-weight:600; }
+.photo-tile-actions button:hover { background:color-mix(in srgb,var(--accent) 32%,transparent); color:var(--accent); }
+.photo-tile-actions button.is-danger:hover { background:rgba(255,107,97,.2); color:var(--danger); }

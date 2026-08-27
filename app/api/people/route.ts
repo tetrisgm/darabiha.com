@@ -1,5 +1,5 @@
 import { requireEditor } from "../../authz";
-import { addRelationship, applyProposal, attachPersonPhoto, readTree, removePerson, removePersonPhoto, removeRelationship, setRelationshipStatus, updatePerson } from "../../../db/store";
+import { addRelationship, applyProposal, attachPersonPhoto, linkPersonPhoto, readTree, removePerson, removePersonPhoto, removeRelationship, setPersonPortrait, setRelationshipStatus, unlinkPersonPhoto, updatePerson } from "../../../db/store";
 
 export const runtime = "edge";
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -32,6 +32,9 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, tree: await setRelationshipStatus(String(body.relationshipId ?? ""), status, auth.user.email) });
     }
     if (action === "remove_photo") return Response.json({ ok: true, tree: await removePersonPhoto(String(body.personId ?? ""), auth.user.email) });
+    if (action === "set_portrait") return Response.json({ ok: true, tree: await setPersonPortrait(String(body.personId ?? ""), body.attachmentId ? String(body.attachmentId) : null, auth.user.email) });
+    if (action === "link_photo") return Response.json({ ok: true, tree: await linkPersonPhoto(String(body.personId ?? ""), String(body.attachmentId ?? ""), auth.user.email) });
+    if (action === "unlink_photo") return Response.json({ ok: true, tree: await unlinkPersonPhoto(String(body.personId ?? ""), String(body.attachmentId ?? ""), auth.user.email) });
     if (action === "add") {
       const displayName = String(body.displayName ?? "").trim();
       if (!displayName) return Response.json({ error: "display_name_required" }, { status: 400 });

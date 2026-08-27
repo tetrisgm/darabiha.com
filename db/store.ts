@@ -24,6 +24,10 @@ const schemaStatements = [
   )`,
   `CREATE TABLE IF NOT EXISTS story_attachments (story_id TEXT NOT NULL, attachment_id TEXT NOT NULL)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_story_attachments_unique ON story_attachments(story_id, attachment_id)`,
+  `CREATE TABLE IF NOT EXISTS person_photos (
+    person_id TEXT NOT NULL, attachment_id TEXT NOT NULL, created_at TEXT NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_person_photos_unique ON person_photos(person_id, attachment_id)`,
   `CREATE TABLE IF NOT EXISTS open_questions (
     id TEXT PRIMARY KEY, question TEXT NOT NULL, evidence TEXT, action_summary TEXT,
     proposal_json TEXT, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'confirmed', 'denied')),
@@ -260,7 +264,7 @@ export function cachedTreeJson(): string | null {
 
 export async function readTree(): Promise<FamilyTree> {
   await ensureSchema();
-  const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult, storyAttachmentsResult] = await Promise.all([
+  const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult, storyAttachmentsResult, personPhotosResult] = await Promise.all([
     env.DB.prepare(`SELECT id, display_name AS displayName, gender, given_name AS givenName,
       family_name AS familyName, maiden_name AS maidenName, birth_date AS birthDate, death_date AS deathDate,
       birth_place AS birthPlace, death_place AS deathPlace, birth_city AS birthCity, birth_country AS birthCountry,
@@ -270,13 +274,22 @@ export async function readTree(): Promise<FamilyTree> {
     env.DB.prepare(`SELECT id, title, body, original_body AS originalBody, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
     env.DB.prepare(`SELECT story_id AS storyId, person_id AS personId FROM story_people`).all<{ storyId: string; personId: string }>(),
     env.DB.prepare(`SELECT story_id AS storyId, attachment_id AS attachmentId FROM story_attachments`).all<{ storyId: string; attachmentId: string }>(),
+    env.DB.prepare(`SELECT person_id AS personId, attachment_id AS attachmentId FROM person_photos ORDER BY created_at`).all<{ personId: string; attachmentId: string }>(),
   ]);
   const links = new Map<string, string[]>();
   for (const row of storyPeopleResult.results) links.set(row.storyId, [...(links.get(row.storyId) ?? []), row.personId]);
   const attachmentLinks = new Map<string, string[]>();
   for (const row of storyAttachmentsResult.results) attachmentLinks.set(row.storyId, [...(attachmentLinks.get(row.storyId) ?? []), row.attachmentId]);
+  // a photo can belong to several people (group photographs); the portrait
+  // always leads the gallery
+  const photoLinks = new Map<string, string[]>();
+  for (const row of personPhotosResult.results) photoLinks.set(row.personId, [...(photoLinks.get(row.personId) ?? []), row.attachmentId]);
   const tree: FamilyTree = {
-    people: peopleResult.results,
+    people: peopleResult.results.map((person) => {
+      const gallery = photoLinks.get(person.id) ?? [];
+      const ordered = person.photoAttachmentId ? [person.photoAttachmentId, ...gallery.filter((id) => id !== person.photoAttachmentId)] : gallery;
+      return { ...person, photoIds: ordered };
+    }),
     relationships: relationshipsResult.results,
     stories: storiesResult.results.map((story) => ({ ...story, personIds: links.get(story.id) ?? [], attachmentIds: attachmentLinks.get(story.id) ?? [] })),
   };
@@ -464,8 +477,10 @@ export async function attachPersonPhoto(personId: string, file: File, actorEmail
   await ensureSchema();
   const now = new Date().toISOString();
   await env.DB.batch([
-    env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ?").bind(attachment.id, now, personId),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "attach_person_photo", "Updated a family portrait", JSON.stringify({ personId, attachmentId: attachment.id }), now),
+    env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)").bind(personId, attachment.id, now),
+    // the first photograph of someone becomes their portrait; later ones join the gallery
+    env.DB.prepare("UPDATE people SET photo_attachment_id = COALESCE(photo_attachment_id, ?), updated_at = ? WHERE id = ?").bind(attachment.id, now, personId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "attach_person_photo", "Added a family photograph", JSON.stringify({ personId, attachmentId: attachment.id }), now),
   ]);
   return readTree();
 }
@@ -557,6 +572,51 @@ export async function answerQuestion(id: string, verdict: "confirm" | "deny", no
       `${verdict === "confirm" ? "Confirmed" : "Denied"}: ${row.question}`,
       JSON.stringify({ questionId: id, verdict, note: note?.trim() || null, applied }), now));
   await env.DB.batch(statements);
+  treeJsonCache = null;
+  return readTree();
+}
+
+
+// ---------- photo galleries ----------
+/** One photograph, many people: a group portrait is linked to each person in
+ * it rather than duplicated. The portrait is whichever gallery photo the
+ * person's photo_attachment_id points at. */
+export async function setPersonPortrait(personId: string, attachmentId: string | null, actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ?").bind(attachmentId, now, personId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "set_person_portrait", attachmentId ? "Chose a portrait" : "Cleared a portrait", JSON.stringify({ personId, attachmentId }), now),
+  ]);
+  treeJsonCache = null;
+  return readTree();
+}
+
+export async function linkPersonPhoto(personId: string, attachmentId: string, actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)").bind(personId, attachmentId, now),
+    env.DB.prepare("UPDATE people SET photo_attachment_id = COALESCE(photo_attachment_id, ?), updated_at = ? WHERE id = ?").bind(attachmentId, now, personId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "link_person_photo", "Added someone to a photograph", JSON.stringify({ personId, attachmentId }), now),
+  ]);
+  treeJsonCache = null;
+  return readTree();
+}
+
+export async function unlinkPersonPhoto(personId: string, attachmentId: string, actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM person_photos WHERE person_id = ? AND attachment_id = ?").bind(personId, attachmentId),
+    // dropping the portrait promotes whatever else the person still has
+    env.DB.prepare(`UPDATE people SET photo_attachment_id = (SELECT attachment_id FROM person_photos WHERE person_id = ? ORDER BY created_at LIMIT 1), updated_at = ?
+      WHERE id = ? AND photo_attachment_id = ?`).bind(personId, now, personId, attachmentId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "unlink_person_photo", "Removed a photograph from a record", JSON.stringify({ personId, attachmentId }), now),
+  ]);
   treeJsonCache = null;
   return readTree();
 }

@@ -16,6 +16,8 @@ export type Person = {
   /** where the person is buried - a cemetery or plot, not a city */
   burialPlace: string | null;
   biography: string | null;
+  /** every photograph linked to this person, portrait first */
+  photoIds?: string[];
   photoAttachmentId: string | null;
 };
 
