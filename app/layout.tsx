@@ -14,6 +14,12 @@ const serif = Cormorant_Garamond({
   weight: ["500", "600"],
 });
 
+/* viewport-fit=cover is what makes env(safe-area-inset-*) mean anything on a
+   phone with a notch and a home indicator; without it iOS letterboxes the
+   page and every inset reads as zero. Apple's guidance is to cover the screen
+   and then keep content out of those insets yourself, which globals.css does. */
+export const viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" as const };
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://darabiha.com"),
   title: "Darabiha · Our family tree",

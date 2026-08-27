@@ -1298,7 +1298,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
    1174px. A document that wide makes the browser zoom the whole archive down
    to a third of its size, record panel included, and nothing on the page
    looks wrong from the inside: it is the viewport that gave way. */
-@media (max-width: 900px) {
+@media (max-width: 767px) {
   .chat-sidebar { width:min(var(--chat-width,480px),100vw); flex:0 0 min(var(--chat-width,480px),100vw); }
   /* The bar spans the phone, so the shell has to start below it - otherwise
      it lies over the top of whatever is in the first column, including the
@@ -1314,7 +1314,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .site-action-bar { gap:.5rem; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 767px) {
   /* .family-shell is isolation:isolate, so the record panel's z-index is
      confined inside it. With the panel covering the whole phone, the shell
      has to sit above the header and the version stamp or they paint over it -
@@ -1368,10 +1368,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
    phone the language switcher keeps its flags but drops its words while the
    search - which the chat and the List view both cover - stands down. */
 .family-shell > * { min-width:0; }
-@media (max-width: 900px) {
-  .site-action-bar .archive-view-switcher { flex:1 1 auto; min-width:0; }
-  .site-action-bar > :last-child { flex:none; }
-}
+
 @media (max-width: 720px) {
   .lang-switch-label, .lang-pick-name { display:none; }
   .lang-switch { gap:.1rem; padding:.1rem; }
@@ -1442,3 +1439,51 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .ingest-note { margin:0 0 .6rem; border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line));
   border-radius:.7rem; background:color-mix(in srgb,var(--accent) 10%,transparent);
   padding:.5rem .7rem; color:var(--ink); font-size:.78rem; line-height:1.45; }
+
+/* --- Apple's compact and regular widths, applied ---------------------------
+   Below 768pt is compact: a phone, or an iPad in Slide Over. One column, the
+   chat and the views taking turns.
+   At 768pt and above is regular: an iPad, which should be given a real split
+   rather than a stretched phone. A 480pt chat took 62% of an iPad in portrait
+   and left the family board 288pt to live in. */
+@media (min-width: 768px) and (max-width: 1100px) {
+  .chat-sidebar { width:clamp(20rem, 38vw, 26rem); flex:0 0 clamp(20rem, 38vw, 26rem); }
+  .site-action-bar,
+  main.has-person .site-action-bar,
+  main.chat-collapsed.has-person .site-action-bar { left:clamp(20rem, 38vw, 26rem); }
+  main.chat-collapsed .site-action-bar { left:0; }
+  /* the record panel is a sheet over the board here, not a third column */
+  .person-panel { width:min(100%, 26rem); }
+}
+
+/* The bar's contents must never widen the page, at any size: the tab strip
+   gives up its room first and the controls beside it hold their own. */
+.site-action-bar .archive-view-switcher { flex:1 1 auto; min-width:0; }
+.site-action-bar > :last-child { flex:none; }
+
+/* --- Safe areas -----------------------------------------------------------
+   With viewport-fit=cover the page runs under the notch and the home
+   indicator, so everything pinned to an edge has to keep clear of them. */
+.site-action-bar { padding-top:env(safe-area-inset-top); height:calc(3.6rem + env(safe-area-inset-top)); }
+.family-shell { padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+.person-panel { padding-bottom:calc(var(--panel-pad, 2.5rem) + env(safe-area-inset-bottom)); }
+.person-panel-bar { padding-top:env(safe-area-inset-top); }
+.canvas-controls, .ped-zoom, .world-map .map-zoom { bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+.build-version { bottom:calc(.6rem + env(safe-area-inset-bottom)); }
+@media (max-width: 767px) {
+  .family-shell { padding-top:calc(3.6rem + env(safe-area-inset-top)); }
+  .chat-sidebar > div { padding-bottom:calc(1.5rem + env(safe-area-inset-bottom)); }
+}
+
+/* --- Touch targets --------------------------------------------------------
+   Apple asks for 44pt on a coarse pointer. These were sized for a cursor. */
+@media (hover: none) {
+  .person-modal-v2 .photo-tile-actions button { min-height:2.75rem; }
+  .relationship-remove, .fact-clear { min-width:2.75rem; min-height:2.75rem; }
+  .marriage-status, .photo-remove-button, .person-delete-button { min-height:2.75rem; }
+  .gender-pick { min-height:2.75rem; padding:.5rem 1.1rem; }
+  .archive-view-switcher button { min-height:2.75rem; }
+  .person-panel-bar button, .focus-back, .canvas-controls button { min-width:2.75rem; min-height:2.75rem; }
+  .lang-pick { min-width:2.75rem; min-height:2.75rem; }
+  .identify-matches button, .fill-row-head { min-height:2.75rem; }
+}
