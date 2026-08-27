@@ -139,6 +139,11 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const [pan, setPan] = useState({ x: 0, y: 0 });
   useEffect(() => { panValue.current = pan; }, [pan]);
   const [scale, setScale] = useState(1);
+  /* The board fits itself to the stage, but the stage changes width when the
+     chat collapses beside it - so the fit follows, right up until the reader
+     zooms themselves, after which the view is theirs. */
+  const userZoomed = useRef(false);
+  const zoom = (next: React.SetStateAction<number>) => { userZoomed.current = true; setScale(next); };
   const [panMode, setPanMode] = useState<"idle" | "drag" | "glide">("idle");
   const dragRef = useRef<{ id: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const pedCursorRef = useRef<HTMLSpanElement>(null);
@@ -160,7 +165,17 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const hidePedCursor = () => {
     if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
   };
-  const fitted = useRef(false);
+  const fitted = useRef(0);
+  // the stage changes width when the chat collapses beside it, and the board
+  // should follow rather than keep a fit made for the narrower stage
+  const [stageWidth, setStageWidth] = useState(0);
+  useEffect(() => {
+    const stage = containerRef.current;
+    if (!stage) return;
+    const observer = new ResizeObserver(() => setStageWidth(stage.getBoundingClientRect().width));
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     let frame = 0;
     let lastWidth = -1;
@@ -169,13 +184,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       // The stage animates open when the chat collapses beside it; the first
       // fit waits for two frames that agree on the width, or it would size
       // the board to a stage still on its way out.
-      if (!width || (!fitted.current && width !== lastWidth)) { lastWidth = width; frame = requestAnimationFrame(settle); return; }
-      if (!fitted.current) {
-        fitted.current = true;
-        // three 13rem columns with 3.2rem between them is what makes the board
-        // read as a family; a phone gets the whole arrangement, scaled down,
-        // instead of the middle column and two ghosts
-        if (width < 720) setScale(Math.max(0.4, Math.min(1, width / 720)));
+      if (!width || width !== lastWidth) { lastWidth = width; frame = requestAnimationFrame(settle); return; }
+      // three 13rem columns with 3.2rem between them is what makes the board
+      // read as a family; a narrow stage gets the whole arrangement, scaled
+      // down, instead of the middle column and two ghosts
+      if (!userZoomed.current && width !== fitted.current) {
+        fitted.current = width;
+        setScale(Math.max(0.4, Math.min(1, width / 720)));
       }
       setPanMode("idle");
       setPan({ x: 0, y: 0 });
@@ -194,7 +209,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     };
     settle();
     return () => cancelAnimationFrame(frame);
-  }, [focusId]);
+  }, [focusId, stageWidth]);
   /* A preview must not move anything the reader is looking at. The board
      reorganises around the hovered person, and the camera shifts by exactly
      the distance their card would otherwise have travelled - so it stays put,
@@ -231,7 +246,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const wheelPan = (event: React.WheelEvent<HTMLDivElement>) => {
     setPanMode("idle");
     if (event.ctrlKey || event.metaKey) {
-      setScale((current) => Math.max(0.4, Math.min(2, current * (event.deltaY > 0 ? 0.94 : 1.06))));
+      zoom((current) => Math.max(0.4, Math.min(2, current * (event.deltaY > 0 ? 0.94 : 1.06))));
     } else {
       setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
     }
@@ -260,13 +275,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       const modified = event.metaKey || event.ctrlKey;
       if (event.key === "+" || (modified && event.key === "=")) {
         event.preventDefault();
-        setScale((current) => Math.min(2, current * 1.1));
+        zoom((current) => Math.min(2, current * 1.1));
       } else if (event.key === "-") {
         event.preventDefault();
-        setScale((current) => Math.max(0.4, current * 0.9));
+        zoom((current) => Math.max(0.4, current * 0.9));
       } else if (modified && event.key === "0") {
         event.preventDefault();
-        setScale(1);
+        zoom(1);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -397,9 +412,9 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       {previewId && <p className="focus-preview-note">{t("family.previewing").replace("{name}", focal.displayName)}</p>}
     </div>
     <div className="canvas-controls ped-zoom" role="group" aria-label="Family zoom controls">
-      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.max(0.4, current * 0.9))} aria-label="Zoom out" title="Zoom out">−</button>
-      <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale(1)} aria-label="Reset zoom" title="Reset zoom">{Math.round(scale * 100)}%</button>
-      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.min(2, current * 1.1))} aria-label="Zoom in" title="Zoom in">＋</button>
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoom((current) => Math.max(0.4, current * 0.9))} aria-label="Zoom out" title="Zoom out">−</button>
+      <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoom(1)} aria-label="Reset zoom" title="Reset zoom">{Math.round(scale * 100)}%</button>
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoom((current) => Math.min(2, current * 1.1))} aria-label="Zoom in" title="Zoom in">＋</button>
     </div>
     <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
