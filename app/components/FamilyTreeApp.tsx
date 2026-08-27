@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
-import { StatisticsView, TimelineView, WorldMapView } from "./ArchiveViews";
+import { CalendarView, StatisticsView, TimelineView, WorldMapView } from "./ArchiveViews";
 import type { MappedPlace } from "../../lib/archive-views";
 import { FocusFamilyView, MissingDataView, OutlineView, Silhouette, TreeSearch } from "./TreeViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
@@ -33,9 +33,9 @@ function proposalRank(proposal: ChangeProposal) {
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
 const EMPTY_TREE: FamilyTree = { people: [], relationships: [], stories: [] };
-const VIEW_MODES = ["family", "tree", "list", "timeline", "map", "stats", "fill"] as const;
+const VIEW_MODES = ["family", "tree", "list", "timeline", "calendar", "map", "stats", "fill"] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
-const VIEW_LABELS: Record<ViewMode, string> = { family: "Family", tree: "Tree", list: "List", timeline: "Timeline", map: "Map", stats: "Numbers", fill: "Fill in" };
+const VIEW_LABELS: Record<ViewMode, string> = { family: "Family", tree: "Tree", list: "List", timeline: "Timeline", map: "Map", calendar: "Calendar", stats: "Numbers", fill: "Fill in" };
 
 export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signInEnabled }: Props) {
   const [tree, setTree] = useState(initialTree ?? EMPTY_TREE);
@@ -336,6 +336,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
               {viewMode === "fill" && viewer.canEdit && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
               {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
+              {viewMode === "calendar" && treeLoaded && <CalendarView tree={tree} onSelect={(person) => openPerson(person)} />}
               {viewMode === "stats" && treeLoaded && <StatisticsView tree={tree} onSelect={(person) => openPerson(person)} />}
               {viewMode === "map" && <WorldMapView tree={tree} onSelectPlace={(place) => { setPlaceFocus(place); setSelectedPerson(null); setHighlightedIds(place.people.map((person) => person.id)); }} />}
             </div>

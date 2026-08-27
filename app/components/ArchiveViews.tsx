@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { buildTimeline, mapFamilyPlaces, type MappedPlace } from "../../lib/archive-views";
 import { buildFamilyStats } from "../../lib/family-stats";
+import { onThisDay } from "../../lib/family-facts";
 import { WORLD_COUNTRY_PATHS } from "../../lib/world-map-paths";
 import type { FamilyTree, Person } from "../../lib/types";
 
@@ -136,5 +137,69 @@ export function StatisticsView({ tree, onSelect }: { tree: FamilyTree; onSelect:
         })}</ul>
       </section>
     </div>
+  </section>;
+}
+
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** The family's year: birthdays of the living, remembrances of the dead, and
+ * the anniversaries of dated stories - the days worth a message. */
+export function CalendarView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+  const today = new Date();
+  const dayOf = (value: string | null) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) ? String(value).slice(5) : null;
+  const yearOf = (value: string | null) => Number(String(value ?? "").slice(0, 4)) || null;
+  type Entry = { key: string; monthDay: string; label: string; detail: string; personId?: string; kind: "birthday" | "remembrance" | "story" };
+  const entries: Entry[] = [];
+  for (const person of tree.people) {
+    const born = dayOf(person.birthDate);
+    if (born) {
+      const bornYear = yearOf(person.birthDate)!;
+      const living = !person.deathDate && today.getFullYear() - bornYear <= 110;
+      entries.push({
+        key: `b-${person.id}`, monthDay: born, personId: person.id,
+        kind: living ? "birthday" : "remembrance",
+        label: person.displayName,
+        detail: living ? `turns ${today.getFullYear() - bornYear}` : `born ${bornYear}`,
+      });
+    }
+    const died = dayOf(person.deathDate);
+    if (died) entries.push({ key: `d-${person.id}`, monthDay: died, personId: person.id, kind: "remembrance", label: person.displayName, detail: `died ${yearOf(person.deathDate)}` });
+  }
+  for (const story of tree.stories) {
+    const day = dayOf(story.date);
+    if (day) entries.push({ key: `s-${story.id}`, monthDay: day, kind: "story", label: story.title, detail: `${yearOf(story.date)}` });
+  }
+  entries.sort((a, b) => a.monthDay.localeCompare(b.monthDay) || a.label.localeCompare(b.label));
+  const byMonth = new Map<string, Entry[]>();
+  for (const entry of entries) byMonth.set(entry.monthDay.slice(0, 2), [...(byMonth.get(entry.monthDay.slice(0, 2)) ?? []), entry]);
+  const todayStamp = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todays = onThisDay(tree, today);
+
+  return <section className="archive-view archive-calendar" aria-label="Family calendar">
+    <div className="archive-view-heading"><p className="eyebrow">Calendar</p><h2>The family year</h2><p>Birthdays of the living, the days we remember, and the anniversaries of the stories. Only full dates appear here — a year alone has no day to fall on.</p></div>
+    {todays.length > 0 && <div className="calendar-today">
+      <p className="eyebrow">Today</p>
+      {todays.map((fact, index) => <p className="calendar-today-line" key={index}>{fact.text}</p>)}
+    </div>}
+    {entries.length ? <div className="calendar-months">
+      {MONTHS.map((month, index) => {
+        const key = String(index + 1).padStart(2, "0");
+        const rows = byMonth.get(key) ?? [];
+        if (!rows.length) return null;
+        return <section className="calendar-month" key={month}>
+          <h3>{month}</h3>
+          <ul>{rows.map((entry) => {
+            const person = entry.personId ? tree.people.find((candidate) => candidate.id === entry.personId) : undefined;
+            return <li className={entry.monthDay === todayStamp ? "is-today" : ""} key={entry.key}>
+              <span className="calendar-day">{Number(entry.monthDay.slice(3))}</span>
+              <span className={`calendar-dot is-${entry.kind}`} aria-hidden="true" />
+              <button type="button" disabled={!person} onClick={() => person && onSelect(person)}>{entry.label}</button>
+              <span className="calendar-detail">{entry.detail}</span>
+            </li>;
+          })}</ul>
+        </section>;
+      })}
+    </div> : <p className="archive-empty">Full birth or death dates will fill this calendar. Most records carry only a year so far.</p>}
   </section>;
 }

@@ -133,6 +133,7 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         <div className="settings-links">
           <a className="settings-link-card" href="/documents"><strong>Documents</strong><span>The family biography, the histories, and the source archive the records were read out of.</span></a>
           <a className="settings-link-card" href="/history"><strong>History</strong><span>Every change anyone has made, newest first.</span></a>
+          <a className="settings-link-card" href="/api/export"><strong>Export</strong><span>The whole archive as a GEDCOM file, which every genealogy program reads.</span></a>
         </div>
       </div>}
 

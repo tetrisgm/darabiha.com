@@ -1103,3 +1103,24 @@ main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-ba
 .history-line time { color:var(--muted); font-size:.72rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .history-summary { margin:.3rem 0 0; font-size:.86rem; line-height:1.5; }
 .history-actor { margin:.2rem 0 0; color:var(--muted); font-size:.72rem; }
+
+/* the family year */
+.archive-calendar { overflow-y:auto; }
+.calendar-today { max-width:74rem; margin-top:1.8rem; border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line)); border-radius:1rem;
+  background:color-mix(in srgb,var(--accent) 8%,rgba(44,44,46,.7)); padding:.9rem 1.1rem; }
+.calendar-today .eyebrow { margin-bottom:.35rem; }
+.calendar-today-line { margin:.15rem 0; font-size:.9rem; line-height:1.5; }
+.calendar-months { columns:2 22rem; column-gap:2.4rem; max-width:74rem; margin-top:2rem; }
+.calendar-month { break-inside:avoid; margin-bottom:1.6rem; }
+.calendar-month h3 { margin:0 0 .5rem; font-family:var(--font-serif),Georgia,serif; font-size:1.1rem; font-weight:600; }
+.calendar-month ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.25rem; }
+.calendar-month li { display:grid; grid-template-columns:1.6rem .5rem 1fr auto; align-items:baseline; gap:.5rem; font-size:.84rem; }
+.calendar-month li.is-today { border-radius:.5rem; background:color-mix(in srgb,var(--accent) 14%,transparent); padding:.15rem .3rem; margin:0 -.3rem; }
+.calendar-day { color:var(--muted); font-variant-numeric:tabular-nums; text-align:right; }
+.calendar-dot { width:.45rem; height:.45rem; border-radius:999px; align-self:center; }
+.calendar-dot.is-birthday { background:var(--accent); }
+.calendar-dot.is-remembrance { background:#8e8e93; }
+.calendar-dot.is-story { background:#bf7b30; }
+.calendar-month button { text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.calendar-month button:not(:disabled):hover { color:var(--accent); }
+.calendar-detail { color:var(--muted); font-size:.74rem; white-space:nowrap; }
