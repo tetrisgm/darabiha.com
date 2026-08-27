@@ -131,6 +131,15 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const hidePedCursor = () => {
     if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
   };
+  /* Where the clicked card sat on screen. The board is about to be rebuilt
+     around that person, and they should stay exactly where the reader put
+     their pointer - it is the family around them that changes, not them. */
+  const holdInPlace = useRef<DOMRect | null>(null);
+  // The board fades and rises 10px when it changes, which is the right
+  // flourish for arriving somewhere new and the wrong one for a card that is
+  // supposed to sit still - it also puts the measurement 10px out, because it
+  // is taken one frame into a 450ms animation.
+  const [holding, setHolding] = useState(false);
   const fitted = useRef(0);
   // the stage changes width when the chat collapses beside it, and the board
   // should follow rather than keep a fit made for the narrower stage
@@ -295,15 +304,6 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   // Hovering a card shows that person's record beside the board and nothing
   // else. It used to redraw the board around them, which moved everything the
   // reader was looking at.
-  /* Where the clicked card sat on screen. The board is about to be rebuilt
-     around that person, and they should stay exactly where the reader put
-     their pointer - it is the family around them that changes, not them. */
-  const holdInPlace = useRef<DOMRect | null>(null);
-  // The board fades and rises 10px when it changes, which is the right
-  // flourish for arriving somewhere new and the wrong one for a card that is
-  // supposed to sit still - it also puts the measurement 10px out, because it
-  // is taken one frame into a 450ms animation.
-  const [holding, setHolding] = useState(false);
   const commit = (person: Person, keepLayout: boolean, element: HTMLElement | null) => {
     onPreview(null);
     if (keepLayout) { onSelectOnly(person); return; }
