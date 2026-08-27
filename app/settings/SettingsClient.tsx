@@ -41,9 +41,7 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
   // is. The server has no request that would return it.
   const [access, setAccess] = useState<{ hasPassword: boolean; shareUrl: string | null }>({ hasPassword: false, shareUrl: null });
   const [password, setPassword] = useState("");
-  const [origin, setOrigin] = useState("");
   useEffect(() => {
-    setOrigin(window.location.origin);
     if (siteVisibility === null) return;
     fetch("/api/site").then((response) => response.ok ? response.json() as Promise<{ hasPassword?: boolean; shareUrl?: string | null }> : null)
       .then((data) => {
@@ -222,8 +220,15 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
             {access.hasPassword && <button type="button" className="fill-skip" disabled={busy} onClick={() => accessAction({ action: "clear_password" })}>Remove it</button>}
           </div>
           {access.shareUrl && <p className="settings-hint settings-share">
-            Private link — anyone who follows it is let straight in:
-            <code>{origin}{access.shareUrl}</code>
+            <span>Private link — anyone who follows it is let straight in:</span>
+            <code>{access.shareUrl}</code>
+            <button type="button" className="fill-skip" onClick={() => {
+              // composed here rather than held in state: the origin is only
+              // knowable in the browser, and rendering it would not match
+              // what the server sent
+              void navigator.clipboard?.writeText(`${window.location.origin}${access.shareUrl}`)
+                .then(() => setNotice("Private link copied.")).catch(() => setNotice("Could not copy — select the link instead."));
+            }}>Copy</button>
             <button type="button" className="fill-skip" disabled={busy} onClick={() => accessAction({ action: "new_link" })}>Make a new one</button>
           </p>}
         </div>}
