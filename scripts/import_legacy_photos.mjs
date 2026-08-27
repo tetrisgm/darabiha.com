@@ -46,6 +46,22 @@ const EXPECTED = new Map([
   ["p211", { name: "Niloufar Hashemzad Forouzan", parents: ["Nasrin (Kobra) Darabiha", "Saeed (Asghar) Hashemzad Forouzan"], group: true, crop: [600, 431, 2020] }],
 ]);
 
+// Images the archive stores with NO person attached, later identified by its
+// own documents. photoDarabi2.jpg is the family's earliest photograph
+// (~1920); the biography's opening caption names four of its six figures,
+// left to right: Abbas Darabi, Hossein Zehtab Darabi, Asadollah Jaberian, ?,
+// Ghassem Darabi, ? — an ordering confirmed by the archive's own single-face
+// crops of figures 1 and 2 (G5_Abbas_Darabi.jpg, G5_Hossein_Darabi.jpg),
+// which are already the portraits on those two cards. These entries give the
+// remaining two named figures their pieces of the same photograph.
+// crop = [offsetY, offsetX, size] in the original's pixels.
+const SUPPLEMENTAL = [
+  { file: "photodarabi2.jpg", title: "The 1920 group photograph — Asadollah Jaberian (figure 3)",
+    name: "Asadollah Jaberian", parents: ["Fatemeh Darabi", "Haj Ramazan Jaberian"], crop: [340, 1210, 560] },
+  { file: "photodarabi2.jpg", title: "The 1920 group photograph — Ghassem Darabi (figure 5)",
+    name: "Ghassem Darabi", parents: ["Mohammad Zehtab Darabi", "Salmeh"], crop: [179, 1869, 588] },
+];
+
 const arg = (flag) => { const index = process.argv.indexOf(flag); return index === -1 ? null : process.argv[index + 1]; };
 const dataPath = arg("--data");
 const photoDir = arg("--photos");
@@ -85,6 +101,19 @@ for (const image of archive.images) {
   }
 }
 
+for (const extra of SUPPLEMENTAL) {
+  const matches = tree.people.filter((person) => {
+    if (person.displayName !== extra.name) return false;
+    const parents = (parentsOf.get(person.id) ?? []).map((id) => byId.get(id)?.displayName).filter(Boolean).sort();
+    return JSON.stringify(parents) === JSON.stringify([...extra.parents].sort());
+  });
+  if (matches.length !== 1) { skipped.push(`${extra.title}: ${extra.name} matched ${matches.length} live records`); continue; }
+  if (matches[0].photoAttachmentId && !process.argv.includes("--replace")) { skipped.push(`${extra.title}: ${extra.name} already has a portrait`); continue; }
+  const source = join(photoDir, extra.file);
+  const size = (await stat(source)).size;
+  work.push({ image: { title: extra.title, source: extra.file }, person: matches[0], source, size, archiveId: null, supplementalCrop: extra.crop, attachmentId: randomUUID() });
+}
+
 console.log(`Portraits to attach: ${work.length}`);
 for (const item of work) console.log(`  ${item.person.displayName.padEnd(30)} <- ${item.image.title} (${Math.round(item.size / 1024)} KB)${EXPECTED.get(item.archiveId)?.group ? " [group photograph]" : ""}`);
 if (skipped.length) { console.log("\nLeft off the cards:"); for (const line of skipped) console.log("  " + line); }
@@ -96,7 +125,7 @@ const now = new Date().toISOString();
 for (const item of work) {
   // sips ships with macOS; the cropped, resized copy is what the cards load
   const resized = join(scratch, `${item.attachmentId}.jpg`);
-  const crop = EXPECTED.get(item.archiveId)?.crop;
+  const crop = item.supplementalCrop ?? EXPECTED.get(item.archiveId)?.crop;
   let source = item.source;
   if (crop) {
     const cropped = join(scratch, `${item.attachmentId}-crop.jpg`);
