@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 168**, `BUILD_ID=562e465`.
+- The live release is **Version 174**, `BUILD_ID=bb5de5c`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":168,"build":"562e465","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":174,"build":"bb5de5c","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -24,7 +24,7 @@ Last updated: 2026-08-27
 - A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
 - `npm run check:data`: all twenty data-model properties hold against the live database.
 - `npm test`: 34 unit tests passed (vitest — `node --test` is not this project's runner and fails on every file). `npx tsc --noEmit` is a mandatory release gate — `npm run build` does NOT typecheck, which is how Version 54 shipped a `ReferenceError` (see the Version 55 record below).
-- `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit — **52 passed, 4 skipped**, twice consecutively at `--workers=2` in ~38s, across Chromium and WebKit — `public-tree.spec.ts` (the archive's long-standing behaviour) and `archive-behaviour.spec.ts` (this session's).
+- `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit — **56 passed, 4 skipped**, twice consecutively at `--workers=2` in ~50s, across Chromium and WebKit — `public-tree.spec.ts` (the archive's long-standing behaviour) and `archive-behaviour.spec.ts` (this session's).
   **The suite was failing intermittently before Version 139, and it was not contention** — or not only contention. The page is server-rendered, so it is on screen and looks interactive before React attaches, and a click landing in that window is silently lost. Under load that window ran past the 5s assertion timeout, so tests that pass in ~2s alone failed in a suite. `main` now carries `data-hydrated`, and `openArchive()` waits for it before any interaction. With that in place the parallel default passes in ~19s under the same load that used to fail it. If this class returns, suspect the hydration window before blaming the machine.
   Canvas tests open the Full tree tab through the `openFullTree` helper, and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
@@ -32,7 +32,7 @@ Last updated: 2026-08-27
 - `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
 
-### Versions 162–168 (2026-08-27) — the sweep: desktop, the data model, then Apple's sizes
+### Versions 162–174 (2026-08-27) — the sweep: desktop, the data model, then Apple's sizes
 
 The owner asked for every outstanding instruction to be found and finished, desktop first, then the data model, then mobile and iPad against Apple's guidelines.
 
@@ -41,7 +41,12 @@ The owner asked for every outstanding instruction to be found and finished, desk
 - **Version 164** (`5cfd842`): **documents are read without anyone watching.** An upload is stored and queued; a later request reads it. Because nobody is present, the queue path applies its own proposals through the same reconciliation (a document describing someone already recorded updates them rather than duplicating), and what it cannot settle becomes a Fill-in question. **The requests come from an editor arriving — no timer anywhere**, because a standing job is the owner's decision under the agent contract. Both paths now share `lib/archivist.ts` (what the archivist is) and `lib/agent-calls.ts` (reading its answers). Verified end to end with a Persian/English note: queued, read, 2 changes applied, **412 people before and after** — it matched the existing record rather than making a second one.
 - **Versions 165–168**: **Apple's compact and regular widths.** An iPad in portrait was a large phone — a 480pt chat taking 62% of a 768pt screen, leaving the board 288pt — and everything below 900px collapsed to one column, which is a phone's answer. The line is now 744pt: one column below it, and above it a 20–26rem chat beside a board with room to be a board. `viewport-fit=cover` plus `env(safe-area-inset-*)` keeps the header, the record panel, the zoom controls and the version stamp clear of the notch and the home indicator. Every touch target is 44pt, including the branch chips, which live inside the canvas transform and needed the same counter-scale the map markers use.
 
-**Measured across every device class** (iPhone 14, Pro Max, iPad mini/9.7/Air/Pro in both orientations, desktop, wide desktop): no zoom-out, no horizontal overflow, and **zero controls under 44pt on any touch device**.
+- **Versions 169–174**: **the view switcher, chased to ground.** Four of the seven tabs were clipped out of the strip with nothing to say they were there — on an iPad in landscape, with room to spare. Three attempts, each measured:
+  - hiding the search was not enough: a 1440px desktop still clipped *Numbers*, because the language switcher's words took the room first;
+  - making the strip refuse to give way fixed the clipping and **broke something worse** — seven segments cannot fit a phone, so the page grew to 569px on a 390px screen and the browser zoomed the whole archive out again;
+  - the answer is Apple's own: a segmented control that cannot show its segments should be a different control. Below 1250px the views are a **picker**, which on iOS is the native wheel; at and above it, the whole strip. The 1250 is measured, not guessed — 1180 (iPad Air landscape) is the width where a seven-segment strip stops fitting beside a 480px chat.
+
+**Measured across every device class** (iPhone 14, Pro Max, iPad mini/9.7/Air/Pro in both orientations, desktop, wide desktop, 2560 wide): no zoom-out, no horizontal overflow, **zero controls under 44pt on any touch device**, and **every view reachable at every size**.
 
 **`tests/browser/archive-behaviour.spec.ts`** is new and covers this session's work: the Tree opening tab, hover previewing without moving the board, List hover, branch expansion holding the card still, the map's zoom and label placement and city preview, the identify card telling repeated names apart by their parents, the archivist answering in Persian, and the access gates. It signs in — which is how it found two controls under 44pt that every anonymous sweep had missed.
 
