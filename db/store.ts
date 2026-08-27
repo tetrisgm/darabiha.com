@@ -50,6 +50,13 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS member_links (
     email TEXT PRIMARY KEY, member_email TEXT NOT NULL, provider TEXT, created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS document_queue (
+    id TEXT PRIMARY KEY, attachment_id TEXT NOT NULL, filename TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending'
+      CHECK(status IN ('pending', 'reading', 'read', 'failed')),
+    result TEXT, created_at TEXT NOT NULL, processed_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_document_queue_status ON document_queue(status, created_at)`,
   `CREATE TABLE IF NOT EXISTS site_settings (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
@@ -630,6 +637,63 @@ type QuestionAction =
  * The id is derived from the question itself, so re-reading the same document
  * does not ask the family the same thing twice, and a question they have
  * already answered stays answered. */
+/* Documents the family sends, waiting to be read.
+ *
+ * An upload should not have to be watched. A file goes to R2 and a row goes
+ * here; something drains the queue afterwards and the reader can close the
+ * tab. Rows are never deleted - what was read, and what came of it, is part
+ * of the archive's record of itself. */
+
+export type QueuedDocument = {
+  id: string; attachmentId: string; filename: string; uploadedBy: string;
+  status: "pending" | "reading" | "read" | "failed"; result: string | null;
+  createdAt: string; processedAt: string | null;
+};
+
+export async function queueDocument(attachmentId: string, filename: string, uploadedBy: string): Promise<void> {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.prepare(`INSERT INTO document_queue (id, attachment_id, filename, uploaded_by, status, created_at)
+    VALUES (?, ?, ?, ?, 'pending', ?)`).bind(crypto.randomUUID(), attachmentId, filename, uploadedBy, now).run();
+}
+
+export async function listDocumentQueue(limit = 40): Promise<QueuedDocument[]> {
+  await ensureSchema();
+  const result = await env.DB.prepare(`SELECT id, attachment_id AS attachmentId, filename, uploaded_by AS uploadedBy,
+    status, result, created_at AS createdAt, processed_at AS processedAt
+    FROM document_queue ORDER BY created_at DESC LIMIT ?`).bind(limit).all<QueuedDocument>();
+  return result.results;
+}
+
+/** Takes the oldest waiting document and marks it as being read, so two
+ *  drains running at once cannot read the same file twice. */
+export async function claimNextDocument(): Promise<QueuedDocument | null> {
+  await ensureSchema();
+  const row = await env.DB.prepare(`SELECT id, attachment_id AS attachmentId, filename, uploaded_by AS uploadedBy,
+    status, result, created_at AS createdAt, processed_at AS processedAt
+    FROM document_queue WHERE status = 'pending' ORDER BY created_at LIMIT 1`).first<QueuedDocument>();
+  if (!row) return null;
+  const claimed = await env.DB.prepare("UPDATE document_queue SET status = 'reading' WHERE id = ? AND status = 'pending'").bind(row.id).run();
+  if (!claimed.meta.changes) return null;
+  return { ...row, status: "reading" };
+}
+
+export async function finishDocument(id: string, status: "read" | "failed", result: string): Promise<void> {
+  await ensureSchema();
+  await env.DB.prepare("UPDATE document_queue SET status = ?, result = ?, processed_at = ? WHERE id = ?")
+    .bind(status, result.slice(0, 2000), new Date().toISOString(), id).run();
+}
+
+export async function readAttachmentBytes(attachmentId: string): Promise<{ bytes: Uint8Array; contentType: string; filename: string } | null> {
+  await ensureSchema();
+  const row = await env.DB.prepare("SELECT object_key AS objectKey, content_type AS contentType, filename FROM attachments WHERE id = ?")
+    .bind(attachmentId).first<{ objectKey: string; contentType: string; filename: string }>();
+  if (!row) return null;
+  const object = await env.FILES.get(row.objectKey);
+  if (!object) return null;
+  return { bytes: new Uint8Array(await object.arrayBuffer()), contentType: row.contentType, filename: row.filename };
+}
+
 export async function recordAgentQuestions(
   conflicts: { question: string; reason: string; candidatePersonIds: string[]; evidence: string[] }[],
   actorEmail: string,

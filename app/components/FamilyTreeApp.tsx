@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { CalendarView, StatisticsView, TimelineView, WorldMapView } from "./ArchiveViews";
@@ -64,6 +64,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   // Where the archive opens: on the person this account says it is, if it
   // has said, and otherwise on the family it has always opened on.
   const [identity, setIdentity] = useState<string | null>(viewer.personId ?? null);
+  const [ingesting, setIngesting] = useState<string | null>(null);
   const [focalId, setFocalId] = useState<string | null>(viewer.personId ?? null);
   /* Everything on this page is server-rendered before React attaches, so a
      click landing in that window is silently lost - the button is there, the
@@ -166,6 +167,38 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     });
     return () => cancelAnimationFrame(frame);
   }, [viewer.canEdit]);
+  /* Documents the family sent are read one request at a time, and this is
+     what makes the requests: an editor arriving drains whatever is waiting.
+     There is no timer anywhere - a standing job is the owner's decision, not
+     this code's - so the queue moves when an editor is present, which is also
+     when someone is there to see what came of it. */
+  useEffect(() => {
+    if (!viewer.canEdit) return;
+    let cancelled = false;
+    void (async () => {
+      for (let guard = 0; guard < 20 && !cancelled; guard += 1) {
+        let data: { done?: boolean; read?: { filename: string; summary?: string; failed?: string } | null; pending?: number };
+        try {
+          const response = await fetch("/api/ingest", { method: "POST" });
+          if (!response.ok) return;
+          data = await response.json();
+        } catch { return; }
+        if (cancelled) return;
+        if (data.done || !data.read) { setIngesting(null); return; }
+        setIngesting(data.read.failed
+          ? `${data.read.filename} could not be read: ${data.read.failed}`
+          : `Read ${data.read.filename} — ${data.read.summary}`);
+        try {
+          const refreshed = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "tree" }) });
+          const payload = await refreshed.json() as { tree?: FamilyTree };
+          if (!cancelled && payload.tree) setTree(payload.tree);
+        } catch { /* the next load will show it */ }
+        if (!data.pending) return;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewer.canEdit]);
+
   const setViewMode = (mode: ViewMode) => {
     viewChosen.current = true;
     setViewModeState(mode);
@@ -303,6 +336,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                 </button>
               </div>
             </div>
+            {ingesting && <p className="ingest-note" role="status">{ingesting}</p>}
             {viewer.signedIn && viewer.role && !identity && treeLoaded && tree.people.length > 0 && (
               <IdentifyMe tree={tree} onClaimed={(person) => { setIdentity(person.id); openPerson(person); }} />
             )}

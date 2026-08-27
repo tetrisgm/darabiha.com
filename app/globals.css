@@ -1437,3 +1437,8 @@ html[lang="fa"] { font-variant-numeric: normal; }
   content:"you"; margin-right:.45rem; border-radius:999px; padding:.05rem .4rem;
   background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent);
   font-size:.62rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+
+/* What the archive is doing with a document nobody is watching. */
+.ingest-note { margin:0 0 .6rem; border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line));
+  border-radius:.7rem; background:color-mix(in srgb,var(--accent) 10%,transparent);
+  padding:.5rem .7rem; color:var(--ink); font-size:.78rem; line-height:1.45; }
