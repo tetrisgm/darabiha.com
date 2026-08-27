@@ -167,6 +167,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
         fitted.current = width;
         setScale(Math.max(0.4, Math.min(1, width / 720)));
       }
+      if (!holdInPlace.current) setHolding(false);
       setPanMode("idle");
       setPan({ x: 0, y: 0 });
       // After the zero-pan layout paints, put the focal card where it belongs:
@@ -180,7 +181,6 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
         const cardRect = focalCard.getBoundingClientRect();
         const held = holdInPlace.current;
         holdInPlace.current = null;
-        setHolding(false);
         const target = held
           ? { x: held.left + held.width / 2, y: held.top + held.height / 2 }
           : { x: stageRect.left + stageRect.width / 2, y: stageRect.top + stageRect.height / 2 };
