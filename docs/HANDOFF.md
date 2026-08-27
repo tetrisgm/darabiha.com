@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 158**, `BUILD_ID=6b39ee9`.
+- The live release is **Version 161**, `BUILD_ID=6490fcd`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":158,"build":"6b39ee9","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":161,"build":"6490fcd","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -30,6 +30,16 @@ Last updated: 2026-08-27
 - `npm run build` passes.
 - `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
+
+### Versions 159–161 (2026-08-27) — the archive in the family's languages
+
+- **Version 159** (`fbc092f`): **both chats read and answer in the family's languages.** The histories were written in Persian, part of the family lives in France, and neither chat's instructions acknowledged that — they were told to work in English by omission, and neither knew which language the reader had chosen. Both receive it now (`darabiha_lang`), and the archivist is told what to do with the parts that carry badly across scripts: match a name against the records and **reuse the spelling the archive already has** rather than transliterating afresh; convert a **Solar Hijri** date only when certain and otherwise record it as written and ask; keep a passage the family wrote as the story's `original_body` with an English rendering in `body`.
+  Verified live: «چند نفر در این شجره‌نامه ثبت شده‌اند؟» → «۴۱۲ نفر ثبت شده‌اند»; the same in French → French.
+- **Version 160** (`6b3afca`): **what the archivist could not settle now reaches the Fill-in tab.** Reading material produces facts safe enough to apply — which the client already applies — and questions, which were spoken once in the chat reply and then scrolled away, so half the work of reading a document was lost each time. `recordAgentQuestions` derives the id from the question text, so sending the same document twice does not ask the family the same thing twice and an answered question stays answered.
+  **Not yet exercised end to end**: in testing, the archivist behaved conservatively and raised no conflicts, so the conflict-to-question path is verified by construction rather than by a live example.
+- **Version 161** (`6490fcd`): `/api/agent` takes **multipart form data**; `request.formData()` throws for anything else, before the try that turns failures into JSON, so a wrong content type came back as an empty 500. It is a 400 that names the problem. (Found by sending it JSON myself.)
+
+**Ingestion is synchronous, not a background queue.** An editor attaches files in the chat and the archivist reads them in that request. The owner asked for uploads to be "processed by the agent in the background"; that would need a durable queue and something to drain it, and standing jobs are an owner decision under the agent contract — so it has not been built.
 
 ### Versions 154–158 (2026-08-27) — a way in, and knowing who came in
 
