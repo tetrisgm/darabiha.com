@@ -43,9 +43,20 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
     setPan({ x: drag.panX + event.clientX - drag.x, y: drag.panY + event.clientY - drag.y });
   };
   const endPan = () => { dragRef.current = null; setPanning(false); };
+  // Zoom keeps the anchor point still: the cursor for wheel zoom, the stage
+  // center for the buttons - so the place you are looking at never flies off.
+  const zoomAt = (factor: number, anchor: { x: number; y: number }) => {
+    const next = Math.max(1, Math.min(8, scale * factor));
+    if (next === scale) return;
+    const shift = (scale - next) / scale;
+    setPan({ x: pan.x + shift * (anchor.x - pan.x), y: pan.y + shift * (anchor.y - pan.y) });
+    setScale(next);
+  };
   const wheelPan = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (event.ctrlKey || event.metaKey) setScale((current) => Math.max(1, Math.min(8, current * (event.deltaY > 0 ? 0.94 : 1.06))));
-    else setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
+    if (event.ctrlKey || event.metaKey) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      zoomAt(event.deltaY > 0 ? 0.94 : 1.06, { x: event.clientX - (rect.left + rect.width / 2), y: event.clientY - (rect.top + rect.height / 2) });
+    } else setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
   };
   // Full-bleed like the other canvases: the stage is the whole tab, and the
   // 2:1 board (which the marker percentages are calibrated to) covers it.
@@ -53,9 +64,9 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
     <div className="world-map" role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}>
       <div className="canvas-controls map-zoom" role="group" aria-label="Map zoom controls">
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.max(1, current * 0.9))} aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(0.9, { x: 0, y: 0 })} aria-label="Zoom out" title="Zoom out">−</button>
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setScale(1); setPan({ x: 0, y: 0 }); }} className="canvas-zoom-level" aria-label="Reset zoom" title="Reset zoom">{Math.round(scale * 100)}%</button>
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.min(8, current * 1.1))} aria-label="Zoom in" title="Zoom in">＋</button>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(1.1, { x: 0, y: 0 })} aria-label="Zoom in" title="Zoom in">＋</button>
       </div>
       <div className="world-map-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, "--map-scale": String(scale) } as React.CSSProperties}>
       <div className="world-map-board">
