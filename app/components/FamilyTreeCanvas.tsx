@@ -244,7 +244,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       return;
     }
     cursor.dataset.visible = "true";
-    setCursorMode(gesture.current ? "grabbing" : target.closest?.(".tree-card") ? "pointer" : "grab");
+    setCursorMode(gesture.current ? "grabbing" : target.closest?.(".tree-card, .branch-chip") ? "pointer" : "grab");
   };
   const hideCursor = () => {
     if (cursorRef.current && !gesture.current) cursorRef.current.dataset.visible = "false";
@@ -269,7 +269,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   const end = (event: React.PointerEvent<HTMLDivElement>) => {
     gesture.current = null;
     setIsPanning(false);
-    setCursorMode((event.target as Element).closest?.(".tree-card") ? "pointer" : "grab");
+    setCursorMode((event.target as Element).closest?.(".tree-card, .branch-chip") ? "pointer" : "grab");
   };
   // Two-finger trackpad scroll pans the camera; a pinch arrives as a wheel
   // event with ctrlKey (metaKey kept for keyboard-modified zoom) and zooms.

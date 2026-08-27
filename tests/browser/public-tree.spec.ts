@@ -146,6 +146,19 @@ test("Safari gets a visible custom grab cursor and clickable-card cursor", async
   const card = await onCameraCard(page);
   await card.hover();
   await expect(page.locator(".tree-custom-cursor")).toHaveAttribute("data-mode", "pointer");
+  // branch chips carry their own cursor rule and once showed the native hand
+  // on top of the app-drawn one; they must behave exactly like cards
+  const chips = page.locator(".branch-chip");
+  for (let index = 0; index < await chips.count(); index += 1) {
+    const chipBox = await chips.nth(index).boundingBox();
+    const canvasBox = await canvas.boundingBox();
+    if (!chipBox || !canvasBox || chipBox.y < canvasBox.y + 64 || chipBox.y + chipBox.height > canvasBox.y + canvasBox.height) continue;
+    await expect(chips.nth(index)).toHaveCSS("cursor", "none");
+    await chips.nth(index).hover();
+    await expect(page.locator(".tree-custom-cursor")).toHaveAttribute("data-mode", "pointer");
+    await expect(page.locator(".tree-custom-cursor")).toHaveAttribute("data-visible", "true");
+    break;
+  }
   const text = card.locator("strong");
   const box = await text.boundingBox();
   expect(box).not.toBeNull();

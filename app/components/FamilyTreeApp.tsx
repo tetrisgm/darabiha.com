@@ -117,10 +117,13 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     const startX = event.clientX;
     const startWidth = chatWidth;
     const clampWidth = (value: number) => Math.min(560, Math.max(300, value));
+    // a fast resize drag sweeps across the chat text; suspend selection until release
+    document.body.style.userSelect = "none";
     const onMove = (move: PointerEvent) => setChatWidth(clampWidth(startWidth + move.clientX - startX));
     const onUp = (up: PointerEvent) => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
       try { window.localStorage.setItem("darabiha-chat-width", String(clampWidth(startWidth + up.clientX - startX))); } catch { /* private mode */ }
     };
     window.addEventListener("pointermove", onMove);
