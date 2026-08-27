@@ -1503,12 +1503,17 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .tree-search input { min-height:2.75rem; }
 }
 
-/* All eight views must be reachable without discovering a hidden scroll:
-   Apple's line on a segmented control is that its segments are visible. On a
-   bar narrower than about 1200px the search gives way first - the chat finds
-   people, and the List view is a list of them - and the tab strip keeps its
-   room rather than clipping four views out of sight. */
+/* Every view must be reachable without discovering a hidden scroll: Apple's
+   line on a segmented control is that its segments are visible. So the strip
+   takes the room it needs and never gives way - what gives way instead, in
+   order, is the language switcher's words, then the search, which the chat
+   and the List view both cover. Measured: all seven tabs visible from an iPad
+   mini in portrait upwards. */
+.site-action-bar .archive-view-switcher { flex:none; max-width:none; overflow:visible; }
+@media (max-width: 1500px) {
+  .lang-switch-label, .lang-pick-name { display:none; }
+  .lang-switch { gap:.15rem; padding:.12rem; }
+}
 @media (max-width: 1200px) {
   .site-action-bar .tree-search { display:none; }
 }
-.site-action-bar .archive-view-switcher { flex:0 1 auto; }
