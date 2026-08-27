@@ -5,7 +5,9 @@
 // faithful to the original rather than tidied or abridged. Solar Hijri years
 // are given as the archive states them, with the Gregorian year in brackets.
 //
-// Keyed by the story title in scripts/import_legacy_stories.mjs.
+// Keyed by the story title in scripts/import_legacy_stories.mjs. The family
+// biography carried its own plea - "Any volunteer to translate this biography
+// into English the rest of the text?" - which these entries answer.
 export const TRANSLATIONS = new Map([
 ["A historic marriage", `This was around the years 1306 to 1308 Solar Hijri (1927–1929). The partnership of Mohammad Zehtab, Hossein, Ramazan and Ghassem Darabi and Asadollah Jaberian was still going, and the running of the company had gradually passed to Ramazan Darabi.
 
@@ -136,4 +138,66 @@ From the appointed date on, the price of unsealed gut suddenly fell by about sev
 In this deal the company bought gut at seventy per cent below price and sold it at full price, and made a good profit.
 
 Ramazan Darabi always told his children and those around him: whatever newspaper or writing or piece of text you see — even if it is lying on the ground — pick it up and read it.`],
+
+["The dedication", `It is a great honour to bring you the Darabi family tree. This is the first attempt and may probably contain errors. Please inform us of any potentially missing or inaccurate information. We hope that this family tree will be useful and updated by our future generations.
+
+Many thanks to Mrs Nahid Jaberian, Helen Jaberian, Farnoush Darabi, Niloufar Forouzan, Mahin Darabi, Sheida Eftekhari Rad, and Mr Massoud Darabiha and Farzad Hosseinzadeh.
+
+Nasser Darabiha and Mohammad Darabi — 21 March 2013
+
+(The archive prints this dedication in English, Persian, French and transliterated Persian. The Persian is kept below.)`],
+
+["How this biography was written", `Greetings. With thanks to Professor Nasser Darabiha, who has worked with me on putting this family tree together with great interest and perseverance and has shown me the way in a great deal of it; and to the rest of the dear family — Mrs Nahid Jaberian, Mrs Helen Jaberian, Mrs Mahin Darabi, Mr Massoud Darabiha, Mr Farzad Hosseinzadeh, Mrs Sheida Eftekhari Rad and Miss Niloufar Forouzan — who have all worked with the two of us, Mohammad and Nasser, and who will help us in the future as well. So that you may know something of the lives, the circumstances and the households of the family's forebears, I set down a short account of each below.
+
+Bear in mind that this material is entirely as narrated by Mr Ramazan Darabi (fifth generation), and that my own part has been only to fix the dates, to determine the ages, and to tell the material and write it down. I hope that the coming generation, reading this and seeing the family tree, will come to know their forebears, and will keep their bond and their connection with all the living members of the family.
+
+I ask all the dear family, and the respected Jaberian family in particular, that if they know anything of Mrs Fatemeh Darabi, wife of Mr Haj Ramazan Jaberian, or of any of the principal branches, they should write it in the proper place under their own name.
+
+Mohammad Darabi, Generation 6c5 — 21 March 2013`],
+
+["Haj Chorok, first generation", `Told by Mohammad Darabi, sixth generation.
+
+Haj Chorok, who stands at the head of the family, was born around the years 1090 to 1100 Solar Hijri (1711–1721) in the city of Darab in Fars province. As a child he moved with his family to Shiraz. Through his ability and his great intelligence he became, while still young, a large and prominent merchant, and he started a family in Shiraz.
+
+His business gradually prospered and he turned his mind to trade between cities. Trade was very hard in those days, for the roads were unsafe and there was none of today's commercial and electronic communication; only real intelligence and a kind of genius made it possible. He managed it. He employed about a hundred men — clerks, secretaries, guards and riders — bought a great many mules and camels, and ran the whole thing properly: he would assemble the merchandise, load it onto the mules and camels, and with a party of riders and guards carry it towards Tabriz, which was the seat of the crown prince and the commercial centre of the country. On the way he stopped for a few days only in the most important cities — Isfahan, Rey and Qazvin — selling there what was wanted and buying what was needed for Tabriz. His last stop was Tabriz itself, where the whole consignment was sold; for the return he bought in the same way what Shiraz needed, and went back. The journey out and back took about nine months.
+
+On one of these journeys, on a bitterly cold winter night, he came into Qazvin and reached the great caravanserai where he always put up. The gate was shut. He knocked several times, but the keeper would not open: sheltering under his korsi from the hard cold, he was too idle to get up. Haj Chorok, seeing his men perishing of cold, shouted several times and beat hard on the gate, and still the keeper never opened. He was furious, and went to another caravanserai and stayed there.
+
+The next day he told his deputy to move the caravan on towards Tabriz and see to what was needed, and said that he would join them for Shiraz when they came back through Qazvin. He went to the bazaar and told the property brokers to buy that caravanserai for him, even if the owner had no wish to sell. In the end he managed to buy it. Then he went to the caravanserai and dismissed the keeper. The man begged forgiveness several times, but he never consented to forgive him. He stayed some months in Qazvin until his caravan returned from Tabriz, and in those months hired a manager, a keeper and staff for the place, and named it Saray-e Haj Chorok — traces of which remain in Qazvin to this day.
+
+Haj Chorok's caravanserai was in use as a caravanserai until 1304 (1925). In that year the property was confiscated, probably by order of Reza Shah, and given over to a large number of Sunni Roma who had been exiled to Qazvin from where they lived. After the Islamic Revolution the property was levelled, and the municipality now uses it as a car park.
+
+Haj Chorok chose a girl from Qazvin and married her, and made a house and a life for her. From then on he stayed mostly in Qazvin, living with his new wife between the going and coming of his caravan. A son was born to them whom they named Haj Agha, and our line comes down from him.`],
+
+["Mohammad Zehtab (Darabi), fourth generation", `Told by Mohammad Darabi, sixth generation.
+
+After Haj Agha came his son Haj Khalil, and unfortunately we have no sound information about either Haj Agha or Haj Khalil. Haj Khalil's son was named Mohammad, and he is the fourth generation of the family tree. He was born in 1235 Solar Hijri (1856) in Qazvin and died in 1318 (1939).
+
+He was very active and industrious as a child. From early adolescence he took up the making of gut string, from sheep intestine. In those days gut string was used only in the bows of cotton-carders and, occasionally, for stringed instruments. He was forever experimenting in his cellar to better the work and raise the quality of what he made, and he repeated the experiments for several years until at last, by steeping the sheep gut in a mixture of egg and several herbal preparations, he was able to increase its durability and arrive at the string he was after.
+
+Now he needed a market for it, and the best was the market of the cotton-carders in the town of Saveh, since Saveh produced the most and the best quilts in the country. So he gave several strings of his new product to Hossein, his eldest son, and told him to give one away free, in the Saveh bazaar, to one shop in every ten. He did so, and within a few months buyers of gut string from Saveh and several other towns were writing to them and showing great interest. He brought his new product to market and gradually came into good circumstances.
+
+At that time — the Qajar period — Tabriz, as the seat of the crown prince, was also the country's commercial centre, and there a great Iranian merchant named Haj Reza Toubi had begun sorting gut. He founded a large factory, installed some two hundred workers (German girls) on the premises, and asked all the gut-string makers of the country to clean the gut and make it ready in its original state for him. Mohammad Zehtab's sons, given their family's circumstances, set about founding a company, whose shareholders were Mohammad Zehtab and his sons Hossein, Ramazan and Ghassem, and his grandson Asadollah. With the new company and factory, Mohammad worked alongside his children with great perseverance: Hossein ran the company, Ramazan was responsible for buying and for finding markets to sell in, Ghassem was responsible for the factory, Asadollah was bookkeeper of the factory and the slaughterhouse, and Mohammad himself oversaw the workers and kept control of the stock.
+
+Mohammad's wife was named Salmeh and came from a good family; she was a kind woman and a devoted mother, tall, with a beautiful face. They say Salmeh Khanom had a gift for making up faces: at some celebrations and private parties she would make one half of her face very beautiful and the other half very ugly, and appear at the party like that. She died of illness in middle age. Some years later Mohammad's children chose another wife for their father, and this second wife was at his side to the end of his life.
+
+Mohammad Zehtab was a very good man, devout and upright. In his own lifetime he lost his eldest son, Hossein. It is said that he was still working at the factory the day before he died, though he was more than a hundred years old. At his death he had his wife call the whole family, and his children and grandchildren all came to the house. He said goodbye to them and kissed them, then lay down in a bed laid facing the qibla, took the hand of his eldest son Ramazan and asked him to look after the whole family. He told him: I have bought a grave and spoken to the mosque about the funeral; I have made ready the cost of the whole ceremony and put it on the ledge of the room; I owe nothing to anyone and no one owes anything to me, and now I wish to leave you all for good. Then he said goodbye to the family again and, smiling, closed his eyes, and having said a prayer died at once. His children, astonished at the manner of their father's death, buried him with particular ceremony in the place he had appointed and performed the rites.
+
+He was the pivot of the family, and the main branches of the family begin with his children.`],
+
+["The main branches of the family", `Told by Mohammad Darabi, sixth generation.
+
+The principal branches of the family, the ones that set its main lines, are the children of Mohammad Zehtab (Darabi). Their names in order of age are Hossein, Fatemeh, Ramazan, Ghassem and Abbas. The last of them died in his youth.
+
+A short account of each is given below.`],
+
+["Ghassem Darabi, fifth generation", `Told by Mohammad Darabi, sixth generation.
+
+The family's third son was named Ghassem, and he was born in 1282 Solar Hijri (1903) in Qazvin. He too was tall and strongly built, and among his qualities were shrewdness and a cool head. From adolescence, more or less, he worked in the factory at the gut trade. He had a thorough command of it, and in his day was perhaps the leading man in the country in that work.
+
+In 1326 (1947) he moved with his family to Tehran and took up trade there. Being inventive, capable and greatly persevering in his work, he was able to become a successful merchant. He then set about founding a factory and took up the sorting of gut, and afterwards founded a salambour works, for the processing of hides; in both of these he was very successful and became well known among his colleagues.
+
+His wife was named Robabeh Masoudi, daughter of Haj Mirza Agha; her brothers and sisters were Ebrahim, Esmail, Mahmoud, Fatemeh and Masoumeh. In her husband's house Robabeh was called Khanom Aziz. Of Ghassem and Robabeh six sons and two daughters remain: Kazem, Ashraf, Reza, Mohammad Taghi, Mohammad Karim, Effat, Mohammad Rahim and Nasser — and sadly Mohammad Karim, a respected and very charitable man, died in 1391 (2012).
+
+Ghassem died of a heart attack in Farvardin 1358 (March–April 1979), at the age of seventy-five.`],
 ]);
