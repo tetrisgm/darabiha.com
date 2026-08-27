@@ -337,7 +337,6 @@ button { cursor: pointer; }
   border:1px solid rgba(255,255,255,.16); border-radius:999px; background:var(--card); color:var(--ink);
   padding:.14rem .6rem; font-size:.72rem; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,.35); cursor:pointer !important; }
 .branch-chip:hover { border-color:var(--accent); color:var(--accent); }
-.canvas-fold-toggle { font-size:.72rem; padding:.45rem .8rem; white-space:nowrap; }
 
 /* family view toolbar */
 .focus-toolbar { display:flex; align-items:center; justify-content:center; gap:1rem; margin-bottom:1.2rem; }
@@ -802,8 +801,6 @@ main.chat-collapsed .person-hover-preview { left:0; }
 .person-panel { background: rgba(28,28,30,.78); }
 .person-hover-preview { background: rgba(28,28,30,.82); }
 .chat-sidebar { background: color-mix(in srgb, var(--sidebar) 84%, transparent); }
-.canvas-fold-toggle { position:absolute; right:4.4rem; bottom:1.25rem; z-index:12; border:1px solid rgba(255,255,255,.08); border-radius:999px; background:rgba(28,28,30,.66); color:var(--ink); font-weight:600; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:0 10px 30px rgba(0,0,0,.35); }
-.canvas-fold-toggle:hover { background:rgba(28,28,30,.92); }
 
 /* panel entrance: transform only - an opacity keyframe can stick at half
    strength when the tab is throttled mid-animation */
