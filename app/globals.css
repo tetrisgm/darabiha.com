@@ -1320,3 +1320,15 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .site-action-bar::-webkit-scrollbar { display:none; }
   .site-action-bar > * { flex:none; }
 }
+
+@media (max-width: 720px) {
+  /* .family-shell is isolation:isolate, so the record panel's z-index is
+     confined inside it. With the panel covering the whole phone, the shell
+     has to sit above the header and the version stamp or they paint over it -
+     which is why the panel's close button could not be tapped at all. */
+  main.has-person .family-shell { z-index:70; }
+  /* and the panel is the page here, not a layer over a visible canvas: at 94%
+     the tree showed through the biography */
+  .person-panel { background:var(--sidebar); }
+  .person-panel-bar { background:var(--sidebar); }
+}
