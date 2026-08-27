@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import type { Attachment, ChangeProposal, FamilyTree, Person, Relationship, Story } from "../lib/types";
+import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
 
 let initialized = false;
 const schemaStatements = [
@@ -24,6 +24,11 @@ const schemaStatements = [
   )`,
   `CREATE TABLE IF NOT EXISTS story_attachments (story_id TEXT NOT NULL, attachment_id TEXT NOT NULL)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_story_attachments_unique ON story_attachments(story_id, attachment_id)`,
+  `CREATE TABLE IF NOT EXISTS open_questions (
+    id TEXT PRIMARY KEY, question TEXT NOT NULL, evidence TEXT, action_summary TEXT,
+    proposal_json TEXT, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'confirmed', 'denied')),
+    answer_note TEXT, answered_by TEXT, answered_at TEXT, created_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS change_log (
     id TEXT PRIMARY KEY, actor_email TEXT NOT NULL, kind TEXT NOT NULL,
     summary TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
@@ -484,5 +489,74 @@ export async function removePerson(personId: string, actorEmail: string) {
     env.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "remove_person", "Removed a family member", JSON.stringify({ personId }), now),
   ]);
+  return readTree();
+}
+
+
+// ---------- open questions: the Fill-in tab's review queue ----------
+// A question records something the archive implies but never states. The
+// proposal_json holds the prepared change, with person ids resolved when the
+// question was seeded; confirming applies it, denying just closes it. Either
+// way the verdict is permanent in the row and in the change log.
+type QuestionAction =
+  | { type: "add_parent"; parentId: string; childId: string }
+  | { type: "append_biography"; personId: string; text: string }
+  | { type: "create_spouse"; ofId: string; gender: "male" | "female" | null; nameFromAnswer: true; biography: string };
+
+export async function listOpenQuestions(): Promise<OpenQuestion[]> {
+  await ensureSchema();
+  const result = await env.DB.prepare(`SELECT id, question, evidence, action_summary AS actionSummary, proposal_json AS proposalJson, status, created_at AS createdAt
+    FROM open_questions WHERE status = 'open' ORDER BY created_at`).all<{ id: string; question: string; evidence: string | null; actionSummary: string | null; proposalJson: string | null; status: "open"; createdAt: string }>();
+  return result.results.map((row) => ({
+    id: row.id, question: row.question, evidence: row.evidence, actionSummary: row.actionSummary,
+    needsAnswerText: Boolean(row.proposalJson && JSON.parse(row.proposalJson).actions?.some((action: QuestionAction) => "nameFromAnswer" in action && action.nameFromAnswer)),
+    status: row.status, createdAt: row.createdAt,
+  }));
+}
+
+export async function answerQuestion(id: string, verdict: "confirm" | "deny", note: string | null, actorEmail: string): Promise<FamilyTree> {
+  await ensureSchema();
+  const row = await env.DB.prepare("SELECT question, proposal_json AS proposalJson, status FROM open_questions WHERE id = ?")
+    .bind(id).first<{ question: string; proposalJson: string | null; status: string }>();
+  if (!row) throw new Error("question_not_found");
+  if (row.status !== "open") throw new Error("question_already_answered");
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  const applied: string[] = [];
+  if (verdict === "confirm" && row.proposalJson) {
+    const actions = (JSON.parse(row.proposalJson).actions ?? []) as QuestionAction[];
+    for (const action of actions) {
+      if (action.type === "add_parent") {
+        statements.push(env.DB.prepare("INSERT OR IGNORE INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, 'parent', ?)")
+          .bind(crypto.randomUUID(), action.parentId, action.childId, now));
+        applied.push("parent link added");
+      } else if (action.type === "append_biography") {
+        const person = await env.DB.prepare("SELECT biography FROM people WHERE id = ?").bind(action.personId).first<{ biography: string | null }>();
+        const current = person?.biography?.trim() ?? "";
+        if (!current.includes(action.text.slice(0, 40))) {
+          const next = current ? `${current}${current.endsWith(".") ? "" : "."} ${action.text}` : action.text;
+          statements.push(env.DB.prepare("UPDATE people SET biography = ?, updated_at = ? WHERE id = ?").bind(next, now, action.personId));
+          applied.push("biography updated");
+        }
+      } else if (action.type === "create_spouse") {
+        const name = note?.trim();
+        if (!name) throw new Error("answer_name_required");
+        const personId = crypto.randomUUID();
+        statements.push(env.DB.prepare("INSERT INTO people (id, display_name, gender, biography, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+          .bind(personId, name, action.gender, action.biography, now, now));
+        statements.push(env.DB.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, 'spouse', ?)")
+          .bind(crypto.randomUUID(), action.ofId, personId, now));
+        applied.push(`added ${name} as spouse`);
+      }
+    }
+  }
+  statements.push(env.DB.prepare("UPDATE open_questions SET status = ?, answer_note = ?, answered_by = ?, answered_at = ? WHERE id = ? AND status = 'open'")
+    .bind(verdict === "confirm" ? "confirmed" : "denied", note?.trim() || null, actorEmail, now, id));
+  statements.push(env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), actorEmail, "answer_question",
+      `${verdict === "confirm" ? "Confirmed" : "Denied"}: ${row.question}`,
+      JSON.stringify({ questionId: id, verdict, note: note?.trim() || null, applied }), now));
+  await env.DB.batch(statements);
+  treeJsonCache = null;
   return readTree();
 }

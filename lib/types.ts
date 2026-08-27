@@ -38,6 +38,19 @@ export type Story = {
   attachmentIds?: string[];
 };
 
+/** A question the record cannot answer alone, queued in the Fill-in tab for
+ * the family to confirm or deny. Confirming applies the prepared change. */
+export type OpenQuestion = {
+  id: string;
+  question: string;
+  evidence: string | null;
+  actionSummary: string | null;
+  /** confirm needs the reviewer to supply a name (e.g. an unnamed spouse) */
+  needsAnswerText: boolean;
+  status: "open" | "confirmed" | "denied";
+  createdAt: string;
+};
+
 export type Attachment = {
   id: string;
   filename: string;

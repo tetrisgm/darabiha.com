@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FamilyTree, Person } from "../../lib/types";
+import type { FamilyTree, OpenQuestion, Person } from "../../lib/types";
 import { buildGenerations, buildRelationMaps } from "../../lib/tree-layout";
 
 function years(person: Person | undefined) {
@@ -459,6 +459,60 @@ function fillBirthYear(person: Person) {
   return match ? Number(match[0]) : null;
 }
 
+/** The archive's open questions, queued for the family to settle. Each one
+ * carries its evidence and a prepared change; Confirm applies it on the spot,
+ * "Not correct" closes it for good. A question about an unnamed person asks
+ * for the name instead of a yes. */
+function OpenQuestionsCard({ onTreeChange }: { onTreeChange: (tree: FamilyTree) => void }) {
+  const [questions, setQuestions] = useState<OpenQuestion[] | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/questions")
+      .then((response) => response.ok ? response.json() as Promise<{ questions: OpenQuestion[] }> : { questions: [] })
+      .then((data) => { if (!cancelled) setQuestions(data.questions); })
+      .catch(() => { if (!cancelled) setQuestions([]); });
+    return () => { cancelled = true; };
+  }, []);
+  const answer = async (question: OpenQuestion, verdict: "confirm" | "deny") => {
+    setBusyId(question.id); setNotice("");
+    try {
+      const response = await fetch("/api/questions", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: question.id, verdict, note: notes[question.id]?.trim() || undefined }) });
+      const data = await response.json() as { tree?: FamilyTree; questions?: OpenQuestion[]; error?: string };
+      if (!response.ok) throw new Error(data.error || "answer_failed");
+      if (data.questions) setQuestions(data.questions);
+      if (data.tree) onTreeChange(data.tree);
+      setNotice(verdict === "confirm" ? "Recorded — thank you." : "Noted as not correct.");
+    } catch (error) {
+      setNotice(error instanceof Error && error.message === "answer_name_required" ? "Please write the name first." : "Could not save the answer. Please try again.");
+    } finally { setBusyId(null); }
+  };
+  if (!questions?.length) return notice ? <p className="fill-notice">{notice}</p> : null;
+  return <div className="fill-questions">
+    <div className="fill-questions-head">
+      <h3>Questions for the family</h3>
+      <p>The old records imply these but never say them outright. Confirming applies the change; every answer is recorded.</p>
+      {notice && <p className="fill-questions-notice" role="status">{notice}</p>}
+    </div>
+    {questions.map((question) => <div className="fill-question" key={question.id}>
+      <p className="fill-question-text">{question.question}</p>
+      {question.evidence && <p className="fill-question-evidence">{question.evidence}</p>}
+      {question.actionSummary && <p className="fill-question-action">{question.actionSummary}</p>}
+      <div className="fill-question-answer">
+        <input className="fill-input" value={notes[question.id] ?? ""} placeholder={question.needsAnswerText ? "Her name…" : "Add a note (optional)"}
+          onChange={(event) => setNotes((current) => ({ ...current, [question.id]: event.target.value }))} aria-label={`Answer for: ${question.question}`} />
+        <button type="button" className="fill-save" disabled={busyId !== null || (question.needsAnswerText && !notes[question.id]?.trim())}
+          onClick={() => answer(question, "confirm")}>{question.needsAnswerText ? "Record the name" : "Confirm"}</button>
+        <button type="button" className="fill-skip" disabled={busyId !== null}
+          onClick={() => answer(question, "deny")}>{question.needsAnswerText ? "Not known" : "Not correct"}</button>
+      </div>
+    </div>)}
+  </div>;
+}
+
 export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; onSaved: (tree: FamilyTree) => void; onOpen: (person: Person) => void }) {
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
   // Spouse-aware rows: a married-in relative with no recorded parents stands
@@ -555,6 +609,7 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
   const field = (key: string, placeholder: string) =>
     <input className="fill-input" value={form[key] ?? ""} placeholder={placeholder} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />;
   return <section className="fill-view" aria-label="Fill in missing details">
+    <OpenQuestionsCard onTreeChange={onSaved} />
     <div className="fill-progress">
       <strong>{complete}</strong> of {tree.people.length} records are complete · <strong>{incomplete.length}</strong> with gaps
       {notice && <span className="fill-notice"> · {notice}</span>}

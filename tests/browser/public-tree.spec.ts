@@ -191,6 +191,9 @@ test("the members-only gate covers the tree and its APIs", async ({ request }) =
 test("member management refuses anonymous requests", async ({ request }) => {
   const listing = await request.get("/api/members");
   expect(listing.status()).toBe(401);
+  // the Fill-in review queue is editor-gated the same way
+  expect((await request.get("/api/questions")).status()).toBe(401);
+  expect((await request.post("/api/questions", { data: { id: "oq-x", verdict: "confirm" } })).status()).toBe(401);
   const mutation = await request.post("/api/members", { data: { action: "set", email: "intruder@example.com", role: "admin" } });
   expect(mutation.status()).toBe(401);
 });
