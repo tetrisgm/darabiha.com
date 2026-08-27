@@ -140,8 +140,13 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     window.addEventListener("pointerup", onUp);
   };
   const [viewMode, setViewModeState] = useState<ViewMode>("family");
+  // The restore runs again once the viewer resolves, which is after the page
+  // is interactive - so without this it could put the reader back on the view
+  // they had last time, seconds after they clicked a different tab.
+  const viewChosen = useRef(false);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
+      if (viewChosen.current) return;
       try {
         const saved = window.localStorage.getItem("darabiha-view");
         if (saved && (VIEW_MODES as readonly string[]).includes(saved) && !(saved === "fill" && !viewer.canEdit)) setViewModeState(saved as ViewMode);
@@ -150,6 +155,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     return () => cancelAnimationFrame(frame);
   }, [viewer.canEdit]);
   const setViewMode = (mode: ViewMode) => {
+    viewChosen.current = true;
     setViewModeState(mode);
     if (mode !== "map") setPlaceFocus(null);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
