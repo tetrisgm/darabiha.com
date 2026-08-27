@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 84**, `BUILD_ID=56f87dc`.
+- The live release is **Version 87**, `BUILD_ID=e00cd3a`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":84,"build":"56f87dc","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":87,"build":"e00cd3a","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -29,8 +29,11 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–84 (2026-08-26)
+### Versions 54–87 (2026-08-26)
 
+- **Version 87** (`e00cd3a`): the Tree view's fold chips say what they do — "Show 141 more" / "Hide branch" instead of "▸ 141" / "▾" (owner: the glyphs were not clear).
+- **Version 86** (`0000bde`): the questions card was being crushed to a hairline — `.fill-view` is a flex column and the card's `overflow:hidden` zeroes its min-height, so flexbox shrank it to nothing; `flex:none` fixes it. (The V86 deploy hit a transient wrangler `fetch failed` after promotion — the version WAS live despite the error; a later clean deploy confirmed.)
+- **Version 85** (`05f1f6b`): **the Fill-in tab is now the family's review queue** (owner: "put these open questions with possible solutions in the fill-in tab, so my father can review them and then confirm or deny"). New `open_questions` D1 table + `/api/questions` (editor-gated GET/POST, covered by the anonymous-401 suite test); a "Questions for the family" card at the top of Fill-in shows each question with its evidence and prepared action. **Confirm applies the change on the spot** via `proposal_json` (ids resolved at seed time): a parent link, a biography note, or — for the unnamed second wife — a new person created from the name the reviewer types (the confirm button is disabled until a name is entered, labeled "Record the name" / "Not known"). Deny closes the question permanently. Verdict, note, reviewer and timestamp live on the row and in `change_log`; `scripts/seed_open_questions.mjs` is idempotent by stable id and never reopens an answered question. Seeded with four: Fatemeh Massoudi = Robabeh's sister?, the second wife's name, Ashraf = the bookkeeper's daughter?, and who the two unidentified men in the 1920 photograph are (note-only — no auto-action).
 - **The story-level facts are on the cards** (2026-08-27, data only — still Version 84; `scripts/enrich_from_histories.mjs`). The owner's point stood: the V81 sweep had only compared *structured fields* against the archive, and the histories assert people and facts the cards never carried. The curated diff, every entry citing its source, all guarded and idempotent:
   - **Five people added** that the histories name outright: Robabeh's siblings **Ebrahim, Esmail, Mahmoud and Masoumeh Masoudi** as children of Haj Mirza Agha Masoudi (Esmail is the one who spotted the customs notice on a scrap of newspaper), and **Gholamreza Darabi**, first son of Hossein Zehtab Darabi and Ategheh Khanom, who died in childhood — his birth certificate was given to his brother Gholamhossein, who is the living **Gholam Reza Darabi** of the tree (biography now explains the renaming).
   - **Eight biographies corrected**: Fatemeh Darabi's household name Mirza Baji; a real biography for Abbas Darabi (G5 — died in his youth, leftmost in the 1920 photograph), Gholam Reza Darabi and Asadollah Jaberian (bookkeeper, first literate with Ghassem, married in the one-evening match of ~1927); Haj Mirza Agha Masoudi (head of the butchers' guild, children listed); Mohammad Zehtab (Salmeh's death, the second wife his children chose, the self-arranged funeral); Ghassem (night school); Hossein (ran the company).
