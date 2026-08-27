@@ -200,12 +200,17 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
         // re-runs that a loading portrait causes
         const anchor = holdInPlace.current;
         const held = anchor && anchor.forFocus === focusId ? anchor.rect : null;
-        const target = held
-          ? { x: held.left + held.width / 2, y: held.top + held.height / 2 }
-          : { x: stageRect.left + stageRect.width / 2, y: stageRect.top + stageRect.height / 2 };
+        const stageMiddle = stageRect.top + stageRect.height / 2;
+        /* The vertical needs no measuring. Every column stretches to the
+           board's height and the focal column centres its card in that, and
+           the board is centred in the stage - so at zero pan the card is
+           already on the stage's centre line, by construction. Measuring it
+           instead caught a transient and baked a fourteen-pixel correction
+           into every board, on arrival and on every click. The horizontal is
+           genuinely unknown, because the focal column is not the middle one. */
         setPan({
-          x: target.x - (cardRect.left + cardRect.width / 2),
-          y: target.y - (cardRect.top + cardRect.height / 2),
+          x: (held ? held.left + held.width / 2 : stageRect.left + stageRect.width / 2) - (cardRect.left + cardRect.width / 2),
+          y: held ? (held.top + held.height / 2) - stageMiddle : 0,
         });
       };
       frame = requestAnimationFrame(place);
