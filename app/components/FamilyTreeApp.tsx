@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { TimelineView, WorldMapView } from "./ArchiveViews";
+import type { MappedPlace } from "../../lib/archive-views";
 import { FocusFamilyView, MissingDataView, OutlineView, Silhouette, TreeSearch } from "./TreeViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { Markdown } from "./Markdown";
@@ -102,6 +103,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [hoverPreview, setHoverPreview] = useState<Person | null>(null);
+  // Map mode: a clicked city opens the panel as a list of its people; opening
+  // one of them swaps in the profile, and closing it returns to the list.
+  const [placeFocus, setPlaceFocus] = useState<MappedPlace | null>(null);
   const [chatWidth, setChatWidth] = useState(330);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -141,6 +145,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   }, [viewer.canEdit]);
   const setViewMode = (mode: ViewMode) => {
     setViewModeState(mode);
+    if (mode !== "map") setPlaceFocus(null);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
   };
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
@@ -222,7 +227,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   }, [tree, focalId]);
 
   return (
-    <main className={`min-h-screen bg-[var(--paper)] text-[var(--ink)] ${chatCollapsed ? "chat-collapsed" : ""} ${selectedPerson ? "has-person" : ""}`} style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties} data-build-id={BUILD_ID} data-version={VERSION}>
+    <main className={`min-h-screen bg-[var(--paper)] text-[var(--ink)] ${chatCollapsed ? "chat-collapsed" : ""} ${selectedPerson || (placeFocus && viewMode === "map") ? "has-person" : ""}`} style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties} data-build-id={BUILD_ID} data-version={VERSION}>
       {authError && <div className="border-b border-[rgba(226,140,115,.35)] bg-[rgba(226,140,115,.12)] px-5 py-3 text-center text-sm text-[#e8a289]">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <header className={`site-action-bar absolute top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8 ${chatCollapsed ? "is-chat-collapsed" : ""}`}>
@@ -292,6 +297,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         </aside>
         <button className={`chat-edge-reveal ${chatCollapsed ? "is-visible" : ""}`} onClick={() => setChatCollapsed(false)} aria-label="Show family chat" title="Show family chat">›</button>
         {hoverPreview && viewMode === "family" && hoverPreview.id !== selectedPerson?.id && <PersonHoverPreview person={hoverPreview} tree={tree} standalone={!selectedPerson} />}
+        {!selectedPerson && placeFocus && viewMode === "map" && <PlacePanel place={placeFocus} tree={tree} onPick={(person) => openPerson(person, true, false)} onClose={() => setPlaceFocus(null)} />}
         {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
         <section className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
@@ -304,7 +310,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
               {viewMode === "fill" && viewer.canEdit && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
               {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
-              {viewMode === "map" && <WorldMapView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
+              {viewMode === "map" && <WorldMapView tree={tree} onSelectPlace={(place) => { setPlaceFocus(place); setSelectedPerson(null); setHighlightedIds(place.people.map((person) => person.id)); }} />}
             </div>
           </div>
         </section>
@@ -415,6 +421,47 @@ function AttachMenu({ onFiles, onFolder }: { onFiles: () => void; onFolder: () =
       </button>
     </div>}
   </div>;
+}
+
+/** The Map panel: everyone the records place in a city, as preview cards.
+ * Clicking a card opens the profile in the same slot; closing the profile
+ * lands back on this list because the place focus survives it. */
+function PlacePanel({ place, tree, onPick, onClose }: { place: MappedPlace; tree: FamilyTree; onPick: (person: Person) => void; onClose: () => void }) {
+  const roleIn = (person: Person) => {
+    const norm = (value: string | null) => value?.toLocaleLowerCase() ?? "";
+    const label = place.label.toLocaleLowerCase();
+    const born = label.startsWith(norm(person.birthCity)) && Boolean(person.birthCity);
+    const died = label.startsWith(norm(person.deathCity)) && Boolean(person.deathCity);
+    if (born && died) return "Born and died here";
+    if (died) return "Died here";
+    if (born) return "Born here";
+    return ""; // mapped by country only - the dates say enough
+  };
+  const people = [...place.people].sort((a, b) => (Number(a.birthDate?.slice(0, 4)) || 9999) - (Number(b.birthDate?.slice(0, 4)) || 9999) || a.displayName.localeCompare(b.displayName));
+  return <section className="person-modal person-modal-v2 person-panel place-panel" role="dialog" aria-labelledby="place-panel-title">
+    <header className="person-panel-bar">
+      <span aria-hidden="true" />
+      <button type="button" className="person-nav-close" onClick={onClose} aria-label="Close">×</button>
+    </header>
+    <div className="person-hero-copy">
+      <h2 id="place-panel-title" className="font-serif text-4xl">{place.label}</h2>
+      <p className="person-subtitle">{people.length === 1 ? "One person in the records" : `${people.length} people in the records`}</p>
+    </div>
+    <div className="place-people">
+      {people.map((person) => {
+        const born = person.birthDate?.slice(0, 4), died = person.deathDate?.slice(0, 4);
+        const life = born && died ? `${born}–${died}` : born ? `b. ${born}` : died ? `d. ${died}` : "";
+        return <button type="button" className="place-person-row" key={person.id} onClick={() => onPick(person)}>
+          {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
+          <span className="place-person-copy">
+            <strong>{person.displayName}</strong>
+            <span>{[life, roleIn(person)].filter(Boolean).join(" · ")}</span>
+          </span>
+          <span className="place-person-go" aria-hidden="true">›</span>
+        </button>;
+      })}
+    </div>
+  </section>;
 }
 
 function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {

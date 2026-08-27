@@ -992,3 +992,15 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .family-map-view .unmapped-places { position:absolute; left:1rem; bottom:1rem; z-index:6; margin:0; max-width:min(70%, 46rem);
   border:1px solid rgba(255,255,255,.08); border-radius:.8rem; background:rgba(28,28,30,.66); padding:.45rem .75rem;
   backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
+
+/* the Map panel: a city's people as preview cards */
+.place-panel .person-hero-copy { margin-bottom:.4rem; }
+.place-people { margin-top:1.2rem; border:1px solid var(--line); border-radius:.9rem; background:rgba(44,44,46,.72); overflow:hidden; }
+.place-person-row { display:flex; width:100%; align-items:center; gap:.75rem; padding:.7rem .9rem; text-align:left; }
+.place-person-row + .place-person-row { border-top:1px solid var(--line); }
+.place-person-row:hover { background:var(--wash); }
+.place-person-row .ped-portrait { height:2.5rem; width:2.5rem; flex:none; }
+.place-person-copy { display:flex; min-width:0; flex:1; flex-direction:column; gap:.1rem; }
+.place-person-copy strong { font-size:.92rem; font-weight:650; letter-spacing:-.005em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.place-person-copy span { color:var(--muted); font-size:.78rem; font-variant-numeric:tabular-nums; }
+.place-person-go { color:var(--muted); font-size:1rem; flex:none; }

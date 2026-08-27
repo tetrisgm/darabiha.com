@@ -138,6 +138,14 @@ test("timeline and map are generated from the same public family records", async
   await page.mouse.move(mapBox!.x + mapBox!.width / 2 + 80, mapBox!.y + mapBox!.height / 2 + 40, { steps: 3 });
   await page.mouse.up();
   await expect.poll(() => page.locator(".world-map-layer").evaluate((element) => (element as HTMLElement).style.transform)).toContain("translate(80px, 40px)");
+  // a city opens as a list of its people; a row opens the profile; closing it returns to the list
+  await page.locator(".map-marker").first().click();
+  await expect(page.locator(".place-panel")).toBeVisible();
+  expect(await page.locator(".place-person-row").count()).toBeGreaterThan(0);
+  await page.locator(".place-person-row").first().click();
+  await expect(page.locator(".person-modal-v2 h2")).toBeVisible();
+  await page.locator(".person-panel-bar .person-nav-close").click();
+  await expect(page.locator(".place-panel")).toBeVisible();
   await page.getByRole("button", { name: "Tree" }).click();
   await expect(page.locator(".family-canvas")).toBeVisible();
 });

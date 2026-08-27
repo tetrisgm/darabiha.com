@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { buildTimeline, mapFamilyPlaces } from "../../lib/archive-views";
+import { buildTimeline, mapFamilyPlaces, type MappedPlace } from "../../lib/archive-views";
 import { WORLD_COUNTRY_PATHS } from "../../lib/world-map-paths";
 import type { FamilyTree, Person } from "../../lib/types";
 
@@ -22,7 +22,7 @@ export function TimelineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
   </section>;
 }
 
-export function WorldMapView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSelectPlace: (place: MappedPlace) => void }) {
   const { mapped, unmapped } = mapFamilyPlaces(tree);
   // The map pans and zooms with the same grammar as the Tree and Family
   // canvases: drag or wheel to pan, ctrl/cmd+wheel or the buttons to zoom.
@@ -62,7 +62,7 @@ export function WorldMapView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
       <svg viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {WORLD_COUNTRY_PATHS.map((d, index) => <path d={d} key={index} />)}
       </svg>
-      {mapped.map((location) => <button type="button" className="map-marker" style={{ left: `${location.x}%`, top: `${location.y}%` }} key={location.key} onClick={() => onSelect(location.people[0])} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
+      {mapped.map((location) => <button type="button" className="map-marker" style={{ left: `${location.x}%`, top: `${location.y}%` }} key={location.key} onClick={() => onSelectPlace(location)} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
       {!mapped.length && <p className="map-empty">Add a birth or death city and country to place someone on the map.</p>}
       </div>
       </div>
