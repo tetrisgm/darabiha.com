@@ -3,6 +3,8 @@ import { readTree } from "../../../db/store";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
 import { describeRelationship, relationshipSentence } from "../../../lib/relationship-path";
 import { requireVisitor } from "../../authz";
+import { cookies } from "next/headers";
+import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
 
 export const runtime = "edge";
 
@@ -36,10 +38,13 @@ export async function POST(request: Request) {
   const message = typeof body.message === "string" ? body.message.trim().slice(0, 4000) : "";
   if (!message) return Response.json({ error: "empty_message" }, { status: 400 });
   const tree = await readTree();
+  const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
   try {
     const response = await new OpenAI({ apiKey }).responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5.4",
-      instructions: "You answer questions about the public Darabiha family archive. Use only the supplied tree data. If a fact is absent, say it is not recorded. Never invent relationships, dates, places, or biographies. Do not propose or perform changes. When asked how two people are related, use the precomputed relationships supplied below rather than working it out yourself. Write for a narrow chat column: short paragraphs, each list item on its own line beginning with \"- \", and never print internal IDs.",
+      instructions: `You answer questions about the public Darabiha family archive. Use only the supplied tree data. If a fact is absent, say it is not recorded. Never invent relationships, dates, places, or biographies. Do not propose or perform changes. When asked how two people are related, use the precomputed relationships supplied below rather than working it out yourself. Write for a narrow chat column: short paragraphs, each list item on its own line beginning with "- ", and never print internal IDs.
+
+This family's records are not in one language: the histories were written in Persian and part of the family lives in France. Understand a question asked in Persian, French, English or a mixture of them, and answer in the language it was asked in - otherwise in ${readerLanguage}. Quote names as the archive spells them rather than translating them.`,
       input: `Question: ${message}\n\n${context(tree, message)}\nTree data:\n${JSON.stringify(tree)}`,
       store: false,
     });

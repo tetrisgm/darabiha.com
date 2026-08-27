@@ -256,3 +256,6 @@ export function translate(lang: Lang, key: string, vars?: Record<string, string 
 
 export const parseLang = (value: string | null | undefined): Lang =>
   LANGUAGES.includes(value as Lang) ? value as Lang : "en";
+
+/** What to call each language when telling the archivist which one to use. */
+export const LANGUAGE_ENDONYM: Record<Lang, string> = { en: "English", fa: "Persian (فارسی)", fr: "French (français)" };

@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { Buffer } from "node:buffer";
 import { strFromU8 } from "fflate";
 import { requireEditor } from "../../authz";
+import { cookies } from "next/headers";
+import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
 import { listAttachments, readTree, saveAttachment } from "../../../db/store";
 import { extractArchiveEntries } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
@@ -198,7 +200,8 @@ function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
 
 function proposalFromCall(call: ToolCall): ChangeProposal | null {
   let args: Record<string, unknown>;
-  try { args = JSON.parse(call.arguments) as Record<string, unknown>; } catch { return null; }
+  try {
+    args = JSON.parse(call.arguments) as Record<string, unknown>; } catch { return null; }
   const summary = String(args.summary ?? "Suggested family-tree change");
   if (call.name === "propose_add_person") return { kind: "add_person", summary, person: personFromArgs(args), relationshipHints: Array.isArray(args.relationship_hints) ? args.relationship_hints.map((hint) => ({ personName: String((hint as Record<string, unknown>).person_name ?? ""), relationshipType: (hint as Record<string, unknown>).relationship_type as "parent" | "spouse" })) : [] };
   if (call.name === "propose_update_person") return {
@@ -257,6 +260,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "files_too_large" }, { status: 413 });
   }
   const [tree, existingAttachments] = await Promise.all([readTree(), listAttachments()]);
+  // the archive is multilingual and so is the reader
+  const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
   const stored = await Promise.all(files.map((file) => saveAttachment(file, auth.user.email)));
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
@@ -310,6 +315,14 @@ Past data must never block new information. Reconcile incoming people against th
 For a rich message or multi-file upload, call tools once for every distinct person, relationship, and story; do not stop after the first item. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person, relationship, and story IDs must be copied exactly from the supplied tree. For people created in this same response, set the relationship ID to null and provide their exact display name so the server can resolve it after creation. A parent relationship is directional: from_person_id/from_person_name is the parent and to_person_id/to_person_name is the child. Preserve every existing field not changed by the editor. Use delete tools only for an explicit request or an unambiguous duplicate. Every summary must include enough disambiguating context for same-name relatives. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep prose warm, direct, and concise. Write replies for a narrow chat column: short paragraphs, each list item on its own line beginning with "- ", bold only for a name or a label, and never print internal IDs or UUIDs — refer to people by name.
 
 When the editor asks how two people are related, use the precomputed relationships supplied with the tree rather than working them out yourself.
+
+LANGUAGE. This family's records are not in one language: the histories were written in Persian, part of the family lives in France, and the archive holds all of it. Read whatever you are given - Persian, French, English, or a message that mixes them - and reply in the language the reader is using, which is ${readerLanguage}. A question asked in Persian is answered in Persian.
+
+Names carry across scripts badly. When a document names someone in Persian or French, match them against the existing records first and reuse the spelling the archive already uses for that person; transliterate afresh only for someone genuinely new, and then keep to one spelling throughout. A name is a record, not a phrase to translate.
+
+Dates may be Solar Hijri. Convert to a Gregorian year only when you are certain; otherwise record the date as the source writes it and ask which year is meant rather than guessing.
+
+When you preserve a passage the family wrote, keep their own words as the story's original and put a faithful English rendering in the body - the archive stores both, and the original is the record.
 
 INTERVIEWING. This archive is filled in by the family, so behave like an interviewer as well as a scribe. After you have applied what the editor told you, look at the gaps listed under "Worth asking about" and ask ONE natural follow-up about a person they plainly know — where a relative was born, where they live now, when someone married, who a spouse's parents were, what someone did for a living. Ask about people close to the ones they are already discussing, never about strangers deep in the tree. One question at a time, warm and specific ("Do you know where Kazem's children were born?"), and drop it if they ignore it twice. If the editor says they do not know, accept it and move on.`,
       input: [{ role: "user", content }] as never,
