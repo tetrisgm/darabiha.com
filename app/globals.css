@@ -92,7 +92,9 @@ button { cursor: pointer; }
 .world-map { position:relative; max-width:74rem; aspect-ratio:2/1; margin:2.5rem auto 0; overflow:hidden; border:1px solid rgba(255,255,255,.09); border-radius:2rem; background:radial-gradient(circle at 60% 28%,rgba(40,46,42,.92),rgba(24,28,25,.92)); box-shadow:0 20px 60px rgba(0,0,0,.35); }
 .world-map svg path { fill:#39423b; stroke:#141a16; stroke-width:.7; vector-effect:non-scaling-stroke; }
 .world-map svg path:hover { fill:#414b43; }
-.map-marker { position:absolute; display:flex; align-items:center; transform:translate(-50%,-50%); filter:drop-shadow(0 5px 8px rgba(0,0,0,.18)); }
+/* markers hold their screen size as the map zooms - counter-scaled so nearby
+   cities (Tehran sits almost on Qazvin) separate instead of staying merged */
+.map-marker { position:absolute; display:flex; align-items:center; transform:translate(-50%,-50%) scale(calc(1 / var(--map-scale, 1))); filter:drop-shadow(0 5px 8px rgba(0,0,0,.18)); }
 .map-marker > span { position:relative; z-index:1; display:flex; width:2rem; height:2rem; align-items:center; justify-content:center; border:3px solid white; border-radius:999px; background:var(--accent); color:white; font-size:.68rem; font-weight:700; }
 .map-marker > strong { position:absolute; left:1.6rem; min-width:max-content; border:1px solid rgba(255,255,255,.09); border-radius:.65rem; background:rgba(44,44,46,.9); padding:.35rem .55rem .35rem .7rem; color:var(--ink); font-size:.7rem; }
 .map-marker:hover > span { transform:scale(1.12); }
@@ -1004,3 +1006,19 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .place-person-copy strong { font-size:.92rem; font-weight:650; letter-spacing:-.005em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .place-person-copy span { color:var(--muted); font-size:.78rem; font-variant-numeric:tabular-nums; }
 .place-person-go { color:var(--muted); font-size:1rem; flex:none; }
+
+/* ============ the panels live over the chat, not beside it ============
+   Hovering or opening a person no longer pushes the canvas or the action
+   bar around: the profile, hover preview, and map place panel all take the
+   chat column's footprint (min 30rem so the content never cramps). The
+   canvas keeps its full width and nothing jumps. */
+.person-panel { position:absolute; left:0; top:0; bottom:0; height:auto; width:max(var(--chat-width,330px), 30rem);
+  flex:none; z-index:45; box-shadow:18px 0 50px rgba(0,0,0,.45); }
+main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-bar { left:max(var(--chat-width,330px), 30rem); }
+.person-hover-preview { left:0; width:max(var(--chat-width,330px), 30rem); }
+@media (max-width: 900px) {
+  .person-panel { position:fixed; width:min(100%,26rem); z-index:60; }
+  main.has-person .site-action-bar { left:var(--chat-width,330px); }
+  main.chat-collapsed.has-person .site-action-bar { left:0; }
+  .person-hover-preview { width:min(100%,26rem); }
+}
