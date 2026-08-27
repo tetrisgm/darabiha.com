@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 96**, `BUILD_ID=2739bf1`.
+- The live release is **Version 97**, `BUILD_ID=f483bcb`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":96,"build":"2739bf1","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":97,"build":"f483bcb","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -29,8 +29,9 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–96 (2026-08-26)
+### Versions 54–97 (2026-08-26)
 
+- **Version 97** (`f483bcb`): the hover preview was buried when a profile was open — the panels' move to z-45 (V94) out-ranked the preview's z-40, so hovering someone to compare against an open profile showed nothing. Preview now z-46: over the panel, under the action bar. Verified in both engines: standalone hover over the chat, and hover-with-profile-open sliding over the profile.
 - **Version 96** (`2739bf1`): panel frost raised to near-solid (.94) — over the chat's text the .78 glass let the words beneath ghost through.
 - **Version 95** (`06b9b31`): map zoom anchors at the cursor (wheel) or the stage center (buttons) — it scaled around the board center, so zooming toward Iran flew Iran off the screen.
 - **Version 94** (`d8f241e`): **the panels take the chat's footprint instead of forming a second column** (owner: hovering someone near the canvas edge slid a panel over the very card being pointed at, and profile+chat are rarely wanted at once). The profile, hover preview, and place panel now overlay the chat column at `max(var(--chat-width), 30rem)` wide, z-index 45 under the action bar; the canvas keeps its full width, nothing reflows on open, and `main.has-person` only shifts the action bar to `max(chat-width, 30rem)`. Mobile (≤900px) keeps the fixed full-height overlay. Also: **map markers are counter-scaled** (`scale(calc(1/var(--map-scale)))`) so they hold their on-screen size as the map zooms — Tehran's disc sat exactly on Qazvin's and grew with it; zoom reaches 8×; markers with more people stack on top (zIndex 4+count), which is what makes Qazvin (5 people) clickable under Tehran (1).
