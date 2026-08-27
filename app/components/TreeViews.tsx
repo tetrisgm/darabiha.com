@@ -420,7 +420,14 @@ function buildDescentModel(tree: FamilyTree) {
 }
 
 /** The whole family as a collapsible indented outline. */
-export function OutlineView({ tree, onSelect, onPreview }: { tree: FamilyTree; onSelect: (person: Person) => void; onPreview?: (person: Person | null) => void }) {
+export function OutlineView({ tree, onSelect, onPreview, meId }: { tree: FamilyTree; onSelect: (person: Person) => void; onPreview?: (person: Person | null) => void; meId?: string | null }) {
+  // four hundred names is a long way to scroll to find yourself
+  const scrolledTo = useRef<string | null>(null);
+  const scrollHere = (element: HTMLElement | null) => {
+    if (!element || !meId || scrolledTo.current === meId) return;
+    scrolledTo.current = meId;
+    requestAnimationFrame(() => element.scrollIntoView({ block: "center" }));
+  };
   const model = useMemo(() => {
     const { maps, kidsOf } = buildDescentModel(tree);
     const placedAsSpouse = new Set<string>();
@@ -441,7 +448,7 @@ export function OutlineView({ tree, onSelect, onPreview }: { tree: FamilyTree; o
     const spouses = [...new Set(maps.spousesOf.get(person.id) ?? [])].map((id) => maps.byId.get(id)).filter(Boolean) as Person[];
     const kids = (kidsOf.get(person.id) ?? []).map((id) => maps.byId.get(id)).filter(Boolean) as Person[];
     kids.sort((a, b) => (Number(a.birthDate?.slice(0, 4)) || 9999) - (Number(b.birthDate?.slice(0, 4)) || 9999) || a.displayName.localeCompare(b.displayName));
-    const line = <span className="outline-line">
+    const line = <span className={`outline-line ${person.id === meId ? "is-me" : ""}`} ref={person.id === meId ? scrollHere : undefined}>
       <button type="button" className="outline-name" onClick={() => onSelect(person)}
         onMouseEnter={() => onPreview?.(person)} onMouseLeave={() => onPreview?.(null)}
         onFocus={() => onPreview?.(person)} onBlur={() => onPreview?.(null)}>{person.displayName}</button>

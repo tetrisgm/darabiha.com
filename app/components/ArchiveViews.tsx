@@ -14,14 +14,17 @@ function prettyDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-export function TimelineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+export function TimelineView({ tree, onSelect, meId }: { tree: FamilyTree; onSelect: (person: Person) => void; meId?: string | null }) {
   const { t } = useLanguage();
   const events = buildTimeline(tree);
+  // a long list of strangers opens where the reader stands in it
+  const scrollHere = useScrollIntoView(meId);
   return <section className="archive-view archive-timeline" aria-label="Family timeline">
     <div className="archive-view-heading"><p className="eyebrow">Timeline</p><h2>{t("timeline.title")}</h2><p>Births, deaths, and dated family stories appear here automatically.</p></div>
     {events.length ? <ol className="timeline-list">{events.map((event) => {
       const person = event.personIds.length === 1 ? tree.people.find((candidate) => candidate.id === event.personIds[0]) : undefined;
-      return <li key={event.id}><time>{event.year}</time><span className={`timeline-dot is-${event.kind}`} /><button type="button" disabled={!person} onClick={() => person && onSelect(person)}><span>{event.title}</span><strong>{prettyDate(event.date)}{event.detail ? ` · ${event.detail}` : ""}</strong></button></li>;
+      const isMe = Boolean(meId && event.personIds.includes(meId));
+      return <li key={event.id} className={isMe ? "is-me" : undefined} ref={isMe ? scrollHere : undefined}><time>{event.year}</time><span className={`timeline-dot is-${event.kind}`} /><button type="button" disabled={!person} onClick={() => person && onSelect(person)}><span>{event.title}</span><strong>{prettyDate(event.date)}{event.detail ? ` · ${event.detail}` : ""}</strong></button></li>;
     })}</ol> : <p className="archive-empty">Dates added to people and stories will build this timeline.</p>}
   </section>;
 }
@@ -118,7 +121,10 @@ export function WorldMapView({ tree, onSelectPlace, onPreviewPlace }: { tree: Fa
     <div className="world-map" ref={stageRef} role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"} data-framed={hasFramed ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
       onDoubleClick={(event) => {
-        // a map zooms in where you double-click, around the point you chose
+        // a map zooms in where you double-click, around the point you chose -
+        // but a double-click on a city is about that city, not the ground
+        // under it, and it already opens the place
+        if ((event.target as HTMLElement).closest(".map-marker")) return;
         const rect = event.currentTarget.getBoundingClientRect();
         zoomAt(1.6, { x: event.clientX - (rect.left + rect.width / 2), y: event.clientY - (rect.top + rect.height / 2) });
       }}>
@@ -251,7 +257,18 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 
 /** The family's year: birthdays of the living, remembrances of the dead, and
  * the anniversaries of dated stories - the days worth a message. */
-export function CalendarView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+/** Puts the reader's own row on screen when a long list first opens. Runs
+ *  once per id: after that the list is theirs to scroll. */
+function useScrollIntoView(id: string | null | undefined) {
+  const done = useRef<string | null>(null);
+  return (element: HTMLElement | null) => {
+    if (!element || !id || done.current === id) return;
+    done.current = id;
+    requestAnimationFrame(() => element.scrollIntoView({ block: "center" }));
+  };
+}
+
+export function CalendarView({ tree, onSelect, meId }: { tree: FamilyTree; onSelect: (person: Person) => void; meId?: string | null }) {
   const { t } = useLanguage();
   const today = new Date();
   const dayOf = (value: string | null) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) ? String(value).slice(5) : null;

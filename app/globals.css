@@ -1430,3 +1430,10 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .identify-none, .identify-error { margin:.6rem 0 0; font-size:.78rem; }
 .identify-none { color:var(--muted); }
 .identify-error { color:var(--danger); }
+
+/* Where the reader stands in a long list. Quiet - a marker, not a selection. */
+.outline-line.is-me > .outline-name, .timeline-list li.is-me button > span:first-child { color:var(--accent); font-weight:700; }
+.outline-line.is-me::before, .timeline-list li.is-me::before {
+  content:"you"; margin-right:.45rem; border-radius:999px; padding:.05rem .4rem;
+  background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent);
+  font-size:.62rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
