@@ -1017,7 +1017,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .person-panel { position:absolute; left:0; top:0; bottom:0; height:auto; width:max(var(--chat-width,330px), 30rem);
   flex:none; z-index:45; box-shadow:18px 0 50px rgba(0,0,0,.45); }
 main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-bar { left:max(var(--chat-width,330px), 30rem); }
-.person-hover-preview { left:0; width:max(var(--chat-width,330px), 30rem); }
+/* the preview must slide OVER an open profile (panel is z-45), under the bar */
+.person-hover-preview { left:0; width:max(var(--chat-width,330px), 30rem); z-index:46; }
 @media (max-width: 900px) {
   .person-panel { position:fixed; width:min(100%,26rem); z-index:60; }
   main.has-person .site-action-bar { left:var(--chat-width,330px); }
