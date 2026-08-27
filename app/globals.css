@@ -797,8 +797,10 @@ main.chat-collapsed .person-hover-preview { left:0; }
 .canvas-controls button:last-child { border-radius:.7rem .7rem 0 0; }
 
 /* frosted refinements: heavier glass, fold pill beside the zoom stack */
-.person-panel { background: rgba(28,28,30,.78); }
-.person-hover-preview { background: rgba(28,28,30,.82); }
+/* over the chat's text (not the canvas) the frost must be nearly solid,
+   or the words beneath ghost through */
+.person-panel { background: rgba(28,28,30,.94); }
+.person-hover-preview { background: rgba(28,28,30,.95); }
 .chat-sidebar { background: color-mix(in srgb, var(--sidebar) 84%, transparent); }
 
 /* panel entrance: transform only - an opacity keyframe can stick at half

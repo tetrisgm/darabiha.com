@@ -1,4 +1,4 @@
 // Updated with each production commit so the live client and version endpoint
 // expose one unambiguous deployment identity.
-export const BUILD_ID = "d8f241e";
-export const VERSION = 94;
+export const BUILD_ID = "06b9b31";
+export const VERSION = 95;
