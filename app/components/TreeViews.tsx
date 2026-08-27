@@ -35,11 +35,7 @@ function PedCursor({ mode, cursorRef }: { mode: "grab" | "grabbing" | "pointer";
   </span>;
 }
 
-function place(person: Person) {
-  return [person.birthCity, person.birthCountry].filter(Boolean).join(", ") || person.birthPlace || "";
-}
-
-export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canBack, canForward, onOpen }: { tree: FamilyTree; focusId: string; onPick: (person: Person) => void; onBack?: () => void; onForward?: () => void; canBack?: boolean; canForward?: boolean; onOpen: (person: Person) => void }) {
+export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnly, onPreview, onBack, onForward, canBack, canForward, onOpen }: { tree: FamilyTree; focusId: string; selectedId?: string | null; onPick: (person: Person) => void; onSelectOnly: (person: Person) => void; onPreview: (person: Person | null) => void; onBack?: () => void; onForward?: () => void; canBack?: boolean; canForward?: boolean; onOpen: (person: Person) => void }) {
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
   const containerRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef(new Map<string, HTMLDivElement>());
@@ -165,6 +161,42 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
       setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
     }
   };
+  useEffect(() => {
+    if (!selectedId || selectedId === focusId) return;
+    const frame = requestAnimationFrame(() => {
+      const stage = containerRef.current;
+      const slot = slotRefs.current.get(`spouse-${selectedId}`) ?? [...slotRefs.current.entries()].find(([key]) => key.endsWith(selectedId))?.[1];
+      if (!stage || !slot) return;
+      const stageRect = stage.getBoundingClientRect();
+      const slotRect = slot.getBoundingClientRect();
+      setPanMode("glide");
+      setPan((current) => ({
+        x: current.x + (stageRect.left + stageRect.width / 2) - (slotRect.left + slotRect.width / 2),
+        y: current.y + (stageRect.top + stageRect.height / 2) - (slotRect.top + slotRect.height / 2),
+      }));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, focusId]);
+  // Figma-style zoom: +/- (and cmd/ctrl with =/-) while the Family view is open
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const modified = event.metaKey || event.ctrlKey;
+      if (event.key === "+" || (modified && event.key === "=")) {
+        event.preventDefault();
+        setScale((current) => Math.min(2, current * 1.1));
+      } else if (event.key === "-") {
+        event.preventDefault();
+        setScale((current) => Math.max(0.4, current * 0.9));
+      } else if (modified && event.key === "0") {
+        event.preventDefault();
+        setScale(1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const centerColumn = (key: string) => {
     const column = colRefs.current.get(key);
     const stage = containerRef.current;
@@ -206,15 +238,20 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
     if (element) slotRefs.current.set(key, element);
     else slotRefs.current.delete(key);
   };
-  const card = (person: Person, key: string, size: "lg" | "md" | "sm", subtitle?: string) => {
+  const spouseIds = new Set(spouses.map((spouse) => spouse.id));
+  const card = (person: Person, key: string, subtitle?: string) => {
     const meta = [years(person), subtitle].filter(Boolean).join(" · ");
-    return <div ref={setRef(key)} className={`ped-card ped-card-${size} ${person.id === focal.id ? "is-focal" : ""}`} key={key}>
-      <button type="button" onClick={() => onPick(person)}>
+    // Clicking the focal person or their spouse keeps the layout exactly as
+    // it is (a married couple shares this neighborhood) - the camera pans,
+    // the selection highlight moves, and the profile follows.
+    const keepLayout = person.id === focal.id || spouseIds.has(person.id);
+    return <div ref={setRef(key)} className={`ped-card ped-card-md ${person.id === (selectedId ?? focal.id) ? "is-selected" : ""}`} key={key}>
+      <button type="button" onClick={() => (keepLayout ? onSelectOnly(person) : onPick(person))}
+        onMouseEnter={() => onPreview(person)} onMouseLeave={() => onPreview(null)} onFocus={() => onPreview(person)} onBlur={() => onPreview(null)}>
         {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
         <span className="ped-copy">
           <strong>{person.displayName}</strong>
           {meta && <span>{meta}</span>}
-          {size === "lg" && place(person) && <span className="ped-place">{place(person)}</span>}
         </span>
       </button>
     </div>;
@@ -235,14 +272,19 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
       onPointerEnter={positionPedCursor} onPointerLeave={hidePedCursor}>
       <PedCursor mode={cursorMode} cursorRef={pedCursorRef} />
+      <div className="canvas-controls ped-zoom" role="group" aria-label="Family zoom controls">
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.max(0.4, current * 0.9))} aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale(1)} aria-label="Reset zoom" title="Reset zoom">{Math.round(scale * 100)}%</button>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.min(2, current * 1.1))} aria-label="Zoom in" title="Zoom in">＋</button>
+      </div>
       <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
         <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
-        <div className="ped-columns">
+        <div className="ped-columns" key={focal.id}>
           {grandkidGroups.length > 0 && <div className="ped-col ped-col-grandkids" ref={(element) => { if (element) colRefs.current.set("grandkids", element); else colRefs.current.delete("grandkids"); }}>
             <button type="button" className="ped-col-label" onClick={() => centerColumn("grandkids")}>Grandchildren</button>
             {grandkidGroups.map((group) => <div className="ped-group" key={group.child.id}>
               {grandkidGroups.length > 1 && <p className="ped-group-label">via {group.child.displayName}</p>}
-              {group.kids.map((kid) => card(kid, `gc-${kid.id}`, "sm"))}
+              {group.kids.map((kid) => card(kid, `gc-${kid.id}`))}
             </div>)}
           </div>}
           <div className="ped-col ped-col-children" ref={(element) => { if (element) colRefs.current.set("children", element); else colRefs.current.delete("children"); }}>
@@ -250,34 +292,34 @@ export function FocusFamilyView({ tree, focusId, onPick, onBack, onForward, canB
             {children.length === 0 && <p className="ped-none">none recorded</p>}
             {childGroups.map((group, index) => <div className="ped-group" key={index}>
               {(childGroups.length > 1 || spouses.length > 1) && <p className="ped-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
-              {group.kids.map((child) => card(child, `child-${child.id}`, "md"))}
+              {group.kids.map((child) => card(child, `child-${child.id}`))}
             </div>)}
           </div>
           <div className="ped-col ped-col-focal" ref={(element) => { if (element) colRefs.current.set("focal", element); else colRefs.current.delete("focal"); }}>
             <div className="ped-couple">
-              {card(focal, "focal", "lg")}
-              {spouses.map((spouse) => <div className="ped-spouse" key={spouse.id}><span className="ped-marriage">⚭</span>{card(spouse, `spouse-${spouse.id}`, "md", statusOf(spouse) ?? undefined)}</div>)}
+              {card(focal, "focal")}
+              {spouses.map((spouse) => <div className="ped-spouse" key={spouse.id}><span className="ped-marriage">⚭</span>{card(spouse, `spouse-${spouse.id}`, statusOf(spouse) ?? undefined)}</div>)}
             </div>
             {siblings.length > 0 && <details className="ped-siblings" open>
               <summary>Siblings ({siblings.length})</summary>
-              {siblings.map((sibling) => card(sibling, `sib-${sibling.id}`, "sm"))}
+              {siblings.map((sibling) => card(sibling, `sib-${sibling.id}`))}
             </details>}
           </div>
           <div className="ped-col ped-col-parents" ref={(element) => { if (element) colRefs.current.set("parents", element); else colRefs.current.delete("parents"); }}>
             <button type="button" className="ped-col-label" onClick={() => centerColumn("parents")}>Parents</button>
-            {father ? card(father, "p-father", "md") : ghost("Add father", "p-father")}
-            {mother ? card(mother, "p-mother", "md") : ghost("Add mother", "p-mother")}
+            {father ? card(father, "p-father") : ghost("Add father", "p-father")}
+            {mother ? card(mother, "p-mother") : ghost("Add mother", "p-mother")}
           </div>
           <div className="ped-col ped-col-grand" ref={(element) => { if (element) colRefs.current.set("grand", element); else colRefs.current.delete("grand"); }}>
             <button type="button" className="ped-col-label" onClick={() => centerColumn("grand")}>Grandparents</button>
             {grandSlots.length === 0 && <p className="ped-none">—</p>}
             {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
-              {slot.person ? card(slot.person, slot.key, "sm") : ghost(slot.label, slot.key, slot.parentKey === "p-father" ? father : mother)}
+              {slot.person ? card(slot.person, slot.key) : ghost(slot.label, slot.key, slot.parentKey === "p-father" ? father : mother)}
             </div>)}
           </div>
           {greatSlots.length > 0 && <div className="ped-col ped-col-great" ref={(element) => { if (element) colRefs.current.set("great", element); else colRefs.current.delete("great"); }}>
             <button type="button" className="ped-col-label" onClick={() => centerColumn("great")}>Great-grandparents</button>
-            {greatSlots.map((slot) => card(slot.person, slot.key, "sm"))}
+            {greatSlots.map((slot) => card(slot.person, slot.key))}
           </div>}
         </div>
       </div>
