@@ -1,8 +1,31 @@
 import OpenAI from "openai";
 import { readTree } from "../../../db/store";
+import { familyFactoids, onThisDay } from "../../../lib/family-facts";
+import { describeRelationship, relationshipSentence } from "../../../lib/relationship-path";
 import { requireVisitor } from "../../authz";
 
 export const runtime = "edge";
+
+/** Relationships are graph facts, not prose: computing every pair the question
+ * might mean and handing the answers over keeps the model from inventing a
+ * cousinhood. Anniversaries and factoids ride along so it can volunteer one. */
+function context(tree: Awaited<ReturnType<typeof readTree>>, message: string): string {
+  const asked = message.toLocaleLowerCase();
+  const named = tree.people.filter((person) => person.displayName.length >= 4 && asked.includes(person.displayName.toLocaleLowerCase().split(" ")[0]));
+  const lines: string[] = [];
+  for (let i = 0; i < named.length && i < 6; i += 1) {
+    for (let j = i + 1; j < named.length && j < 6; j += 1) {
+      const result = describeRelationship(tree, named[i].id, named[j].id);
+      if (result) lines.push(relationshipSentence(result));
+    }
+  }
+  const today = onThisDay(tree).map((fact) => fact.text);
+  return [
+    lines.length ? `Computed relationships (authoritative):\n${lines.join("\n")}` : "",
+    today.length ? `Anniversaries today:\n${today.join("\n")}` : "",
+    `Facts about the archive:\n${familyFactoids(tree).map((fact) => fact.text).join("\n")}`,
+  ].filter(Boolean).join("\n\n") + "\n\n";
+}
 
 export async function POST(request: Request) {
   const access = await requireVisitor();
@@ -16,8 +39,8 @@ export async function POST(request: Request) {
   try {
     const response = await new OpenAI({ apiKey }).responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5.4",
-      instructions: "You answer questions about the public Darabiha family archive. Use only the supplied tree data. If a fact is absent, say it is not recorded. Never invent relationships, dates, places, or biographies. Do not propose or perform changes. Write for a narrow chat column: short paragraphs, each list item on its own line beginning with \"- \", and never print internal IDs.",
-      input: `Question: ${message}\n\nTree data:\n${JSON.stringify(tree)}`,
+      instructions: "You answer questions about the public Darabiha family archive. Use only the supplied tree data. If a fact is absent, say it is not recorded. Never invent relationships, dates, places, or biographies. Do not propose or perform changes. When asked how two people are related, use the precomputed relationships supplied below rather than working it out yourself. Write for a narrow chat column: short paragraphs, each list item on its own line beginning with \"- \", and never print internal IDs.",
+      input: `Question: ${message}\n\n${context(tree, message)}\nTree data:\n${JSON.stringify(tree)}`,
       store: false,
     });
     return Response.json({ reply: response.output_text.trim() || "That detail is not recorded in the archive." });

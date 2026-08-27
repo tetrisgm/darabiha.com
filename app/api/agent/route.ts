@@ -5,7 +5,10 @@ import { requireEditor } from "../../authz";
 import { listAttachments, readTree, saveAttachment } from "../../../db/store";
 import { extractArchiveEntries } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
-import type { AgentConflict, ChangeProposal, Person } from "../../../lib/types";
+import { familyFactoids, onThisDay } from "../../../lib/family-facts";
+import { describeRelationship, relationshipSentence } from "../../../lib/relationship-path";
+import { interviewLeads } from "../../../lib/interview";
+import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../../lib/types";
 
 export const runtime = "edge";
 
@@ -146,6 +149,30 @@ const tools = [
 
 type ToolCall = { type: "function_call"; name: string; arguments: string };
 
+/** Relationships are graph facts, so they are computed and handed over rather
+ * than left to the model; the interview leads are the gaps near whoever is
+ * being discussed, which is the only place a living relative can actually
+ * help. */
+function archivistContext(tree: FamilyTree, conversation: string): string {
+  const asked = conversation.toLocaleLowerCase();
+  const named = tree.people.filter((person) => person.displayName.length >= 4 && asked.includes(person.displayName.toLocaleLowerCase().split(" ")[0]));
+  const pairs: string[] = [];
+  for (let i = 0; i < named.length && i < 6; i += 1) {
+    for (let j = i + 1; j < named.length && j < 6; j += 1) {
+      const result = describeRelationship(tree, named[i].id, named[j].id);
+      if (result) pairs.push(relationshipSentence(result));
+    }
+  }
+  const leads = interviewLeads(tree, named.map((person) => person.id));
+  const today = onThisDay(tree).map((fact) => fact.text);
+  return [
+    pairs.length ? `Computed relationships (authoritative):\n${pairs.join("\n")}` : "",
+    leads.length ? `Worth asking about (gaps near the people in this conversation):\n${leads.map((lead) => `- ${lead.personName}${lead.nearTo ? ` (near ${lead.nearTo})` : ""}: missing ${lead.missing.join(", ")}`).join("\n")}` : "",
+    today.length ? `Anniversaries today:\n${today.join("\n")}` : "",
+    `Facts about the archive:\n${familyFactoids(tree).map((fact) => fact.text).join("\n")}`,
+  ].filter(Boolean).join("\n\n") + "\n\n";
+}
+
 function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
   return {
     displayName: String(args.display_name ?? ""),
@@ -231,7 +258,7 @@ export async function POST(request: Request) {
   const stored = await Promise.all(files.map((file) => saveAttachment(file, auth.user.email)));
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
-    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\nCurrent tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,
+    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\n${archivistContext(tree, `${message} ${history}`)}Current tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,
   }];
   for (const file of files) {
     if (file.name.toLowerCase().endsWith(".zip")) {
@@ -278,7 +305,11 @@ export async function POST(request: Request) {
 
 Past data must never block new information. Reconcile incoming people against the current tree using normalized names, dates, places, biography, parents, spouses, children, and sibling context. When one existing record clearly matches, update it instead of creating a duplicate. When the editor explicitly identifies an accidental duplicate, consolidate useful facts into the canonical person and delete the duplicate. Resolve harmless formatting, capitalization, empty-field, and more-complete-value differences yourself. Ask a clarification question only when evidence supports multiple plausible people or contains a material contradiction you cannot resolve. Do not ask for confirmation for routine high-confidence changes.
 
-For a rich message or multi-file upload, call tools once for every distinct person, relationship, and story; do not stop after the first item. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person, relationship, and story IDs must be copied exactly from the supplied tree. For people created in this same response, set the relationship ID to null and provide their exact display name so the server can resolve it after creation. A parent relationship is directional: from_person_id/from_person_name is the parent and to_person_id/to_person_name is the child. Preserve every existing field not changed by the editor. Use delete tools only for an explicit request or an unambiguous duplicate. Every summary must include enough disambiguating context for same-name relatives. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep prose warm, direct, and concise. Write replies for a narrow chat column: short paragraphs, each list item on its own line beginning with "- ", bold only for a name or a label, and never print internal IDs or UUIDs — refer to people by name.`,
+For a rich message or multi-file upload, call tools once for every distinct person, relationship, and story; do not stop after the first item. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person, relationship, and story IDs must be copied exactly from the supplied tree. For people created in this same response, set the relationship ID to null and provide their exact display name so the server can resolve it after creation. A parent relationship is directional: from_person_id/from_person_name is the parent and to_person_id/to_person_name is the child. Preserve every existing field not changed by the editor. Use delete tools only for an explicit request or an unambiguous duplicate. Every summary must include enough disambiguating context for same-name relatives. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep prose warm, direct, and concise. Write replies for a narrow chat column: short paragraphs, each list item on its own line beginning with "- ", bold only for a name or a label, and never print internal IDs or UUIDs — refer to people by name.
+
+When the editor asks how two people are related, use the precomputed relationships supplied with the tree rather than working them out yourself.
+
+INTERVIEWING. This archive is filled in by the family, so behave like an interviewer as well as a scribe. After you have applied what the editor told you, look at the gaps listed under "Worth asking about" and ask ONE natural follow-up about a person they plainly know — where a relative was born, where they live now, when someone married, who a spouse's parents were, what someone did for a living. Ask about people close to the ones they are already discussing, never about strangers deep in the tree. One question at a time, warm and specific ("Do you know where Kazem's children were born?"), and drop it if they ignore it twice. If the editor says they do not know, accept it and move on.`,
       input: [{ role: "user", content }] as never,
       tools: tools as never,
       parallel_tool_calls: true,

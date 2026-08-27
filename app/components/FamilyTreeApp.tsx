@@ -148,6 +148,21 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     if (mode !== "map") setPlaceFocus(null);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
   };
+  // what the archive volunteers before it is asked: an anniversary today, or
+  // a fact about the family, with openers worth tapping
+  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; suggestions: string[] } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/greeting")
+      .then((response) => response.ok ? response.json() as Promise<{ fact: string | null; personId: string | null; suggestions: string[] }> : null)
+      .then((data) => { if (!cancelled && data) setGreeting(data); })
+      .catch(() => { /* the chat works without it */ });
+    return () => { cancelled = true; };
+  }, []);
+  const openGreetingPerson = () => {
+    const person = greeting?.personId ? tree.people.find((candidate) => candidate.id === greeting.personId) : null;
+    if (person) openPerson(person);
+  };
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -252,19 +267,23 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
               </div>
             </div>
             {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} focusPerson={selectedPerson} onClearFocus={closePerson} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); setViewMode("tree"); }} />
+              <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} focusPerson={selectedPerson} onClearFocus={closePerson} onOpenPerson={(person) => openPerson(person)} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); setViewMode("tree"); }} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
                   {!selectedPerson && <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
                     Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Ask about the family, add what you know, or attach documents and photos — I’ll keep the tree up to date.
                   </div>}
+                  {!selectedPerson && greeting?.fact && messages.length === 0 && <button type="button" className="chat-fact" onClick={openGreetingPerson} disabled={!greeting.personId}>
+                    <span className="chat-fact-label">From the archive</span>
+                    <span>{greeting.fact}</span>
+                  </button>}
                   {messages.length === 0 && <div className="chat-suggestions">
                     {(selectedPerson ? [
                       `What do we know about ${selectedPerson.displayName.split(" ")[0]}?`,
                       `${selectedPerson.displayName.split(" ")[0]} was born in …`,
                       `${selectedPerson.displayName.split(" ")[0]} had a sibling named …`,
-                    ] : [
+                    ] : greeting?.suggestions?.length ? greeting.suggestions : [
                       "Who has the most descendants?",
                       "What do we know about Ramazan Darabi?",
                       "My cousin was born in Tehran in 1985 — record him",
@@ -608,8 +627,16 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeopleMentioned }: { signedIn: boolean; tree: FamilyTree; focusPerson: Person | null; onClearFocus: () => void; onPeopleMentioned: (people: Person[]) => void }) {
+function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeopleMentioned, onOpenPerson }: { signedIn: boolean; tree: FamilyTree; focusPerson: Person | null; onClearFocus: () => void; onPeopleMentioned: (people: Person[]) => void; onOpenPerson: (person: Person) => void }) {
   const [question, setQuestion] = useState("");
+  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; suggestions: string[] } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/greeting").then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (!cancelled && data) setGreeting(data as { fact: string | null; personId: string | null; suggestions: string[] }); })
+      .catch(() => { /* the chat works without it */ });
+    return () => { cancelled = true; };
+  }, []);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [asked, setAsked] = useState<string[]>([]);
@@ -625,7 +652,7 @@ function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeople
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
       <div className={`flex flex-1 flex-col items-center overflow-y-auto pb-5 text-center ${asked.length || focusPerson ? "justify-start" : "justify-center"}`}>
-        {!asked.length && !focusPerson ? <><h3 className="mt-0 font-serif text-2xl">The Darabiha family tree</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Explore our family history, ask about the people and relationships in the tree, and discover the stories recorded here.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <div className="public-chat-answer"><Markdown text={reply} /></div>}</div>}
+        {!asked.length && !focusPerson ? <><h3 className="mt-0 font-serif text-2xl">The Darabiha family tree</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Explore our family history, ask about the people and relationships in the tree, and discover the stories recorded here.</p>{greeting?.fact && <button type="button" className="chat-fact" onClick={() => { const person = greeting.personId ? tree.people.find((candidate) => candidate.id === greeting.personId) : null; if (person) onOpenPerson(person); }} disabled={!greeting.personId}><span className="chat-fact-label">From the archive</span><span>{greeting.fact}</span></button>}{greeting?.suggestions?.length ? <div className="chat-suggestions">{greeting.suggestions.map((prompt) => <button type="button" className="chat-suggestion" key={prompt} onClick={() => setQuestion(prompt)}>{prompt}</button>)}</div> : null}{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <div className="public-chat-answer"><Markdown text={reply} /></div>}</div>}
       </div>
       <div>
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
