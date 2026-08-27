@@ -488,8 +488,6 @@ body { font-family: var(--font-sans), "Avenir Next", sans-serif; -webkit-font-sm
 h1, h2, h3 { text-wrap: balance; }
 .eyebrow { letter-spacing:.16em; font-size:.62rem; }
 .ped-copy > span, .fill-cell, .outline-years, .tree-card-copy span, .person-facts, .fact-line { font-variant-numeric: tabular-nums; }
-.site-action-bar .site-wordmark { font-family: var(--font-serif), Georgia, serif; font-size:1.35rem; font-weight:600; letter-spacing:.01em; color:var(--ink); }
-.site-action-bar .site-wordmark:hover { color:var(--accent); }
 
 /* floating island header */
 .site-action-bar { left:446px; right:16px; top:12px; height:3.4rem; border:1px solid rgba(255,255,255,.08); border-bottom:1px solid rgba(255,255,255,.08);
@@ -713,9 +711,7 @@ main.chat-collapsed .site-action-bar { left:16px; }
 .focus-toolbar { display:flex; align-items:center; justify-content:flex-start; gap:1rem; }
 .focus-toolbar .focus-hint { margin:0; }
 
-/* narrow-window header: tabs win, the wordmark yields */
 @media (max-width: 1100px) {
-  .site-action-bar .site-wordmark { display:none; }
   .tree-search input { width:9rem; }
 }
 
@@ -1223,3 +1219,18 @@ html[lang="fa"] { font-variant-numeric: normal; }
   border:1px solid transparent; background:transparent; color:var(--muted);
   font-size:.72rem; letter-spacing:.01em; transition:color .15s, background .15s, border-color .15s; }
 .fact-correction:hover { color:var(--ink); background:rgba(255,255,255,.07); border-color:var(--line); }
+
+/* One fact per row, label beside value. Born and Died side by side gave each
+   a half-width cell for a sentence that needs a whole one: "1983-07-05 in
+   Paris, France" broke across two lines between the city and the country. */
+.person-modal-v2 .person-facts { grid-template-columns:1fr; }
+.person-modal-v2 .person-facts > div { display:grid; grid-template-columns:7rem 1fr;
+  align-items:baseline; gap:.2rem .8rem; padding:.62rem 1rem; }
+.person-modal-v2 .person-facts > div + div { border-left:0; border-top:1px solid var(--line); }
+.person-modal-v2 .person-facts p { margin-top:0; }
+.person-modal-v2 .person-facts .fact-correction { grid-column:2; justify-self:start; }
+/* a narrow panel has no room for two columns; the label goes back on top */
+@media (max-width: 560px) {
+  .person-modal-v2 .person-facts > div { grid-template-columns:1fr; gap:.15rem; }
+  .person-modal-v2 .person-facts .fact-correction { grid-column:1; }
+}
