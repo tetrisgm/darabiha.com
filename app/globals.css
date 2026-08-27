@@ -1261,3 +1261,9 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .ped-view[data-preview="true"] .ped-col-focal .ped-card.is-selected,
 .ped-view[data-preview="true"] .ped-col-focal > .ped-couple > .ped-card {
   outline:1px dashed color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:3px; }
+
+/* The column label sat in the flow, so centring the column put the cards
+   half a label below the focal card. The body holds the cards alone; the
+   label hangs above it. */
+.ped-col-body { position:relative; display:flex; flex-direction:column; gap:inherit; }
+.ped-col-body > .ped-col-label { position:absolute; bottom:calc(100% + .4rem); left:0; margin:0; }

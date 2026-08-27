@@ -47,8 +47,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   // moves out from under the pointer, which the new layout does, would flicker.
   const [previewId, setPreviewId] = useState<string | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Where the pointer was when the current preview began. Swapping the board
+  // slides a different card under a pointer that never moved, and mouseenter
+  // fires for it - so without this the two boards trade places forever.
+  const pointerAt = useRef({ x: 0, y: 0 });
+  const previewAt = useRef<{ x: number; y: number } | null>(null);
   const activeId = previewId && maps.byId.has(previewId) ? previewId : focusId;
-  useEffect(() => { setPreviewId(null); }, [focusId]);
+  useEffect(() => { previewAt.current = null; setPreviewId(null); }, [focusId]);
   const model = useMemo(() => {
     const focal = maps.byId.get(activeId) ?? tree.people[0];
     if (!focal) return null;
@@ -122,6 +127,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const pedCursorRef = useRef<HTMLSpanElement>(null);
   const [cursorMode, setCursorMode] = useState<"grab" | "grabbing" | "pointer">("grab");
   const positionPedCursor = (event: React.PointerEvent) => {
+    if (event.pointerType !== "touch") pointerAt.current = { x: event.clientX, y: event.clientY };
     const cursor = pedCursorRef.current;
     if (!cursor || event.pointerType === "touch") return;
     cursor.style.left = `${event.clientX}px`;
@@ -260,20 +266,26 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     if (element) slotRefs.current.set(key, element);
     else slotRefs.current.delete(key);
   };
-  const beginHover = (person: Person) => {
+  const beginHover = (person: Person, viaPointer = true) => {
     onPreview(person);
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    if (person.id === activeId) return;
-    hoverTimer.current = setTimeout(() => setPreviewId(person.id), 340);
+    const anchor = previewAt.current;
+    const chosen = !viaPointer || !anchor || Math.hypot(pointerAt.current.x - anchor.x, pointerAt.current.y - anchor.y) > 6;
+    if (person.id === activeId || !chosen) return;
+    hoverTimer.current = setTimeout(() => {
+      previewAt.current = { ...pointerAt.current };
+      setPreviewId(person.id);
+    }, 340);
   };
   const cancelHover = () => {
     onPreview(null);
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
   };
+  const endPreview = () => { previewAt.current = null; setPreviewId(null); };
   const commit = (person: Person, keepLayout: boolean) => {
     cancelHover();
-    setPreviewId(null);
+    endPreview();
     if (keepLayout) onSelectOnly(person); else onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
@@ -286,7 +298,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     const behind = hiddenRelativeCount(person.id, maps, onBoard);
     return <div ref={setRef(key)} className={`ped-card ped-card-md ${person.id === (selectedId ?? focal.id) ? "is-selected" : ""}`} key={key}>
       <button type="button" onClick={() => commit(person, keepLayout)}
-        onMouseEnter={() => beginHover(person)} onMouseLeave={cancelHover} onFocus={() => beginHover(person)} onBlur={cancelHover}>
+        onMouseEnter={() => beginHover(person)} onMouseLeave={cancelHover} onFocus={() => beginHover(person, false)} onBlur={cancelHover}>
         {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
         <span className="ped-copy">
           <strong>{person.displayName}</strong>
@@ -316,25 +328,29 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     </div>
     <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
-      onPointerEnter={positionPedCursor} onPointerLeave={() => { hidePedCursor(); cancelHover(); setPreviewId(null); }}>
+      onPointerEnter={positionPedCursor} onPointerLeave={() => { hidePedCursor(); cancelHover(); endPreview(); }}>
       <PedCursor mode={cursorMode} cursorRef={pedCursorRef} />
       <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
         <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
         <div className="ped-columns" key={focal.id}>
           {grandkidGroups.length > 0 && <div className="ped-col ped-col-grandkids" ref={(element) => { if (element) colRefs.current.set("grandkids", element); else colRefs.current.delete("grandkids"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("grandkids")}>{t("family.grandchildren")}</button>
-            {grandkidGroups.map((group) => <div className="ped-group" key={group.child.id}>
-              {grandkidGroups.length > 1 && <p className="ped-group-label">via {group.child.displayName}</p>}
-              {group.kids.map((kid) => card(kid, `gc-${kid.id}`))}
-            </div>)}
+            <div className="ped-col-body">
+              <button type="button" className="ped-col-label" onClick={() => centerColumn("grandkids")}>{t("family.grandchildren")}</button>
+              {grandkidGroups.map((group) => <div className="ped-group" key={group.child.id}>
+                {grandkidGroups.length > 1 && <p className="ped-group-label">via {group.child.displayName}</p>}
+                {group.kids.map((kid) => card(kid, `gc-${kid.id}`))}
+              </div>)}
+            </div>
           </div>}
           <div className="ped-col ped-col-children" ref={(element) => { if (element) colRefs.current.set("children", element); else colRefs.current.delete("children"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("children")}>{t("family.children")}</button>
-            {children.length === 0 && <p className="ped-none">{t("family.none")}</p>}
-            {childGroups.map((group, index) => <div className="ped-group" key={index}>
-              {(childGroups.length > 1 || spouses.length > 1) && <p className="ped-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
-              {group.kids.map((child) => card(child, `child-${child.id}`))}
-            </div>)}
+            <div className="ped-col-body">
+              <button type="button" className="ped-col-label" onClick={() => centerColumn("children")}>{t("family.children")}</button>
+              {children.length === 0 && <p className="ped-none">{t("family.none")}</p>}
+              {childGroups.map((group, index) => <div className="ped-group" key={index}>
+                {(childGroups.length > 1 || spouses.length > 1) && <p className="ped-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
+                {group.kids.map((child) => card(child, `child-${child.id}`))}
+              </div>)}
+            </div>
           </div>
           <div className="ped-col ped-col-focal" ref={(element) => { if (element) colRefs.current.set("focal", element); else colRefs.current.delete("focal"); }}>
             {/* The spouse and the siblings hang off the focal card rather than
@@ -353,20 +369,26 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
             </div>
           </div>
           <div className="ped-col ped-col-parents" ref={(element) => { if (element) colRefs.current.set("parents", element); else colRefs.current.delete("parents"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("parents")}>{t("family.parents")}</button>
-            {father ? card(father, "p-father") : ghost(t("family.addFather"), "p-father")}
-            {mother ? card(mother, "p-mother") : ghost(t("family.addMother"), "p-mother")}
+            <div className="ped-col-body">
+              <button type="button" className="ped-col-label" onClick={() => centerColumn("parents")}>{t("family.parents")}</button>
+              {father ? card(father, "p-father") : ghost(t("family.addFather"), "p-father")}
+              {mother ? card(mother, "p-mother") : ghost(t("family.addMother"), "p-mother")}
+            </div>
           </div>
           <div className="ped-col ped-col-grand" ref={(element) => { if (element) colRefs.current.set("grand", element); else colRefs.current.delete("grand"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("grand")}>{t("family.grandparents")}</button>
-            {grandSlots.length === 0 && <p className="ped-none">—</p>}
-            {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
-              {slot.person ? card(slot.person, slot.key) : ghost(t(slot.label), slot.key, slot.parentKey === "p-father" ? father : mother)}
-            </div>)}
+            <div className="ped-col-body">
+              <button type="button" className="ped-col-label" onClick={() => centerColumn("grand")}>{t("family.grandparents")}</button>
+              {grandSlots.length === 0 && <p className="ped-none">—</p>}
+              {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
+                {slot.person ? card(slot.person, slot.key) : ghost(t(slot.label), slot.key, slot.parentKey === "p-father" ? father : mother)}
+              </div>)}
+            </div>
           </div>
           {greatSlots.length > 0 && <div className="ped-col ped-col-great" ref={(element) => { if (element) colRefs.current.set("great", element); else colRefs.current.delete("great"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("great")}>{t("family.greatGrandparents")}</button>
-            {greatSlots.map((slot) => card(slot.person, slot.key))}
+            <div className="ped-col-body">
+              <button type="button" className="ped-col-label" onClick={() => centerColumn("great")}>{t("family.greatGrandparents")}</button>
+              {greatSlots.map((slot) => card(slot.person, slot.key))}
+            </div>
           </div>}
         </div>
       </div>
