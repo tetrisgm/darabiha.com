@@ -218,9 +218,11 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
   }, [focusPersonId, fullLayout, collapsed]);
   const lastCentered = useRef<string | null>(null);
   const enteredView = useRef(false);
-  /** Where a card sat when it was clicked, so opening its branch does not
-   *  slide it out from under the pointer. */
-  const holdInPlace = useRef<{ id: string; at: { x: number; y: number } } | null>(null);
+  /** The screen rectangle a card occupied when it was clicked, so opening its
+   *  branch does not slide it out from under the pointer. Measured from the
+   *  DOM rather than the layout model: `translate(x,y) scale(s)` puts the
+   *  translation in screen pixels, so a screen delta is what the view wants. */
+  const holdInPlace = useRef<{ id: string; at: DOMRect } | null>(null);
   useEffect(() => {
     const person = focusPersonId ? tree.people.find((candidate) => candidate.id === focusPersonId) : undefined;
     if (!person || !positions.has(person.id) || lastCentered.current === person.id) return;
@@ -248,13 +250,11 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     const hold = holdInPlace.current;
     if (!hold) return;
     holdInPlace.current = null;
-    const now = positions.get(hold.id);
-    if (!now) return;
-    setView((current) => {
-      const dx = (hold.at.x - now.x) * current.scale, dy = (hold.at.y - now.y) * current.scale;
-      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return current;
-      return { ...current, x: current.x + dx, y: current.y + dy };
-    });
+    const card = cursorRef.current?.parentElement?.querySelector(`[data-person-id="${hold.id}"]`);
+    if (!card) return;
+    const now = card.getBoundingClientRect();
+    const dx = hold.at.left - now.left, dy = hold.at.top - now.top;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
   }, [positions]);
   // open on the patriarch: world x 0 is the layout anchor
   const centered = useRef(false);
@@ -355,7 +355,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
           {hook.farLines.map((farLine, index) => <path key={index} d={farLine.path} fill="none" />)}
         </g>)}
       </svg>
-      {visibleTree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} onClick={() => { if (collapsed.has(person.id)) holdInPlace.current = { id: person.id, at: point(person) }; onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
+      {visibleTree.people.map((person) => { const p = point(person); const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", "); return <button className={`tree-card ${highlightedIds.includes(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} data-person-id={person.id} onClick={(event) => { if (collapsed.has(person.id)) holdInPlace.current = { id: person.id, at: event.currentTarget.getBoundingClientRect() }; onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>; })}
       {[...primaryChildren.keys()].filter((id) => visibleSet.has(id) && positions.has(id)).map((id) => {
         const p = positions.get(id)!;
         const isFolded = collapsed.has(id);
