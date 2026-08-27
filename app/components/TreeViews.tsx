@@ -37,6 +37,7 @@ function PedCursor({ mode, cursorRef }: { mode: "grab" | "grabbing" | "pointer";
 }
 
 export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnly, onPreview, onBack, onForward, canBack, canForward, onOpen }: { tree: FamilyTree; focusId: string; selectedId?: string | null; onPick: (person: Person) => void; onSelectOnly: (person: Person) => void; onPreview: (person: Person | null) => void; onBack?: () => void; onForward?: () => void; canBack?: boolean; canForward?: boolean; onOpen: (person: Person) => void }) {
+  const { t } = useLanguage();
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
   const containerRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef(new Map<string, HTMLDivElement>());
@@ -69,8 +70,8 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       const grandparents = (maps.parentsOf.get(parent.id) ?? []).map(get).filter(Boolean) as Person[];
       const grandfather = grandparents.find((gp) => gp.gender === "male") ?? grandparents[0];
       const grandmother = grandparents.find((gp) => gp !== grandfather);
-      grandSlots.push({ parentKey, person: grandfather, key: `${parentKey}-gf`, label: "Add grandfather" });
-      grandSlots.push({ parentKey, person: grandmother, key: `${parentKey}-gm`, label: "Add grandmother" });
+      grandSlots.push({ parentKey, person: grandfather, key: `${parentKey}-gf`, label: "family.addGrandfather" });
+      grandSlots.push({ parentKey, person: grandmother, key: `${parentKey}-gm`, label: "family.addGrandmother" });
       if (grandfather) links.push([parentKey, `${parentKey}-gf`]);
       if (grandmother) links.push([parentKey, `${parentKey}-gm`]);
     }
@@ -272,10 +273,10 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   return <section className="focus-view ped-view" aria-label="Family around one person">
     <div className="focus-toolbar">
       <div className="focus-nav">
-        <button type="button" className="focus-back" onClick={onBack} disabled={!canBack} aria-label="Back">←</button>
-        <button type="button" className="focus-back" onClick={onForward} disabled={!canForward} aria-label="Forward">→</button>
+        <button type="button" className="focus-back" onClick={onBack} disabled={!canBack} aria-label={t("family.back")}>←</button>
+        <button type="button" className="focus-back" onClick={onForward} disabled={!canForward} aria-label={t("family.forward")}>→</button>
       </div>
-      <p className="focus-hint" data-visible={hintVisible ? "true" : "false"} aria-hidden={!hintVisible}>Click a person to center the tree on them and open their record.</p>
+      <p className="focus-hint" data-visible={hintVisible ? "true" : "false"} aria-hidden={!hintVisible}>{t("family.hint")}</p>
     </div>
     <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
@@ -290,15 +291,15 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
         <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
         <div className="ped-columns" key={focal.id}>
           {grandkidGroups.length > 0 && <div className="ped-col ped-col-grandkids" ref={(element) => { if (element) colRefs.current.set("grandkids", element); else colRefs.current.delete("grandkids"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("grandkids")}>Grandchildren</button>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("grandkids")}>{t("family.grandchildren")}</button>
             {grandkidGroups.map((group) => <div className="ped-group" key={group.child.id}>
               {grandkidGroups.length > 1 && <p className="ped-group-label">via {group.child.displayName}</p>}
               {group.kids.map((kid) => card(kid, `gc-${kid.id}`))}
             </div>)}
           </div>}
           <div className="ped-col ped-col-children" ref={(element) => { if (element) colRefs.current.set("children", element); else colRefs.current.delete("children"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("children")}>Children</button>
-            {children.length === 0 && <p className="ped-none">none recorded</p>}
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("children")}>{t("family.children")}</button>
+            {children.length === 0 && <p className="ped-none">{t("family.none")}</p>}
             {childGroups.map((group, index) => <div className="ped-group" key={index}>
               {(childGroups.length > 1 || spouses.length > 1) && <p className="ped-group-label">with {group.spouse?.displayName ?? "unrecorded partner"}</p>}
               {group.kids.map((child) => card(child, `child-${child.id}`))}
@@ -310,24 +311,24 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
               {spouses.map((spouse) => <div className="ped-spouse" key={spouse.id}><span className="ped-marriage">⚭</span>{card(spouse, `spouse-${spouse.id}`, statusOf(spouse) ?? undefined)}</div>)}
             </div>
             {siblings.length > 0 && <details className="ped-siblings" open>
-              <summary>Siblings ({siblings.length})</summary>
+              <summary>{t("family.siblings")} ({siblings.length})</summary>
               {siblings.map((sibling) => card(sibling, `sib-${sibling.id}`))}
             </details>}
           </div>
           <div className="ped-col ped-col-parents" ref={(element) => { if (element) colRefs.current.set("parents", element); else colRefs.current.delete("parents"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("parents")}>Parents</button>
-            {father ? card(father, "p-father") : ghost("Add father", "p-father")}
-            {mother ? card(mother, "p-mother") : ghost("Add mother", "p-mother")}
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("parents")}>{t("family.parents")}</button>
+            {father ? card(father, "p-father") : ghost(t("family.addFather"), "p-father")}
+            {mother ? card(mother, "p-mother") : ghost(t("family.addMother"), "p-mother")}
           </div>
           <div className="ped-col ped-col-grand" ref={(element) => { if (element) colRefs.current.set("grand", element); else colRefs.current.delete("grand"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("grand")}>Grandparents</button>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("grand")}>{t("family.grandparents")}</button>
             {grandSlots.length === 0 && <p className="ped-none">—</p>}
             {grandSlots.map((slot) => <div className="ped-grand-slot" key={slot.key}>
-              {slot.person ? card(slot.person, slot.key) : ghost(slot.label, slot.key, slot.parentKey === "p-father" ? father : mother)}
+              {slot.person ? card(slot.person, slot.key) : ghost(t(slot.label), slot.key, slot.parentKey === "p-father" ? father : mother)}
             </div>)}
           </div>
           {greatSlots.length > 0 && <div className="ped-col ped-col-great" ref={(element) => { if (element) colRefs.current.set("great", element); else colRefs.current.delete("great"); }}>
-            <button type="button" className="ped-col-label" onClick={() => centerColumn("great")}>Great-grandparents</button>
+            <button type="button" className="ped-col-label" onClick={() => centerColumn("great")}>{t("family.greatGrandparents")}</button>
             {greatSlots.map((slot) => card(slot.person, slot.key))}
           </div>}
         </div>
@@ -398,6 +399,7 @@ export function OutlineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (p
 
 /** Type-ahead person search shared by every view. */
 export function TreeSearch({ tree, onPick }: { tree: FamilyTree; onPick: (person: Person) => void }) {
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -421,10 +423,10 @@ export function TreeSearch({ tree, onPick }: { tree: FamilyTree; onPick: (person
   return <div className="tree-search" ref={boxRef}>
     <input
       type="search"
-      placeholder="Find a person…"
+      placeholder={t("nav.search")}
       value={query}
       autoComplete="off"
-      aria-label="Find a person"
+      aria-label={t("nav.search")}
       onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
       onFocus={() => setOpen(true)}
       onBlur={() => setTimeout(() => setOpen(false), 150)}
