@@ -1,4 +1,7 @@
+import { cookies } from "next/headers";
 import FamilyTreeApp from "./components/FamilyTreeApp";
+import { LanguageProvider } from "./components/LanguageContext";
+import { LANG_COOKIE, parseLang } from "../lib/i18n";
 import { appleSignInPath, appleSignOutPath, getAppleUser } from "./apple-auth";
 import { getViewerRole, TEMPORARY_OPEN_EDITOR } from "./authz";
 import { getSiteVisibility } from "../db/store";
@@ -30,12 +33,15 @@ export default async function Home() {
       </main>
     );
   }
+  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   return (
-    <FamilyTreeApp
-      initialTree={null}
-      viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "editor", role, displayName: user?.displayName ?? null }}
-      signOutPath={appleSignOutPath("/")}
-      signInEnabled={!TEMPORARY_OPEN_EDITOR}
-    />
+    <LanguageProvider initial={lang}>
+      <FamilyTreeApp
+        initialTree={null}
+        viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "editor", role, displayName: user?.displayName ?? null }}
+        signOutPath={appleSignOutPath("/")}
+        signInEnabled={!TEMPORARY_OPEN_EDITOR}
+      />
+    </LanguageProvider>
   );
 }

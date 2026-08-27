@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { buildTimeline, mapFamilyPlaces, type MappedPlace } from "../../lib/archive-views";
 import { buildFamilyStats } from "../../lib/family-stats";
 import { onThisDay } from "../../lib/family-facts";
+import { useLanguage } from "./LanguageContext";
 import { WORLD_COUNTRY_PATHS } from "../../lib/world-map-paths";
 import type { FamilyTree, Person } from "../../lib/types";
 
@@ -14,9 +15,10 @@ function prettyDate(value: string) {
 }
 
 export function TimelineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+  const { t } = useLanguage();
   const events = buildTimeline(tree);
   return <section className="archive-view archive-timeline" aria-label="Family timeline">
-    <div className="archive-view-heading"><p className="eyebrow">Timeline</p><h2>Lives and stories through time</h2><p>Births, deaths, and dated family stories appear here automatically.</p></div>
+    <div className="archive-view-heading"><p className="eyebrow">Timeline</p><h2>{t("timeline.title")}</h2><p>Births, deaths, and dated family stories appear here automatically.</p></div>
     {events.length ? <ol className="timeline-list">{events.map((event) => {
       const person = event.personIds.length === 1 ? tree.people.find((candidate) => candidate.id === event.personIds[0]) : undefined;
       return <li key={event.id}><time>{event.year}</time><span className={`timeline-dot is-${event.kind}`} /><button type="button" disabled={!person} onClick={() => person && onSelect(person)}><span>{event.title}</span><strong>{prettyDate(event.date)}{event.detail ? ` · ${event.detail}` : ""}</strong></button></li>;
@@ -25,6 +27,7 @@ export function TimelineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
 }
 
 export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSelectPlace: (place: MappedPlace) => void }) {
+  const { t } = useLanguage();
   const { mapped, unmapped } = mapFamilyPlaces(tree);
   // The map pans and zooms with the same grammar as the Tree and Family
   // canvases: drag or wheel to pan, ctrl/cmd+wheel or the buttons to zoom.
@@ -66,9 +69,9 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
     <div className="world-map" role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}>
       <div className="canvas-controls map-zoom" role="group" aria-label="Map zoom controls">
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(0.9, { x: 0, y: 0 })} aria-label="Zoom out" title="Zoom out">−</button>
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setScale(1); setPan({ x: 0, y: 0 }); }} className="canvas-zoom-level" aria-label="Reset zoom" title="Reset zoom">{Math.round(scale * 100)}%</button>
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(1.1, { x: 0, y: 0 })} aria-label="Zoom in" title="Zoom in">＋</button>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(0.9, { x: 0, y: 0 })} aria-label={t("map.zoomOut")} title={t("map.zoomOut")}>−</button>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setScale(1); setPan({ x: 0, y: 0 }); }} className="canvas-zoom-level" aria-label={t("map.reset")} title={t("map.reset")}>{Math.round(scale * 100)}%</button>
+        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(1.1, { x: 0, y: 0 })} aria-label={t("map.zoomIn")} title={t("map.zoomIn")}>＋</button>
       </div>
       <div className="world-map-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, "--map-scale": String(scale) } as React.CSSProperties}>
       <div className="world-map-board">
@@ -89,6 +92,7 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
  * family has lived, where it has lived, and which names recur. Every number is
  * computed from the records as they stand. */
 export function StatisticsView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+  const { t } = useLanguage();
   const stats = buildFamilyStats(tree);
   const pct = (count: number) => stats.people ? Math.round((count / stats.people) * 100) : 0;
   const peak = Math.max(1, ...stats.births.map((entry) => entry.count));
@@ -101,7 +105,7 @@ export function StatisticsView({ tree, onSelect }: { tree: FamilyTree; onSelect:
     </li>)}</ul>;
   };
   return <section className="archive-view archive-stats" aria-label="Family statistics">
-    <div className="archive-view-heading"><p className="eyebrow">Statistics</p><h2>The shape of the family</h2><p>Everything here is counted from the records as they stand today.</p></div>
+    <div className="archive-view-heading"><p className="eyebrow">Statistics</p><h2>{t("stats.title")}</h2><p>{t("stats.intro")}</p></div>
     <div className="stat-cards">
       <div className="stat-card"><strong>{stats.people}</strong><span>people recorded</span></div>
       <div className="stat-card"><strong>{stats.relationships.parent + stats.relationships.spouse}</strong><span>{stats.relationships.parent} parent links · {stats.relationships.spouse} marriages</span></div>
@@ -146,6 +150,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 /** The family's year: birthdays of the living, remembrances of the dead, and
  * the anniversaries of dated stories - the days worth a message. */
 export function CalendarView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+  const { t } = useLanguage();
   const today = new Date();
   const dayOf = (value: string | null) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) ? String(value).slice(5) : null;
   const yearOf = (value: string | null) => Number(String(value ?? "").slice(0, 4)) || null;
@@ -177,9 +182,9 @@ export function CalendarView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
   const todays = onThisDay(tree, today);
 
   return <section className="archive-view archive-calendar" aria-label="Family calendar">
-    <div className="archive-view-heading"><p className="eyebrow">Calendar</p><h2>The family year</h2><p>Birthdays of the living, the days we remember, and the anniversaries of the stories. Only full dates appear here — a year alone has no day to fall on.</p></div>
+    <div className="archive-view-heading"><p className="eyebrow">Calendar</p><h2>{t("calendar.title")}</h2><p>{t("calendar.intro")}</p></div>
     {todays.length > 0 && <div className="calendar-today">
-      <p className="eyebrow">Today</p>
+      <p className="eyebrow">{t("calendar.today")}</p>
       {todays.map((fact, index) => <p className="calendar-today-line" key={index}>{fact.text}</p>)}
     </div>}
     {entries.length ? <div className="calendar-months">

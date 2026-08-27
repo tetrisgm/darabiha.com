@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FamilyTree, OpenQuestion, Person } from "../../lib/types";
 import { buildGenerations, buildRelationMaps } from "../../lib/tree-layout";
+import { useLanguage } from "./LanguageContext";
 
 function years(person: Person | undefined) {
   if (!person) return "";
@@ -464,6 +465,7 @@ function fillBirthYear(person: Person) {
  * "Not correct" closes it for good. A question about an unnamed person asks
  * for the name instead of a yes. */
 function OpenQuestionsCard({ onTreeChange }: { onTreeChange: (tree: FamilyTree) => void }) {
+  const { t } = useLanguage();
   const [questions, setQuestions] = useState<OpenQuestion[] | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -493,8 +495,8 @@ function OpenQuestionsCard({ onTreeChange }: { onTreeChange: (tree: FamilyTree) 
   if (!questions?.length) return notice ? <p className="fill-notice">{notice}</p> : null;
   return <div className="fill-questions">
     <div className="fill-questions-head">
-      <h3>Questions for the family</h3>
-      <p>The old records imply these but never say them outright. Confirming applies the change; every answer is recorded.</p>
+      <h3>{t("fill.questionsTitle")}</h3>
+      <p>{t("fill.questionsIntro")}</p>
       {notice && <p className="fill-questions-notice" role="status">{notice}</p>}
     </div>
     {questions.map((question) => <div className="fill-question" key={question.id}>
@@ -502,18 +504,19 @@ function OpenQuestionsCard({ onTreeChange }: { onTreeChange: (tree: FamilyTree) 
       {question.evidence && <p className="fill-question-evidence">{question.evidence}</p>}
       {question.actionSummary && <p className="fill-question-action">{question.actionSummary}</p>}
       <div className="fill-question-answer">
-        <input className="fill-input" value={notes[question.id] ?? ""} placeholder={question.needsAnswerText ? "Her name…" : "Add a note (optional)"}
+        <input className="fill-input" value={notes[question.id] ?? ""} placeholder={question.needsAnswerText ? t("fill.namePlaceholder") : t("fill.notePlaceholder")}
           onChange={(event) => setNotes((current) => ({ ...current, [question.id]: event.target.value }))} aria-label={`Answer for: ${question.question}`} />
         <button type="button" className="fill-save" disabled={busyId !== null || (question.needsAnswerText && !notes[question.id]?.trim())}
-          onClick={() => answer(question, "confirm")}>{question.needsAnswerText ? "Record the name" : "Confirm"}</button>
+          onClick={() => answer(question, "confirm")}>{question.needsAnswerText ? t("fill.recordName") : t("fill.confirm")}</button>
         <button type="button" className="fill-skip" disabled={busyId !== null}
-          onClick={() => answer(question, "deny")}>{question.needsAnswerText ? "Not known" : "Not correct"}</button>
+          onClick={() => answer(question, "deny")}>{question.needsAnswerText ? t("fill.notKnown") : t("fill.deny")}</button>
       </div>
     </div>)}
   </div>;
 }
 
 export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; onSaved: (tree: FamilyTree) => void; onOpen: (person: Person) => void }) {
+  const { t } = useLanguage();
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
   // Spouse-aware rows: a married-in relative with no recorded parents stands
   // on their spouse's generation, not on the founders' row.
@@ -615,9 +618,9 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
       {notice && <span className="fill-notice"> · {notice}</span>}
     </div>
     <div className="fill-controls">
-      <input className="fill-search" type="search" placeholder="Find a person to fill in…" value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Find a person to fill in" />
+      <input className="fill-search" type="search" placeholder={t("fill.search")} value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Find a person to fill in" />
       <select className="fill-gen-filter" value={genFilter} onChange={(event) => setGenFilter(event.target.value)} aria-label="Filter by generation">
-        <option value="">All generations</option>
+        <option value="">{t("fill.allGenerations")}</option>
         {generations.map((generation) => <option key={generation} value={String(generation)}>Generation {generation + 1}{generation === 0 ? " · eldest" : ""}</option>)}
       </select>
     </div>

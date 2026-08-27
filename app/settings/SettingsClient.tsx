@@ -1,5 +1,7 @@
 "use client";
 
+import { LANGUAGES, LANGUAGE_NAMES, LANG_COOKIE, type Lang, parseLang } from "../../lib/i18n";
+
 import { useEffect, useState } from "react";
 
 type Role = "admin" | "editor" | "viewer" | null;
@@ -28,6 +30,12 @@ const ERROR_COPY: Record<string, string> = {
 };
 
 export default function SettingsClient({ viewer, siteVisibility, appleSignInPath, googleSignInPath, signOutPath }: Props) {
+  // read once on mount: the cookie is the single source, shared with the server
+  const [currentLang, setCurrentLang] = useState<Lang>("en");
+  useEffect(() => {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`));
+    setCurrentLang(parseLang(match?.[1]));
+  }, []);
   const [visibility, setVisibility] = useState(siteVisibility);
   const [members, setMembers] = useState<Member[] | null>(null);
   const [newEmail, setNewEmail] = useState("");
@@ -126,6 +134,20 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
       {viewer.signedIn && viewer.role === "editor" && <div className="settings-card">
         <p>You can edit the archive — add people, correct records, and attach photos. Managing who has access is reserved for admins.</p>
       </div>}
+
+      <div className="settings-card">
+        <h2>Language</h2>
+        <p className="settings-hint">The archive&rsquo;s own words — names, biographies and stories — stay in the language they were written in.</p>
+        <div className="settings-languages">
+          {LANGUAGES.map((code) => <button type="button" key={code}
+            className={`settings-language ${currentLang === code ? "is-active" : ""}`}
+            lang={code} dir={code === "fa" ? "rtl" : "ltr"}
+            onClick={() => {
+              document.cookie = `${LANG_COOKIE}=${code}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+              window.location.reload();
+            }}>{LANGUAGE_NAMES[code]}</button>)}
+        </div>
+      </div>
 
       {(viewer.role === "admin" || viewer.role === "editor") && <div className="settings-card">
         <h2>The archive behind the archive</h2>

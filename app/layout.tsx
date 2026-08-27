@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Plus_Jakarta_Sans } from "next/font/google";
+import { cookies } from "next/headers";
+import { Cormorant_Garamond, Plus_Jakarta_Sans, Vazirmatn } from "next/font/google";
 import "./globals.css";
+import { isRtl, LANG_COOKIE, parseLang } from "../lib/i18n";
 
 const sans = Plus_Jakarta_Sans({ variable: "--font-sans", subsets: ["latin"] });
+// Persian needs a face with real Arabic-script coverage; Vazirmatn is the
+// standard choice and carries Latin too, so mixed lines stay even.
+const persian = Vazirmatn({ variable: "--font-persian", subsets: ["arabic", "latin"], weight: ["400", "500", "600", "700"] });
 const serif = Cormorant_Garamond({
   variable: "--font-serif",
   subsets: ["latin"],
@@ -26,10 +31,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   return (
-    <html lang="en">
-      <body className={`${sans.variable} ${serif.variable}`}><div className="grain-overlay" aria-hidden="true" />{children}</body>
+    <html lang={lang} dir={isRtl(lang) ? "rtl" : "ltr"}>
+      <body className={`${sans.variable} ${serif.variable} ${persian.variable}`}><div className="grain-overlay" aria-hidden="true" />{children}</body>
     </html>
   );
 }

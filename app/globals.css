@@ -1124,3 +1124,46 @@ main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-ba
 .calendar-month button { text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .calendar-month button:not(:disabled):hover { color:var(--accent); }
 .calendar-detail { color:var(--muted); font-size:.74rem; white-space:nowrap; }
+
+/* ============ three languages, two directions ============
+   Persian reads right to left, so the chrome mirrors: the chat column and
+   every panel that docks beside it swap sides, and the arrows that mean
+   "back" and "forward" swap with them. The canvases are not mirrored -
+   a family tree is a spatial diagram, and Persian genealogy software draws
+   it the same way. */
+html[lang="fa"] body { font-family: var(--font-persian), var(--font-sans), Tahoma, sans-serif; }
+html[lang="fa"] .font-serif, html[lang="fa"] h1, html[lang="fa"] h2, html[lang="fa"] h3,
+html[lang="fa"] .person-modal-v2 h2, html[lang="fa"] .archive-view-heading h2 { font-family: var(--font-persian), var(--font-serif), serif; }
+/* Persian numerals stay Latin here: the archive's dates are written that way */
+html[lang="fa"] { font-variant-numeric: normal; }
+
+[dir="rtl"] .family-shell { direction: rtl; }
+[dir="rtl"] .chat-sidebar { border-right: 0; border-left: 1px solid var(--line); }
+[dir="rtl"] .chat-resize-handle { right: auto; left: -3px; }
+[dir="rtl"] .chat-edge-reveal { left: auto; right: 0; border-left: 1px solid var(--line); border-right: 0;
+  border-radius: .8rem 0 0 .8rem; transform: translateY(-50%) translateX(0) scaleX(-1); }
+[dir="rtl"] .site-action-bar { left: 0; right: var(--chat-width,330px); }
+[dir="rtl"] main.chat-collapsed .site-action-bar { right: 0; }
+[dir="rtl"] main.has-person .site-action-bar, [dir="rtl"] main.chat-collapsed.has-person .site-action-bar {
+  left: 0; right: max(var(--chat-width,330px), 30rem); }
+[dir="rtl"] .person-panel { left: auto; right: 0; border-right: 0; border-left: 1px solid var(--line);
+  box-shadow: -18px 0 50px rgba(0,0,0,.45); }
+[dir="rtl"] .person-hover-preview { left: auto; right: 0; }
+[dir="rtl"] .canvas-controls, [dir="rtl"] .ped-zoom, [dir="rtl"] .world-map .map-zoom { right: auto; left: 1.2rem; }
+[dir="rtl"] .canvas-legend { left: auto; right: 16px; }
+[dir="rtl"] .build-version { left: auto; right: .75rem; }
+[dir="rtl"] .family-map-view .unmapped-places { left: auto; right: 1rem; }
+/* the stage itself keeps its left-to-right reading, like the printed charts */
+[dir="rtl"] .focus-view, [dir="rtl"] .archive-view, [dir="rtl"] .ped-stage, [dir="rtl"] .family-canvas { direction: ltr; }
+[dir="rtl"] .archive-view-heading, [dir="rtl"] .stat-sections, [dir="rtl"] .calendar-months,
+[dir="rtl"] .stat-cards, [dir="rtl"] .fill-view, [dir="rtl"] .timeline-list { direction: rtl; }
+[dir="rtl"] .fill-th, [dir="rtl"] .fill-row-head, [dir="rtl"] .place-person-row,
+[dir="rtl"] .relationship-row-main, [dir="rtl"] .chat-suggestion { text-align: right; }
+[dir="rtl"] .fill-row-head::after { right: auto; left: .8rem; }
+[dir="rtl"] .place-person-go, [dir="rtl"] .story-card > summary::after { transform: scaleX(-1); }
+[dir="rtl"] .person-nav button, [dir="rtl"] .focus-back { transform: scaleX(-1); }
+[dir="rtl"] .settings-back-pill { flex-direction: row-reverse; }
+.settings-languages { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.9rem; }
+.settings-language { border:1px solid var(--line); border-radius:999px; background:var(--card); padding:.5rem 1.1rem; color:var(--ink); font-size:.88rem; font-weight:600; }
+.settings-language:hover { border-color:var(--accent); color:var(--accent); }
+.settings-language.is-active { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent); }
