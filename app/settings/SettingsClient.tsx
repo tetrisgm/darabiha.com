@@ -4,12 +4,12 @@ import { LANGUAGES, LANGUAGE_NAMES, LANG_COOKIE, type Lang, parseLang } from "..
 
 import { useEffect, useState } from "react";
 
-type Role = "admin" | "editor" | "viewer" | null;
+type Role = "admin" | "canEdit" | "canView" | null;
 type Identity = { email: string; provider: string | null };
-type Member = { email: string; role: "admin" | "editor" | "viewer"; addedBy: string; createdAt: string; links: Identity[] };
+type Member = { email: string; role: "admin" | "canEdit" | "canView"; addedBy: string; createdAt: string; links: Identity[] };
 type Props = {
   viewer: { signedIn: boolean; email: string | null; accountEmail: string | null; displayName: string | null; role: Role; links: Identity[]; connectedProviders: string[] };
-  siteVisibility: "public" | "members" | null;
+  siteVisibility: "public" | "members" | "password" | null;
   appleSignInPath: string;
   googleSignInPath: string | null;
   signOutPath: string;
@@ -37,9 +37,34 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
     return parseLang(document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1]);
   });
   const [visibility, setVisibility] = useState(siteVisibility);
+  // The password is write-only: this holds whether one exists, never what it
+  // is. The server has no request that would return it.
+  const [access, setAccess] = useState<{ hasPassword: boolean; shareUrl: string | null }>({ hasPassword: false, shareUrl: null });
+  const [password, setPassword] = useState("");
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    if (siteVisibility === null) return;
+    fetch("/api/site").then((response) => response.ok ? response.json() as Promise<{ hasPassword?: boolean; shareUrl?: string | null }> : null)
+      .then((data) => {
+        if (data) setAccess({ hasPassword: Boolean(data.hasPassword), shareUrl: data.shareUrl ?? null });
+      }).catch(() => { /* the rest of the page works without it */ });
+  }, [siteVisibility]);
+  const accessAction = async (payload: Record<string, unknown>) => {
+    setBusy(true); setNotice("");
+    try {
+      const response = await fetch("/api/site", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await response.json() as { visibility?: "public" | "members" | "password"; hasPassword?: boolean; shareUrl?: string | null; error?: string };
+      if (!response.ok) { setNotice(data.error === "password_too_short" ? "Use at least six characters." : "That could not be saved."); return; }
+      setAccess({ hasPassword: Boolean(data.hasPassword), shareUrl: data.shareUrl ?? null });
+      if (data.visibility) setVisibility(data.visibility);
+      setPassword("");
+    } catch { setNotice("That could not be saved."); }
+    finally { setBusy(false); }
+  };
   const [members, setMembers] = useState<Member[] | null>(null);
   const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState<"viewer" | "editor" | "admin">("editor");
+  const [newRole, setNewRole] = useState<"canView" | "canEdit" | "admin">("canView");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [authError, setAuthError] = useState("");
@@ -127,11 +152,11 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         <p>Your account is signed in but not on the member list yet. Ask a site admin to add <strong>{viewer.email}</strong> below.</p>
       </div>}
 
-      {viewer.signedIn && viewer.role === "viewer" && <div className="settings-card">
+      {viewer.signedIn && viewer.role === "canView" && <div className="settings-card">
         <p>You can browse the archive. Editing the family records needs the editor role, which a site admin can grant on this page.</p>
       </div>}
 
-      {viewer.signedIn && viewer.role === "editor" && <div className="settings-card">
+      {viewer.signedIn && viewer.role === "canEdit" && <div className="settings-card">
         <p>You can edit the archive — add people, correct records, and attach photos. Managing who has access is reserved for admins.</p>
       </div>}
 
@@ -149,7 +174,7 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         </div>
       </div>
 
-      {(viewer.role === "admin" || viewer.role === "editor") && <div className="settings-card">
+      {(viewer.role === "admin" || viewer.role === "canEdit") && <div className="settings-card">
         <h2>The archive behind the archive</h2>
         <p className="settings-hint">Where the records came from, and what has been done to them.</p>
         <div className="settings-links">
@@ -163,7 +188,9 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
       {viewer.role === "admin" && <div className="settings-card">
         <h2>Members &amp; access</h2>
         {visibility && <div className="settings-visibility">
-          {([["public", "Anyone can visit", "The tree is open to anyone with the link."], ["members", "Only people I add", "Visitors must sign in, and only the people listed below can see the archive."]] as const).map(([value, label, detail]) =>
+          {([["public", "Anyone can visit", "The tree is open to anyone with the link."],
+             ["password", "Anyone with the password", "Family who have the link enter a shared password once, and their browser remembers it. People on the list below are never asked."],
+             ["members", "Only people I add", "Visitors must sign in, and only the people listed below can see the archive."]] as const).map(([value, label, detail]) =>
             <button type="button" key={value} className={`settings-visibility-option ${visibility === value ? "is-active" : ""}`} disabled={busy}
               onClick={async () => {
                 if (visibility === value) return;
@@ -171,9 +198,9 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
                 setNotice("");
                 try {
                   const response = await fetch("/api/site", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility: value }) });
-                  const data = await response.json() as { visibility?: "public" | "members" };
-                  if (data.visibility) setVisibility(data.visibility);
-                  else setNotice("The change could not be saved.");
+                  const data = await response.json() as { visibility?: "public" | "members" | "password"; error?: string };
+                  if (data.visibility) { setVisibility(data.visibility); setAccess({ hasPassword: Boolean((data as { hasPassword?: boolean }).hasPassword), shareUrl: (data as { shareUrl?: string | null }).shareUrl ?? null }); }
+                  else setNotice(data.error === "set_a_password_first" ? "Set a password first — the archive cannot be locked without one." : "The change could not be saved.");
                 } catch {
                   setNotice("The change could not be saved.");
                 } finally {
@@ -184,7 +211,23 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
               <span>{detail}</span>
             </button>)}
         </div>}
-        <p className="settings-hint">Admins manage everything, editors can change the family records, viewers can only browse.</p>
+        {visibility === "password" && <div className="settings-access">
+          <label className="settings-access-row">
+            <span>{access.hasPassword ? "Change the family password" : "Set a family password"}</span>
+            <input type="password" value={password} placeholder="At least six characters" autoComplete="new-password"
+              onChange={(event) => setPassword(event.target.value)} disabled={busy} />
+          </label>
+          <div className="settings-access-actions">
+            <button type="button" disabled={busy || password.trim().length < 6} onClick={() => accessAction({ action: "set_password", password: password.trim() })}>Save password</button>
+            {access.hasPassword && <button type="button" className="fill-skip" disabled={busy} onClick={() => accessAction({ action: "clear_password" })}>Remove it</button>}
+          </div>
+          {access.shareUrl && <p className="settings-hint settings-share">
+            Private link — anyone who follows it is let straight in:
+            <code>{origin}{access.shareUrl}</code>
+            <button type="button" className="fill-skip" disabled={busy} onClick={() => accessAction({ action: "new_link" })}>Make a new one</button>
+          </p>}
+        </div>}
+        <p className="settings-hint">canView can browse the archive, canEdit can change the family records, admin manages everything. New members start at canView.</p>
         {notice && <p className="settings-error">{notice}</p>}
         {!members && <p className="settings-hint">Loading the member list…</p>}
         {members && <ul className="settings-members">
@@ -199,8 +242,8 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
             </span>
             <select value={member.role} disabled={busy} aria-label={`Role for ${member.email}`}
               onChange={(event) => mutate({ action: "set", email: member.email, role: event.target.value })}>
-              <option value="viewer">viewer</option>
-              <option value="editor">editor</option>
+              <option value="canView">canView</option>
+              <option value="canEdit">canEdit</option>
               <option value="admin">admin</option>
             </select>
             <button type="button" className="settings-remove" disabled={busy} aria-label={`Remove ${member.email}`}
@@ -209,9 +252,9 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         </ul>}
         <form className="settings-add" onSubmit={(event) => { event.preventDefault(); if (newEmail.trim()) mutate({ action: "set", email: newEmail.trim().toLowerCase(), role: newRole }); }}>
           <input type="email" required placeholder="name@example.com" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} aria-label="Email address to add" />
-          <select value={newRole} onChange={(event) => setNewRole(event.target.value === "admin" ? "admin" : event.target.value === "viewer" ? "viewer" : "editor")} aria-label="Role for the new member">
-            <option value="viewer">viewer</option>
-            <option value="editor">editor</option>
+          <select value={newRole} onChange={(event) => setNewRole(event.target.value === "admin" ? "admin" : event.target.value === "canEdit" ? "canEdit" : "canView")} aria-label="Role for the new member">
+            <option value="canView">canView</option>
+            <option value="canEdit">canEdit</option>
             <option value="admin">admin</option>
           </select>
           <button type="submit" disabled={busy || !newEmail.trim()}>Add member</button>

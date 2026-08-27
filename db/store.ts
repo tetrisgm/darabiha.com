@@ -44,7 +44,7 @@ const schemaStatements = [
     summary TEXT NOT NULL, payload_json TEXT NOT NULL, created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS members (
-    email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'editor', 'viewer')),
+    email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'canEdit', 'canView')),
     added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS member_links (
@@ -65,16 +65,20 @@ export async function ensureSchema() {
   // Imported archive material is written in its own language; body holds the
   // English a reader sees first, original_body the words the family wrote.
   try { await env.DB.prepare("ALTER TABLE stories ADD COLUMN original_body TEXT").run(); } catch { /* existing deployment */ }
-  // Databases created before the viewer role carry a two-role CHECK
-  // constraint; SQLite cannot alter it, so the table is rebuilt once.
+  // The roles are named for what they let a person do - canView, canEdit,
+  // admin - and older databases carry 'viewer' and 'editor' under a CHECK
+  // constraint SQLite cannot alter, so the table is rebuilt once and the
+  // values mapped across.
   const membersSchema = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='members'").first<{ sql: string }>();
-  if (membersSchema && !membersSchema.sql.includes("'viewer'")) {
+  if (membersSchema && !membersSchema.sql.includes("'canView'")) {
     await env.DB.batch([
       env.DB.prepare(`CREATE TABLE IF NOT EXISTS members_next (
-        email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'editor', 'viewer')),
+        email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'canEdit', 'canView')),
         added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       )`),
-      env.DB.prepare("INSERT OR IGNORE INTO members_next SELECT email, role, added_by, created_at, updated_at FROM members"),
+      env.DB.prepare(`INSERT OR IGNORE INTO members_next
+        SELECT email, CASE role WHEN 'editor' THEN 'canEdit' WHEN 'viewer' THEN 'canView' ELSE role END,
+        added_by, created_at, updated_at FROM members`),
       env.DB.prepare("DROP TABLE members"),
       env.DB.prepare("ALTER TABLE members_next RENAME TO members"),
     ]);
@@ -84,9 +88,9 @@ export async function ensureSchema() {
   const memberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM members").first<{ count: number }>();
   if (!memberCount?.count) {
     const now = new Date().toISOString();
-    const seeds: [string, "admin" | "editor"][] = [["ramine@ramine.net", "admin"]];
+    const seeds: [string, "admin" | "canEdit"][] = [["ramine@ramine.net", "admin"]];
     for (const email of (process.env.EDITOR_EMAILS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean)) {
-      if (!seeds.some(([seeded]) => seeded === email)) seeds.push([email, "editor"]);
+      if (!seeds.some(([seeded]) => seeded === email)) seeds.push([email, "canEdit"]);
     }
     await env.DB.batch(seeds.map(([email, role]) =>
       env.DB.prepare("INSERT OR IGNORE INTO members (email, role, added_by, created_at, updated_at) VALUES (?, ?, 'seed', ?, ?)").bind(email, role, now, now)));
@@ -95,21 +99,70 @@ export async function ensureSchema() {
   initialized = true;
 }
 
-export type MemberRole = "admin" | "editor" | "viewer";
+export type MemberRole = "admin" | "canEdit" | "canView";
 
-export type SiteVisibility = "public" | "members";
+export type SiteVisibility = "public" | "members" | "password";
 let visibilityCache: { value: SiteVisibility; time: number } | null = null;
 
-/** "public": anyone can visit. "members": visitors must sign in (every
- * first sign-in auto-registers a viewer, so the member list is the guest
- * book and admins can raise or remove anyone). */
+/** "public": anyone can visit. "members": visitors must sign in (every first
+ * sign-in auto-registers someone who can view, so the member list is the
+ * guest book and admins can raise or remove anyone). "password": anyone with
+ * the family's shared password, or the private link, or a place on the
+ * member list. */
 export async function getSiteVisibility(): Promise<SiteVisibility> {
   if (visibilityCache && Date.now() - visibilityCache.time < 10_000) return visibilityCache.value;
   await ensureSchema();
   const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'visibility'").first<{ value: string }>();
-  const value: SiteVisibility = row?.value === "members" ? "members" : "public";
+  const value: SiteVisibility = row?.value === "members" ? "members" : row?.value === "password" ? "password" : "public";
   visibilityCache = { value, time: Date.now() };
   return value;
+}
+
+/* The shared password and the private link.
+ *
+ * The password is only ever kept as the keyed digest lib/access.ts produces:
+ * nothing here can return it, because nothing here has it. The share token is
+ * a secret in the same sense - it is returned to admins so they can copy the
+ * link, and to nobody else. */
+
+async function readSetting(key: string): Promise<string | null> {
+  await ensureSchema();
+  const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = ?").bind(key).first<{ value: string }>();
+  return row?.value ?? null;
+}
+
+async function writeSetting(key: string, value: string, actorEmail: string, summary: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO site_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(key, value, now),
+    // the payload records that it happened, never what was set
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "site_access", summary, JSON.stringify({ setting: key }), now),
+  ]);
+}
+
+export const accessPasswordDigest = () => readSetting("access_password");
+export const hasAccessPassword = async () => Boolean(await readSetting("access_password"));
+
+export async function setAccessPasswordDigest(digest: string, actorEmail: string) {
+  await writeSetting("access_password", digest, actorEmail, "Set the family password");
+}
+
+export async function clearAccessPassword(actorEmail: string) {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM site_settings WHERE key = 'access_password'"),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "site_access", "Removed the family password", JSON.stringify({ setting: "access_password" }), now),
+  ]);
+}
+
+export const shareToken = () => readSetting("access_share_token");
+
+export async function setShareToken(token: string, actorEmail: string) {
+  await writeSetting("access_share_token", token, actorEmail, "Made a new private link");
 }
 
 export async function setSiteVisibility(value: SiteVisibility, actorEmail: string) {
@@ -118,7 +171,7 @@ export async function setSiteVisibility(value: SiteVisibility, actorEmail: strin
   await env.DB.batch([
     env.DB.prepare("INSERT INTO site_settings (key, value, updated_at) VALUES ('visibility', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").bind(value, now),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), actorEmail, "site_visibility", value === "members" ? "Restricted the site to signed-in members" : "Opened the site to anyone with the link", JSON.stringify({ visibility: value }), now),
+      .bind(crypto.randomUUID(), actorEmail, "site_visibility", value === "members" ? "Restricted the site to signed-in members" : value === "password" ? "Put the site behind the family password" : "Opened the site to anyone with the link", JSON.stringify({ visibility: value }), now),
   ]);
   visibilityCache = { value, time: Date.now() };
 }
@@ -134,9 +187,9 @@ export async function registerViewer(email: string) {
   if (existing) return;
   const now = new Date().toISOString();
   await env.DB.batch([
-    env.DB.prepare("INSERT OR IGNORE INTO members (email, role, added_by, created_at, updated_at) VALUES (?, 'viewer', 'sign-up', ?, ?)").bind(canonical, now, now),
+    env.DB.prepare("INSERT OR IGNORE INTO members (email, role, added_by, created_at, updated_at) VALUES (?, 'canView', 'sign-up', ?, ?)").bind(canonical, now, now),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), canonical, "member_signup", `${canonical} signed in for the first time and became a viewer`, JSON.stringify({ email: canonical, role: "viewer" }), now),
+      .bind(crypto.randomUUID(), canonical, "member_signup", `${canonical} signed in for the first time and can view the archive`, JSON.stringify({ email: canonical, role: "viewer" }), now),
   ]);
 }
 export type MemberIdentity = { email: string; provider: string | null };

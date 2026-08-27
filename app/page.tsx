@@ -3,8 +3,8 @@ import FamilyTreeApp from "./components/FamilyTreeApp";
 import { LanguageProvider } from "./components/LanguageContext";
 import { LANG_COOKIE, parseLang } from "../lib/i18n";
 import { appleSignInPath, appleSignOutPath, getAppleUser } from "./apple-auth";
-import { getViewerRole, TEMPORARY_OPEN_EDITOR } from "./authz";
-import { getSiteVisibility } from "../db/store";
+import { getViewerRole, visitorGate, TEMPORARY_OPEN_EDITOR } from "./authz";
+import PasswordGate from "./components/PasswordGate";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,19 @@ export default async function Home() {
   // server response repeatedly exceeded the Worker CPU limit.
   const user = await getAppleUser();
   const role = user ? await getViewerRole(user) : null;
-  if ((await getSiteVisibility()) === "members" && !role) {
+  const gate = await visitorGate();
+  if (gate === "password") {
+    return (
+      <main className="settings-page visit-gate">
+        <section className="settings-panel">
+          <p className="eyebrow settings-eyebrow">Darabiha</p>
+          <h1>A family archive</h1>
+          <PasswordGate />
+        </section>
+      </main>
+    );
+  }
+  if (gate === "sign-in" || gate === "not-a-member") {
     return (
       <main className="settings-page visit-gate">
         <section className="settings-panel">
@@ -38,7 +50,7 @@ export default async function Home() {
     <LanguageProvider initial={lang}>
       <FamilyTreeApp
         initialTree={null}
-        viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "editor", role, displayName: user?.displayName ?? null }}
+        viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "canEdit", role, displayName: user?.displayName ?? null }}
         signOutPath={appleSignOutPath("/")}
         signInEnabled={!TEMPORARY_OPEN_EDITOR}
       />

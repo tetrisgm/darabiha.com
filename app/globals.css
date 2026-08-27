@@ -1377,3 +1377,28 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .lang-switch { gap:.1rem; padding:.1rem; }
   .tree-search { display:none; }
 }
+
+/* The password gate, and the admin card that sets what it asks for. */
+.gate-form { display:flex; gap:.5rem; margin-top:.9rem; }
+.gate-form input { flex:1; min-width:0; border:1px solid var(--line); border-radius:.7rem;
+  background:rgba(44,44,46,.75); color:var(--ink); padding:.6rem .8rem; font:inherit; }
+.gate-form input:focus { outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent); }
+.gate-form button { border-radius:999px; background:var(--accent-fill); color:#fff;
+  padding:.6rem 1.2rem; font-size:.85rem; font-weight:650; }
+.gate-form button:disabled { opacity:.5; }
+.gate-error { margin:.6rem 0 0; color:var(--danger); font-size:.85rem; }
+.gate-note { margin:.9rem 0 0; color:var(--muted); font-size:.8rem; }
+.gate-note a { color:var(--accent); }
+
+.settings-access { display:flex; flex-direction:column; gap:.7rem; margin:.9rem 0 .2rem;
+  border:1px solid var(--line); border-radius:.9rem; padding:.9rem; background:rgba(44,44,46,.45); }
+.settings-access-row { display:flex; flex-direction:column; gap:.35rem; font-size:.82rem; color:var(--muted); }
+.settings-access-row input { border:1px solid var(--line); border-radius:.6rem; background:rgba(28,28,30,.8);
+  color:var(--ink); padding:.5rem .7rem; font:inherit; }
+.settings-access-actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+.settings-access-actions button { border-radius:999px; background:var(--accent-fill); color:#fff;
+  padding:.45rem 1rem; font-size:.8rem; font-weight:650; }
+.settings-access-actions button:disabled { opacity:.45; }
+.settings-share { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin:0; }
+.settings-share code { flex:1; min-width:0; overflow-x:auto; white-space:nowrap; border:1px solid var(--line);
+  border-radius:.5rem; background:rgba(28,28,30,.8); padding:.35rem .55rem; font-size:.75rem; color:var(--ink); }

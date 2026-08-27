@@ -1,5 +1,7 @@
-import { getAppleUser, type AppleUser } from "./apple-auth";
+import { cookies } from "next/headers";
+import { getAppleUser, verifyToken, type AppleUser } from "./apple-auth";
 import { getMemberRole, getSiteVisibility, type MemberRole } from "../db/store";
+import { ACCESS_COOKIE } from "../lib/access";
 
 // Editing is enforced: only members with the editor or admin role can
 // mutate the archive. Flipping this to true reopens the old test mode where
@@ -28,7 +30,7 @@ export async function requireEditor(): Promise<
     };
   }
   const role = await getViewerRole(user);
-  if (role !== "admin" && role !== "editor") {
+  if (role !== "admin" && role !== "canEdit") {
     return {
       ok: false,
       response: Response.json({ error: "editor_access_required" }, { status: 403 }),
@@ -37,21 +39,40 @@ export async function requireEditor(): Promise<
   return { ok: true, user };
 }
 
-/** Gate for read access. In "public" visibility everyone passes; in
- * "members" visibility the visitor must be signed in with any role (every
- * sign-in auto-registers a viewer, and admins can remove one). */
+/** Whether this visitor has already answered the family password, or arrived
+ * by the private link. Signed with the same secret as a member session and
+ * carries its own expiry. */
+export async function hasAccessPass(): Promise<boolean> {
+  const token = (await cookies()).get(ACCESS_COOKIE)?.value;
+  return Boolean(await verifyToken<{ access?: boolean }>(token));
+}
+
+export type VisitorGate = "ok" | "sign-in" | "not-a-member" | "password";
+
+/** Who may read the archive.
+ *
+ * "public": everyone. "members": a signed-in person on the member list.
+ * "password": the same member list, or anyone who knows the family password
+ * or has followed the private link. Being on the member list always passes,
+ * in every mode - the owner asked that people they have added are never
+ * asked for the password. */
+export async function visitorGate(): Promise<VisitorGate> {
+  const visibility = await getSiteVisibility();
+  if (visibility === "public") return "ok";
+  const user = await getAppleUser();
+  if (user && (await getViewerRole(user))) return "ok";
+  if (visibility === "password") return (await hasAccessPass()) ? "ok" : "password";
+  return user ? "not-a-member" : "sign-in";
+}
+
 export async function requireVisitor(): Promise<
   { ok: true } | { ok: false; response: Response }
 > {
-  if ((await getSiteVisibility()) === "public") return { ok: true };
-  const user = await getAppleUser();
-  if (!user) {
-    return { ok: false, response: Response.json({ error: "sign_in_required" }, { status: 401 }) };
-  }
-  if (!(await getViewerRole(user))) {
-    return { ok: false, response: Response.json({ error: "viewer_access_required" }, { status: 403 }) };
-  }
-  return { ok: true };
+  const gate = await visitorGate();
+  if (gate === "ok") return { ok: true };
+  if (gate === "password") return { ok: false, response: Response.json({ error: "password_required" }, { status: 401 }) };
+  if (gate === "sign-in") return { ok: false, response: Response.json({ error: "sign_in_required" }, { status: 401 }) };
+  return { ok: false, response: Response.json({ error: "viewer_access_required" }, { status: 403 }) };
 }
 
 /** Member management is admin-only and is never opened by the temporary

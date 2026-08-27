@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     if (lastAdmin) return Response.json({ error: "last_admin" }, { status: 400 });
     await removeMember(canonical, user.email);
   } else if (body?.action === "set") {
-    const role = body.role === "admin" ? "admin" as const : body.role === "editor" ? "editor" as const : body.role === "viewer" ? "viewer" as const : null;
+    const role = body.role === "admin" ? "admin" as const : body.role === "canEdit" ? "canEdit" as const : body.role === "canView" ? "canView" as const : null;
     if (!role) return Response.json({ error: "invalid_role" }, { status: 400 });
     if (lastAdmin && role !== "admin") return Response.json({ error: "last_admin" }, { status: 400 });
     await upsertMember(canonical, role, user.email);

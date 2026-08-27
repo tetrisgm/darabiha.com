@@ -1,18 +1,61 @@
 import { requireAdmin } from "../../authz";
-import { getSiteVisibility, setSiteVisibility } from "../../../db/store";
+import {
+  clearAccessPassword, getSiteVisibility, hasAccessPassword, setAccessPasswordDigest,
+  setShareToken, setSiteVisibility, shareToken, type SiteVisibility,
+} from "../../../db/store";
+import { hashAccessPassword, newShareToken } from "../../../lib/access";
+
+/** Who can see the archive, the family password, and the private link.
+ *
+ * Admin only, and the password is write-only: this route can be told a new
+ * one, and can say whether one exists, but there is no request that returns
+ * it - the stored form is a keyed digest and the plaintext is never kept. */
+
+const VISIBILITIES: SiteVisibility[] = ["public", "members", "password"];
+
+async function state() {
+  return {
+    visibility: await getSiteVisibility(),
+    hasPassword: await hasAccessPassword(),
+    shareUrl: (await shareToken()) ? `/api/access?key=${await shareToken()}` : null,
+  };
+}
 
 export async function GET() {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
-  return Response.json({ visibility: await getSiteVisibility() });
+  return Response.json(await state());
 }
 
 export async function POST(request: Request) {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
-  const body = await request.json().catch(() => null) as { visibility?: string } | null;
-  const visibility = body?.visibility === "members" ? "members" as const : body?.visibility === "public" ? "public" as const : null;
+  const body = await request.json().catch(() => null) as { visibility?: string; password?: unknown; action?: string } | null;
+
+  if (body?.action === "set_password") {
+    const password = typeof body.password === "string" ? body.password.trim() : "";
+    if (password.length < 6) return Response.json({ error: "password_too_short" }, { status: 400 });
+    await setAccessPasswordDigest(await hashAccessPassword(password), auth.user.email);
+    // a password is no use without a link to go with it
+    if (!(await shareToken())) await setShareToken(newShareToken(), auth.user.email);
+    return Response.json(await state());
+  }
+  if (body?.action === "clear_password") {
+    await clearAccessPassword(auth.user.email);
+    if ((await getSiteVisibility()) === "password") await setSiteVisibility("members", auth.user.email);
+    return Response.json(await state());
+  }
+  if (body?.action === "new_link") {
+    await setShareToken(newShareToken(), auth.user.email);
+    return Response.json(await state());
+  }
+
+  const visibility = VISIBILITIES.find((candidate) => candidate === body?.visibility);
   if (!visibility) return Response.json({ error: "invalid_visibility" }, { status: 400 });
+  // locking the door needs a key to have been cut first
+  if (visibility === "password" && !(await hasAccessPassword())) {
+    return Response.json({ error: "set_a_password_first" }, { status: 400 });
+  }
   await setSiteVisibility(visibility, auth.user.email);
-  return Response.json({ visibility });
+  return Response.json(await state());
 }
