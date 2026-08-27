@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 133**, `BUILD_ID=1e9eeb5`.
+- The live release is **Version 135**, `BUILD_ID=2dc1c7e`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":133,"build":"1e9eeb5","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":135,"build":"2dc1c7e","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -24,11 +24,18 @@ Last updated: 2026-08-27
 - A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
 - `npm test`: 34 unit tests passed (vitest — `node --test` is not this project's runner and fails on every file). `npx tsc --noEmit` is a mandatory release gate — `npm run build` does NOT typecheck, which is how Version 54 shipped a `ReferenceError` (see the Version 55 record below).
 - `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit, twice consecutively at `--workers=1`.
-  **The default 4 workers are more than this Mac can carry when something else is on it**: with load averages of 5–11 from unrelated processes, the `openFullTree` tests time out at 20s waiting for `.tree-card` while the same tests pass in ~0.9s alone. That is contention, not a regression — check `uptime` before believing a timeout, and run `--workers=1` (about 23s for the whole suite) when the machine is busy. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
+  **The default 4 workers are more than this Mac can carry when something else is on it**: with load averages of 5–11 from unrelated processes, the `openFullTree` tests time out at 20s waiting for `.tree-card` while the same tests pass in ~0.9s alone. That is contention, not a regression — check `uptime` before believing a timeout, and run `--workers=1` (about 23-33s for the whole suite) when the machine is busy — a serial pass came back green under a load average of 27, where the parallel default fails at load 5. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
+
+### Versions 134–135 (2026-08-27)
+
+- **Versions 134–135** (`ca98d07`, `2dc1c7e`): **clicking a card in the Tree view opens its branch and moves nothing** (owner: "as of there, branch should auto-expand"; "it does this really weird thing where it slides around instead of just staying in place").
+  - The unfold effect ran only for a person who was *not* already visible, so clicking a card you could see left their own family folded away beneath them. It now opens the chosen person's branch — the same thing their chip does — along with the ancestors that would otherwise hide them, and only writes state when something actually changes.
+  - The slide had two sources stacked: the click called `centerOn` and then the focus effect centred again, and opening the branch pushed the neighbours apart on top of that. The camera now moves only for someone **not already on screen** (reached from the chat or the search); the first arrival in the Tree view still snaps to centre.
+  - The clicked card holds its place across the re-layout. V134 anchored on layout coordinates and the card still jumped 380px — `translate(x,y) scale(s)` does not map layout units to screen pixels one for one. V135 records the card's actual `getBoundingClientRect()` and feeds the screen delta straight into the view, because the translate *is* in screen pixels. Measured on Ramazan Darabi ("Show 141 more"): 20 cards → 42, 4 folded chips → 14, and the clicked card moved by exactly (0, 0). Cards carry `data-person-id` so the anchor can find them again.
 
 ### Versions 130–133 (2026-08-27)
 
