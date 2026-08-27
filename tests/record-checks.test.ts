@@ -6,7 +6,7 @@ const person = (id: string, displayName: string, extra: Partial<Person> = {}): P
   id, displayName, gender: null, givenName: null, familyName: null, maidenName: null,
   birthDate: null, deathDate: null, birthPlace: null, deathPlace: null,
   birthCity: null, birthCountry: null, deathCity: null, deathCountry: null,
-  burialPlace: null, biography: null, photoAttachmentId: null, ...extra,
+  burialPlace: null, residence: null, biography: null, photoAttachmentId: null, ...extra,
 });
 const tree = (people: Person[], relationships: FamilyTree["relationships"] = [], stories: FamilyTree["stories"] = []): FamilyTree => ({ people, relationships, stories });
 const parent = (from: string, to: string) => ({ id: `${from}-${to}`, fromPersonId: from, toPersonId: to, type: "parent" as const, status: null });

@@ -364,16 +364,20 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   );
 }
 
-function InlineText({ value, placeholder, canEdit, multiline, className, inputType, onSave }: { value: string | null; placeholder: string; canEdit: boolean; multiline?: boolean; className?: string; inputType?: string; onSave: (next: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
+/** autoOpen mounts straight into the input, so a caller can offer a field
+ *  without writing anything to it; onDone fires whenever editing ends, saved
+ *  or abandoned, so the caller can put its own state back. */
+function InlineText({ value, placeholder, canEdit, multiline, className, inputType, autoOpen, onDone, onSave }: { value: string | null; placeholder: string; canEdit: boolean; multiline?: boolean; className?: string; inputType?: string; autoOpen?: boolean; onDone?: () => void; onSave: (next: string) => void }) {
+  const [editing, setEditing] = useState(Boolean(autoOpen));
+  const [draft, setDraft] = useState(autoOpen ? value ?? "" : "");
   if (!canEdit) return value ? <span className={className}>{value}</span> : null;
   if (!editing) {
     return <button type="button" className={`inline-edit ${value ? "" : "is-empty"} ${className ?? ""}`} title="Click to edit" onClick={() => { setDraft(value ?? ""); setEditing(true); }}>{value || placeholder}</button>;
   }
-  const commit = () => { setEditing(false); if (draft.trim() !== (value ?? "")) onSave(draft.trim()); };
+  const close = () => { setEditing(false); onDone?.(); };
+  const commit = () => { close(); if (draft.trim() !== (value ?? "")) onSave(draft.trim()); };
   const keys = (event: React.KeyboardEvent) => {
-    if (event.key === "Escape") setEditing(false);
+    if (event.key === "Escape") close();
     if (event.key === "Enter" && !multiline) (event.target as HTMLElement).blur();
   };
   return multiline
@@ -538,6 +542,8 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   const [relativeChoice, setRelativeChoice] = useState("");
   const [editingBio, setEditingBio] = useState(false);
   const [photoShare, setPhotoShare] = useState<string | null>(null);
+  // "record a death" opens the field; it does not fill it in
+  const [recordingDeath, setRecordingDeath] = useState(false);
   const [shareQuery, setShareQuery] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -554,7 +560,8 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   const stories = tree.stories.filter((story) => story.personIds.includes(person.id));
   const photos = person.photoIds ?? (person.photoAttachmentId ? [person.photoAttachmentId] : []);
   async function post(body: Record<string, unknown>) { const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (!response.ok || !data.tree) throw new Error(data.error || "Request failed"); onTreeChange(data.tree); return data.tree; }
-  const patchField = (key: string) => async (value: string) => { try { await post({ action: "update", personId: person.id, patch: { [key]: value } }); setNotice("Saved"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save"); } };
+  async function patchFields(patch: Record<string, string>) { try { await post({ action: "update", personId: person.id, patch }); setNotice("Saved"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save"); } }
+  const patchField = (key: string) => (value: string) => patchFields({ [key]: value });
   async function removeRelationship(id: string) { try { await post({ action: "remove_relationship", relationshipId: id }); setNotice("Relationship removed"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove relationship"); } }
   async function deletePerson() { if (!window.confirm(`Remove ${person.displayName} and their family-tree connections? This cannot be undone.`)) return; setSaving(true); try { await post({ action: "remove", personId: person.id }); onClose(); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not remove person"); } finally { setSaving(false); } }
   async function addRelative(label: string) {
@@ -586,7 +593,8 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   // born within a plausible lifetime and no death recorded -> presumed living;
   // an ancestor born in 1856 with no death date is simply unrecorded
   const birthYear = Number(person.birthDate?.slice(0, 4));
-  const presumedLiving = !person.deathDate && (!birthYear || new Date().getFullYear() - birthYear <= 110);
+  const deathRecorded = Boolean(person.deathDate || person.deathCity || person.deathCountry || person.burialPlace);
+  const presumedLiving = !deathRecorded && (!birthYear || new Date().getFullYear() - birthYear <= 110);
   const subtitleRest = [person.birthDate ? (person.deathDate ? `${person.birthDate.slice(0, 4)}–${person.deathDate.slice(0, 4)}` : `b. ${person.birthDate.slice(0, 4)}`) : person.deathDate ? `d. ${person.deathDate.slice(0, 4)}` : "", locationLine(person.birthCity, person.birthCountry, person.birthPlace) ?? ""].filter(Boolean).join(" · ");
   const relation = (other: Person, label: string) => tree.relationships.find((link) => (label === "Spouse" && link.type === "spouse" && ((link.fromPersonId === person.id && link.toPersonId === other.id) || (link.toPersonId === person.id && link.fromPersonId === other.id))) || (label === "Parents" && link.type === "parent" && link.fromPersonId === other.id && link.toPersonId === person.id) || (label === "Children" && link.type === "parent" && link.fromPersonId === person.id && link.toPersonId === other.id));
   return <section className="person-modal person-modal-v2 person-panel" role="dialog" aria-labelledby="person-modal-title">
@@ -615,15 +623,24 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
       <div><span className="eyebrow">{t("person.born")}</span><p className="fact-line"><InlineText value={person.birthDate} placeholder="add date" canEdit={canEdit} onSave={patchField("birthDate")} className="fact-date" />{(canEdit || person.birthCity || person.birthCountry) && <> in <InlineText value={person.birthCity} placeholder="city" canEdit={canEdit} onSave={patchField("birthCity")} />{(canEdit || (person.birthCity && person.birthCountry)) && ", "}<InlineText value={person.birthCountry} placeholder="country" canEdit={canEdit} onSave={patchField("birthCountry")} /></>}{!canEdit && !person.birthDate && t("person.birthNotRecorded")}</p></div>
       {/* No death date does not mean "died, date unknown": someone born within a
           lifetime is presumed living, and the record only asks for a death once
-          there is reason to think there was one. */}
-      <div><span className="eyebrow">{person.deathDate ? t("person.died") : presumedLiving ? t("person.living") : t("person.death")}</span><p className="fact-line">
-        {person.deathDate || !presumedLiving
-          ? <><InlineText value={person.deathDate} placeholder={canEdit ? "add date" : ""} canEdit={canEdit} onSave={patchField("deathDate")} className="fact-date" />{(canEdit || person.deathCity || person.deathCountry) && <> in <InlineText value={person.deathCity} placeholder="city" canEdit={canEdit} onSave={patchField("deathCity")} />{(canEdit || (person.deathCity && person.deathCountry)) && ", "}<InlineText value={person.deathCountry} placeholder="country" canEdit={canEdit} onSave={patchField("deathCountry")} /></>}{!canEdit && !person.deathDate && t("person.notRecorded")}</>
+          there is reason to think there was one. Offering the death field must
+          not itself record one - the prompt opens an empty input, and nothing
+          is written until a date is typed - and a death entered by mistake has
+          to be reversible, which is what the correction below is for. */}
+      <div><span className="eyebrow">{deathRecorded ? t("person.died") : presumedLiving ? t("person.living") : t("person.death")}</span><p className="fact-line">
+        {deathRecorded || recordingDeath || !presumedLiving
+          ? <><InlineText value={person.deathDate} placeholder={canEdit ? "add date" : ""} canEdit={canEdit} autoOpen={recordingDeath} onDone={() => setRecordingDeath(false)} onSave={patchField("deathDate")} className="fact-date" />{(canEdit || person.deathCity || person.deathCountry) && <> in <InlineText value={person.deathCity} placeholder="city" canEdit={canEdit} onSave={patchField("deathCity")} />{(canEdit || (person.deathCity && person.deathCountry)) && ", "}<InlineText value={person.deathCountry} placeholder="country" canEdit={canEdit} onSave={patchField("deathCountry")} /></>}{!canEdit && !person.deathDate && t("person.notRecorded")}</>
           : canEdit
-            ? <button type="button" className="inline-edit is-empty" onClick={() => patchField("deathDate")(new Date().toISOString().slice(0, 10))}>{t("person.recordDeath")}</button>
+            ? <button type="button" className="inline-edit is-empty" onClick={() => setRecordingDeath(true)}>{t("person.recordDeath")}</button>
             : <>{t("person.stillLiving")}</>}
-      </p></div>
-      {(person.burialPlace || (canEdit && person.deathDate)) && <div className="person-fact-wide"><span className="eyebrow">{t("person.buried")}</span><p className="fact-line"><InlineText value={person.burialPlace} placeholder={t("person.burialPlaceholder")} canEdit={canEdit} onSave={patchField("burialPlace")} /></p></div>}
+      </p>
+      {canEdit && deathRecorded && <button type="button" className="fact-correction" onClick={() => {
+        if (!window.confirm(`Clear the death recorded for ${person.displayName} and show them as living?`)) return;
+        void patchFields({ deathDate: "", deathCity: "", deathCountry: "", burialPlace: "" });
+      }}>{t("person.notLiving")}</button>}
+      </div>
+      {(person.residence || canEdit) && <div className="person-fact-wide"><span className="eyebrow">{presumedLiving ? t("person.lives") : t("person.lived")}</span><p className="fact-line"><InlineText value={person.residence} placeholder={t("person.residencePlaceholder")} canEdit={canEdit} onSave={patchField("residence")} /></p></div>}
+      {(person.burialPlace || (canEdit && deathRecorded)) && <div className="person-fact-wide"><span className="eyebrow">{t("person.buried")}</span><p className="fact-line"><InlineText value={person.burialPlace} placeholder={t("person.burialPlaceholder")} canEdit={canEdit} onSave={patchField("burialPlace")} /></p></div>}
     </div>
     {(photos.length > 1 || (canEdit && photos.length > 0)) && <div className="person-photos">
       <div className="relationship-heading"><p className="eyebrow">{t("person.photographs")}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => photoRef.current?.click()} aria-label="Add a photograph">＋</button>}</div>

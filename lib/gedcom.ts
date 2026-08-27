@@ -90,6 +90,7 @@ export function buildGedcom(tree: FamilyTree, origin = "https://darabiha.com"): 
       if (deathDate) lines.push(`2 DATE ${deathDate}`);
       if (deathPlace) lines.push(`2 PLAC ${escape(deathPlace)}`);
     }
+    if (person.residence) { lines.push("1 RESI", `2 PLAC ${escape(person.residence)}`); }
     if (person.burialPlace) { lines.push("1 BURI", `2 PLAC ${escape(person.burialPlace)}`); }
     if (person.biography) lines.push(...textLines(1, "NOTE", person.biography));
     // stories this person appears in travel with them

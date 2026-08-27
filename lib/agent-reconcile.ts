@@ -22,7 +22,9 @@ function mergePerson(existing: Omit<Person, "id">, incoming: AddPersonProposal["
     birthCity: incoming.birthCity ?? existing.birthCity,
     birthCountry: incoming.birthCountry ?? existing.birthCountry,
     deathCity: incoming.deathCity ?? existing.deathCity,
-    deathCountry: incoming.deathCountry ?? existing.deathCountry, burialPlace: null,
+    deathCountry: incoming.deathCountry ?? existing.deathCountry,
+    burialPlace: incoming.burialPlace ?? existing.burialPlace,
+    residence: incoming.residence ?? existing.residence,
     biography: incoming.biography ?? existing.biography,
     photoAttachmentId: incoming.photoAttachmentId ?? existing.photoAttachmentId,
   };

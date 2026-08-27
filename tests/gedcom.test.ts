@@ -6,12 +6,12 @@ const person = (id: string, displayName: string, extra: Partial<Person> = {}): P
   id, displayName, gender: null, givenName: null, familyName: null, maidenName: null,
   birthDate: null, deathDate: null, birthPlace: null, deathPlace: null,
   birthCity: null, birthCountry: null, deathCity: null, deathCountry: null,
-  burialPlace: null, biography: null, photoAttachmentId: null, ...extra,
+  burialPlace: null, residence: null, biography: null, photoAttachmentId: null, ...extra,
 });
 
 const tree: FamilyTree = {
   people: [
-    person("f", "Mohammad Zehtab Darabi", { gender: "male", birthDate: "1856", deathDate: "1939-04-02", birthCity: "Qazvin", birthCountry: "Iran", burialPlace: "Qazvin cemetery" }),
+    person("f", "Mohammad Zehtab Darabi", { gender: "male", birthDate: "1856", deathDate: "1939-04-02", birthCity: "Qazvin", birthCountry: "Iran", burialPlace: "Qazvin cemetery", residence: "Tehran, Iran" }),
     person("m", "Salmeh", { gender: "female" }),
     person("c", "Hossein Zehtab Darabi", { gender: "male", birthDate: "1882", biography: "Ran the company." }),
   ],
@@ -30,6 +30,11 @@ describe("gedcom export", () => {
     expect(text.startsWith("0 HEAD")).toBe(true);
     expect(text.trimEnd().endsWith("0 TRLR")).toBe(true);
     expect(text).toContain("2 VERS 5.5.1");
+  });
+
+  it("exports where a person lived as a residence event", () => {
+    expect(text).toContain("1 RESI");
+    expect(text).toContain("2 PLAC Tehran, Iran");
   });
 
   it("writes names, sex, dates and places", () => {

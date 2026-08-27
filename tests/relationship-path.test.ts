@@ -6,7 +6,7 @@ const person = (id: string, displayName: string, gender: Person["gender"] = null
   id, displayName, gender, givenName: null, familyName: null, maidenName: null,
   birthDate: null, deathDate: null, birthPlace: null, deathPlace: null,
   birthCity: null, birthCountry: null, deathCity: null, deathCountry: null,
-  burialPlace: null, biography: null, photoAttachmentId: null,
+  burialPlace: null, residence: null, biography: null, photoAttachmentId: null,
 });
 const parent = (from: string, to: string) => ({ id: `p-${from}-${to}`, fromPersonId: from, toPersonId: to, type: "parent" as const, status: null });
 const spouse = (a: string, b: string) => ({ id: `s-${a}-${b}`, fromPersonId: a, toPersonId: b, type: "spouse" as const, status: null });

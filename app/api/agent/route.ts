@@ -29,6 +29,7 @@ const personProperties = {
   birth_place: nullableString, death_place: nullableString,
   birth_city: nullableString, birth_country: nullableString, death_city: nullableString, death_country: nullableString,
   burial_place: { ...nullableString, description: "Cemetery or plot where the person is buried, when the source names one." },
+  residence: { ...nullableString, description: "Where the person lives, or last lived - a city or country, not a street address." },
   biography: nullableString,
   photo_attachment_id: { ...nullableString, description: "Use an uploaded image attachment ID only when the evidence clearly identifies the pictured person." },
 };
@@ -189,6 +190,7 @@ function personFromArgs(args: Record<string, unknown>): Omit<Person, "id"> {
     deathCity: args.death_city as string | null,
     deathCountry: args.death_country as string | null,
     burialPlace: (args.burial_place as string | null) ?? null,
+    residence: (args.residence as string | null) ?? null,
     biography: args.biography as string | null,
     photoAttachmentId: args.photo_attachment_id as string | null,
   };

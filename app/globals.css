@@ -378,7 +378,9 @@ button:disabled, button:disabled * { cursor: default; }
 .fill-footnote { max-width:34rem; color:var(--muted); font-size:.76rem; text-align:center; }
 
 /* Ancestry-style pedigree (Family view) */
-.ped-view { padding:5.6rem 1.5rem 3rem; }
+/* the zoom stack is anchored to the stage, so the stage reaches the bottom:
+   3rem of padding here put the controls 58px off the corner instead of 10 */
+.ped-view { padding:5.6rem 1.5rem .6rem; }
 .ped-stage { position:relative; margin:0 auto; max-width:76rem; min-height:24rem; }
 .ped-lines { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
 .ped-lines path { fill:none; stroke:rgba(235,235,245,.24); stroke-width:1.5; }
@@ -1213,3 +1215,11 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .focus-back:disabled { opacity:.32; }
 .focus-nav .focus-back:first-child { border-radius:.7rem 0 0 .7rem; }
 .focus-nav .focus-back:last-child { border-radius:0 .7rem .7rem 0; border-left:1px solid rgba(255,255,255,.08); }
+
+/* A death entered by mistake has to be reversible from the record itself.
+   Quiet by default - the correction belongs to editors who spot an error,
+   not to the reading of a life. */
+.fact-correction { display:inline-block; margin-top:.35rem; padding:.12rem .45rem; border-radius:.4rem;
+  border:1px solid transparent; background:transparent; color:var(--muted);
+  font-size:.72rem; letter-spacing:.01em; transition:color .15s, background .15s, border-color .15s; }
+.fact-correction:hover { color:var(--ink); background:rgba(255,255,255,.07); border-color:var(--line); }
