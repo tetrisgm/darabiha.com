@@ -52,6 +52,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   // fires for it - so without this the two boards trade places forever.
   const pointerAt = useRef({ x: 0, y: 0 });
   const previewAt = useRef<{ x: number; y: number } | null>(null);
+  /** Has the pointer moved since the current preview opened? Everything that
+   *  starts or ends a preview asks this first, because swapping the board
+   *  fires enter and leave events for a pointer that never went anywhere. */
+  const travelled = () => {
+    const anchor = previewAt.current;
+    return !anchor || Math.hypot(pointerAt.current.x - anchor.x, pointerAt.current.y - anchor.y) > 6;
+  };
   const activeId = previewId && maps.byId.has(previewId) ? previewId : focusId;
   useEffect(() => { previewAt.current = null; setPreviewId(null); }, [focusId]);
   const model = useMemo(() => {
@@ -135,8 +142,10 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     cursor.dataset.visible = "true";
     const target = event.target as Element;
     setCursorMode(dragRef.current ? "grabbing" : target.closest?.("button, summary") ? "pointer" : "grab");
-    // moving off the cards and onto open canvas gives the board back
-    if (previewId && !dragRef.current && !target.closest?.(".ped-card")) { cancelHover(); endPreview(); }
+    // Moving off the cards and onto open canvas gives the board back - but
+    // only for a pointer that actually travelled. Swapping the board fires a
+    // fresh enter for whatever now lies under a pointer that never moved.
+    if (previewId && !dragRef.current && !target.closest?.(".ped-card") && travelled()) { cancelHover(); endPreview(); }
   };
   const hidePedCursor = () => {
     if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
@@ -271,9 +280,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const beginHover = (person: Person, viaPointer = true) => {
     onPreview(person);
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    const anchor = previewAt.current;
-    const chosen = !viaPointer || !anchor || Math.hypot(pointerAt.current.x - anchor.x, pointerAt.current.y - anchor.y) > 6;
-    if (person.id === activeId || !chosen) return;
+    if (person.id === activeId || (viaPointer && !travelled())) return;
     hoverTimer.current = setTimeout(() => {
       previewAt.current = { ...pointerAt.current };
       setPreviewId(person.id);
