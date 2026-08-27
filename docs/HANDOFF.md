@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 82**, `BUILD_ID=7fa9d89`.
+- The live release is **Version 84**, `BUILD_ID=56f87dc`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":82,"build":"7fa9d89","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":84,"build":"56f87dc","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -29,8 +29,12 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–82 (2026-08-26)
+### Versions 54–84 (2026-08-26)
 
+- **Version 84** (`56f87dc`): the story card's chevron rule was matching the nested original-language `<summary>` too, so that toggle drew a marker at each end; scoped to `.story-card > summary`.
+- **Version 83** (`136360f`): **the family histories lead in English, with the Persian kept beside them** (owner: the original language belongs in the archive but should be secondary). `stories` gained an `original_body` column (migrated in `ensureSchema`, and by hand on the live D1 before the data landed); `body` now holds a faithful English translation from `scripts/legacy_story_translations.mjs`, `original_body` the family's own words, and the profile shows the English with a "Read the original Persian" disclosure under it. The translations keep Solar Hijri years as the archive states them with the Gregorian year in brackets, and use the name spellings already on the records. Re-running the import converges an existing story on the curated title, date, place, body and original — it no longer skips what is already there.
+  - The two derived dates the owner asked for are set: **The two Ramazans' journey to Qom = 1905** and **A day's hunting = 1906**, both from Ramazan Darabi's stated age in the document against his recorded 1893 birth. Three stories now carry dates, so three appear on the Timeline.
+  - `/api/tree` is now 345 KB (79 KB gzipped), up from ~290 KB, and still answers in ~0.34 s.
 - **Version 82** (`7fa9d89`): **the archive's eight Persian family histories are now stories** (`scripts/import_legacy_stories.mjs`). `Mohmmad_Darabi_HISTORIES/*.doc` — a hunting day outside Qazvin, the two Ramazans walking to Qom, the customs duty that nearly ruined the gut trade, life accounts of Hossein, Ramazan and Fatemeh — went in verbatim in the original Persian (translating them is the family's call, not a script's), each linked to the people it names. Linking is by explicit Persian token: `NAMES` maps a phrase as it appears in the documents to a live display name, folds the Arabic/Persian letter variants (ي/ی, ك/ک) before matching, and the run fails if any mapped name does not resolve to exactly one person. 35 person links across 8 stories; every one was checked in context. Only "A historic marriage" carries a date (the document says 1306–1308 Solar Hijri → 1927), so it is the only one on the Timeline — the other seven state no date and were deliberately left undated.
   - Stories had **no surface outside the Timeline**, and the Timeline only shows dated ones, so seven of eight would have been invisible: a person's record now has a **Stories** section listing the stories they appear in, collapsed, `dir="auto"` so the Persian sets its own direction and right-aligns.
   - The archivist reads stories too (they are part of the tree payload), so the chat can now answer from these histories.
