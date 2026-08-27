@@ -31,7 +31,9 @@ export function Markdown({ text }: { text: string }) {
   };
   for (const raw of text.replace(/\r/g, "").split("\n")) {
     const line = raw.trimEnd();
-    if (!line.trim()) { flushParagraph(); flushList(); continue; }
+    // a blank line ends a paragraph but not a list: models routinely put one
+    // between items, and each item would otherwise become its own list
+    if (!line.trim()) { flushParagraph(); continue; }
     const heading = /^\s*#{1,6}\s+(.*)$/.exec(line);
     if (heading) { flushParagraph(); flushList(); blocks.push(<p className="md-heading" key={blocks.length}>{renderInline(heading[1])}</p>); continue; }
     const bullet = /^\s*[-*•]\s+(.*)$/.exec(line);
