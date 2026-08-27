@@ -796,9 +796,9 @@ main.chat-collapsed .person-hover-preview { left:0; }
 /* ============ Maps-material pass: frosted panels, circular controls ============ */
 
 /* frosted glass for the two left panels and the hover preview */
-.chat-sidebar { background: color-mix(in srgb, var(--sidebar) 68%, transparent); backdrop-filter: blur(28px) saturate(1.35); -webkit-backdrop-filter: blur(28px) saturate(1.35); }
-.person-panel { background: rgba(253, 251, 246, .72); backdrop-filter: blur(28px) saturate(1.35); -webkit-backdrop-filter: blur(28px) saturate(1.35); }
-.person-hover-preview { background: rgba(253, 251, 246, .8); backdrop-filter: blur(28px) saturate(1.35); -webkit-backdrop-filter: blur(28px) saturate(1.35); }
+.chat-sidebar { background: color-mix(in srgb, var(--sidebar) 68%, transparent); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); }
+.person-panel { background: rgba(253, 251, 246, .72); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); }
+.person-hover-preview { background: rgba(253, 251, 246, .8); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); }
 
 /* one circular control cluster top-right: ‹ › × */
 .person-nav { right:1rem; top:1rem; gap:.4rem; }
@@ -807,7 +807,7 @@ main.chat-collapsed .person-hover-preview { left:0; }
 .person-nav .person-nav-close { font-size:1.3rem; }
 
 /* Maps-style zoom: a vertical frosted +/− stack, no label */
-.canvas-controls { flex-direction:column-reverse; gap:0; padding:.2rem; border-radius:.9rem; background:rgba(253,251,246,.75); border:1px solid rgba(0,0,0,.06); backdrop-filter:blur(18px) saturate(1.3); -webkit-backdrop-filter:blur(18px) saturate(1.3); }
+.canvas-controls { flex-direction:column-reverse; gap:0; padding:.2rem; border-radius:.9rem; background:rgba(253,251,246,.75); border:1px solid rgba(0,0,0,.06); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
 .canvas-controls button { height:2.2rem; width:2.2rem; min-width:2.2rem; font-size:1.25rem; color:var(--ink); }
 .canvas-controls button:hover { background:rgba(36,33,27,.08); }
 .canvas-controls .canvas-zoom-level { display:none; }
@@ -818,5 +818,12 @@ main.chat-collapsed .person-hover-preview { left:0; }
 .person-panel { background: rgba(253, 251, 246, .88); }
 .person-hover-preview { background: rgba(253, 251, 246, .9); }
 .chat-sidebar { background: color-mix(in srgb, var(--sidebar) 84%, transparent); }
-.canvas-fold-toggle { position:absolute; right:4.4rem; bottom:1.25rem; z-index:12; border:1px solid rgba(0,0,0,.06); border-radius:999px; background:rgba(253,251,246,.75); color:var(--ink); font-weight:600; backdrop-filter:blur(18px) saturate(1.3); -webkit-backdrop-filter:blur(18px) saturate(1.3); box-shadow:0 10px 30px rgba(45,72,57,.14); }
+.canvas-fold-toggle { position:absolute; right:4.4rem; bottom:1.25rem; z-index:12; border:1px solid rgba(0,0,0,.06); border-radius:999px; background:rgba(253,251,246,.75); color:var(--ink); font-weight:600; backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:0 10px 30px rgba(45,72,57,.14); }
 .canvas-fold-toggle:hover { background:rgba(253,251,246,.95); }
+
+/* panel entrance: transform only - an opacity keyframe can stick at half
+   strength when the tab is throttled mid-animation */
+@keyframes panel-in { from { transform: translateX(-14px); } to { transform: none; } }
+.person-panel { animation: panel-in .22s ease-out both; }
+.person-hover-preview { animation-name: preview-in-x; }
+@keyframes preview-in-x { from { transform: translateX(-14px); } to { transform: none; } }
