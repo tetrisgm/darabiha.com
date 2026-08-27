@@ -614,6 +614,37 @@ type QuestionAction =
   | { type: "append_biography"; personId: string; text: string }
   | { type: "create_spouse"; ofId: string; gender: "male" | "female" | null; nameFromAnswer: true; biography: string };
 
+/** What the archivist could not settle while reading a document becomes a
+ * question for the family rather than a line in a chat that scrolls away.
+ *
+ * The id is derived from the question itself, so re-reading the same document
+ * does not ask the family the same thing twice, and a question they have
+ * already answered stays answered. */
+export async function recordAgentQuestions(
+  conflicts: { question: string; reason: string; candidatePersonIds: string[]; evidence: string[] }[],
+  actorEmail: string,
+): Promise<number> {
+  if (!conflicts.length) return 0;
+  await ensureSchema();
+  const now = new Date().toISOString();
+  const statements = [];
+  for (const conflict of conflicts) {
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(conflict.question)));
+    const id = `agent-${[...digest.slice(0, 10)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    const evidence = [conflict.reason, ...conflict.evidence].filter(Boolean).join(" · ") || null;
+    statements.push(env.DB.prepare(`INSERT OR IGNORE INTO open_questions
+      (id, question, evidence, action_summary, proposal_json, status, created_at) VALUES (?, ?, ?, ?, ?, 'open', ?)`)
+      .bind(id, conflict.question, evidence, "Answer here and an editor will apply it.",
+        JSON.stringify({ candidatePersonIds: conflict.candidatePersonIds }), now));
+  }
+  statements.push(env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), actorEmail, "agent_questions",
+      `Reading what was sent raised ${conflicts.length} question${conflicts.length === 1 ? "" : "s"} for the family`,
+      JSON.stringify({ questions: conflicts.map((conflict) => conflict.question) }), now));
+  await env.DB.batch(statements);
+  return conflicts.length;
+}
+
 export async function listOpenQuestions(): Promise<OpenQuestion[]> {
   await ensureSchema();
   // Consistency problems are derived, not stored: the checker runs against the

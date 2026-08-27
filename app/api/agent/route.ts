@@ -4,7 +4,7 @@ import { strFromU8 } from "fflate";
 import { requireEditor } from "../../authz";
 import { cookies } from "next/headers";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
-import { listAttachments, readTree, saveAttachment } from "../../../db/store";
+import { listAttachments, readTree, recordAgentQuestions, saveAttachment } from "../../../db/store";
 import { extractArchiveEntries } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
@@ -338,6 +338,10 @@ INTERVIEWING. This archive is filled in by the family, so behave like an intervi
     const explicitConflicts = calls.map((item) => conflictFromCall(item)).filter((item): item is AgentConflict => item !== null);
     const reconciled = reconcileProposals(tree, rawProposals);
     const conflicts = [...explicitConflicts, ...reconciled.conflicts];
+    // What reading the material raised but could not settle belongs in the
+    // Fill-in tab, where the family can answer it, rather than only in a chat
+    // reply that scrolls away.
+    await recordAgentQuestions(conflicts, auth.user.email);
     const reply = response.output_text.trim() || (conflicts.length
       ? conflicts.map((conflict) => conflict.question).join("\n\n")
       : reconciled.proposals.length
