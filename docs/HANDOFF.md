@@ -1,20 +1,20 @@
 # Darabiha handoff
 
-Last updated: 2026-08-26
+Last updated: 2026-08-27
 
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 116**, `BUILD_ID=37ce44d`.
+- The live release is **Version 129**, `BUILD_ID=a70dd86`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
 - Production exposes its uncached identity at `/api/version` and as visible version text at the lower-left edge.
 - **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
 
-## Live state verified on 2026-08-26
+## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":116,"build":"37ce44d","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":129,"build":"a70dd86","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -22,12 +22,31 @@ Last updated: 2026-08-26
 - Seven people now carry portraits from the legacy archive — Hossein Zehtab Darabi and Abbas Darabi (the archive's own crops of the ~1920 group photograph), Asadollah Jaberian and Ghassem Darabi (figures 3 and 5 of that same photograph, identified by the biography's caption), and Kazem Darabiha, Nasser Darabiha and Niloufar Hashemzad Forouzan (modern family group photographs, hand-cropped). Every other card is still portrait-less; the archive holds no more images that name a person.
 - The public D1 tree currently reports **412 people (see the story-facts entry above), 687 relationships, and 14 stories** (the Persian family histories and the family biography, Versions 82–84; a duplicate bare `Aydin` beside `Aydin Darabi` was removed 2026-08-26). Gender is recorded for 405 of 412 people, assigned by `scripts/enrich_gender.mjs` from a curated given-name lexicon plus heterosexual-marriage deduction (owner-authorized assumption), with zero same-gender-marriage conflicts as cross-validation. Eight stay NULL deliberately: ambiguous names (Heshmat Ghazvini Hosseinzadeh, Karen Kamali, Meesha Darabi, Sasha Darabi, Setia Darabi, Shervine Eftekhari Rad, the coded `xAsJ 17 Bemanian`) and Ramine Darabiha, whose gender the archive should hear from Ramine rather than guess — the corrected legacy archive merged with the previously hand-entered records (see “Main tree data” below).
 - A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
-- `npm test`: 17 unit tests passed. `npx tsc --noEmit` is a mandatory release gate — `npm run build` does NOT typecheck, which is how Version 54 shipped a `ReferenceError` (see the Version 55 record below).
-- `npm run test:browser`: 30 live tests passed (2 more run only in members visibility) across Chromium and Playwright WebKit, twice consecutively. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
+- `npm test`: 34 unit tests passed (vitest — `node --test` is not this project's runner and fails on every file). `npx tsc --noEmit` is a mandatory release gate — `npm run build` does NOT typecheck, which is how Version 54 shipped a `ReferenceError` (see the Version 55 record below).
+- `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit, twice consecutively at `--workers=2`.
+  **The default 4 workers are more than this Mac can carry when something else is on it**: with load averages near 5–8 from unrelated processes, the two `openFullTree` tests time out at 20s waiting for `.tree-card` while the same tests pass in ~1s alone. That is contention, not a regression — check `uptime` before believing a timeout. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
+
+### Versions 117–129 (2026-08-27)
+
+- **Versions 117, 118, 120** (`05d3a05`, `bffb9cd`, `1d7f42b`): **one set of canvas controls, in the corner they point at** (owner: "I would bring the zoom buttons closer to the bottom right"; "the back and next icons … are not styled the same as the zoom buttons"). The zoom stacks moved from 1.2rem to `.6rem`; the back/forward pair became `.focus-nav`/`.focus-back`, measured at the same 35×35px as the zoom buttons. V120 then fixed why the Family stack still sat 34px from the right and 58px from the bottom while the tree and map canvases sat at 10/10: it was a child of `.ped-stage`, and an absolute offset there is measured from a box the view's padding insets. It is a child of `.ped-view` now, and lands at 10/10 like the other two.
+- **Version 119** (`4ce22da`): **a death is reversible, and the archive holds where people live** (owner: "If I click the field about the death, it's not possible to undo or remove it. And by default people are not assumed to be living … we're not exposing the field to say where this person is living or was living").
+  - "Record a death" used to *write* one — a single click stamped today's date onto a living person. It opens an empty input now and writes nothing until a date is typed (`InlineText` gained `autoOpen`/`onDone`).
+  - A death entered by mistake had no way back. The record carries its own correction — "Correct this - mark as living" — which clears the date, the place and the burial together behind a confirm. `presumedLiving` now weighs every death fact, not the date alone.
+  - **`residence`** runs through the schema (migrated on the live D1), `Person`, the store, the agent's tools, the interview's gap list and the GEDCOM export as a `RESI`/`PLAC` event. The interview had been asking "where they live now" with nowhere to put the answer.
+  - Found in passing: `agent-reconcile.ts` merged an update with `burialPlace: null`, and an update proposal rewrites every column — so any agent edit erased a burial place the family had entered. Fixed, with a test.
+- **Versions 121, 123–128**: **the Family board reads as one family** (owner: "I would expect this person's children to be directly on the left rather than going left and then a little bit down"; "for his siblings, I want … a little count next to them … I can't tell that when I click this person there will be other information"; "if I hover someone we should see a preview of what that information would be if I were to click them").
+  - **Children line up with the person.** The focal column centred on the card *plus* the spouse *plus* the whole sibling list, so the children sat ~226px low. Those hang off the card in `.ped-focal-below` without adding to the column's height, and the column labels were lifted out of the flow too (`.ped-col-body`), which was the last 19px. Measured: focal, children and parents all centre on the same pixel.
+  - **Every card says what it hides.** `hiddenRelativeCount()` counts the relatives a card would bring that are not already on the board; a sibling with thirteen children reads "+13" instead of looking like a leaf.
+  - **Hovering a card shows the board a click would give**, after 340ms, with a note naming who is being previewed. Two real bugs had to be beaten first, both from the same cause — *swapping the board moves the DOM under a pointer that never moved*:
+    - the new card under the still pointer fired `mouseenter`, started another preview, and the two boards traded places forever;
+    - the removal of the old card fired `pointerenter`/`pointerleave` on the stage, which the release rule read as "moved onto open canvas" and closed the preview four milliseconds after it opened — everywhere except the sibling list, which is why it looked like it worked.
+    Both now ask `travelled()`: has the pointer actually moved since this preview began? V121 also carries the profile-panel changes — facts one per row (Born and Died side by side gave each half the width for a sentence that needs all of it), Siblings moved up next to Parents, and the "Darabiha" wordmark removed from the header.
+- **Version 122** (`1b3cb55`): **the map says when it has finished framing itself** (`data-framed`). Its opening framing lands an animation frame after the records arrive, which under a loaded test run is well after first paint — the pan test sampled its baseline before that and read a drag of 80×40 as −198×270. Behaviour unchanged; it was only unobservable.
+- **Version 129** (`a70dd86`): **the saved view no longer overrules the tab you just clicked.** The restore of the last view runs on an animation frame, and its effect re-runs when the viewer resolves — after the page is interactive. A reader who clicked Tree inside that window was put back on Family a moment later.
 
 ### Versions 54–116 (2026-08-26)
 
