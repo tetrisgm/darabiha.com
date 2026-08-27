@@ -351,7 +351,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setView({ x: 0, y: 0, scale: 1 })} aria-label={`Reset zoom to 100 percent`} title="Reset zoom">{Math.round(view.scale * 100)}%</button>
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(1.1)} aria-label="Zoom in" title="Zoom in">＋</button>
     </div>
-    <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}>
+    <div className="tree-viewport" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`, "--tree-scale": String(view.scale) } as React.CSSProperties}>
       <svg className="tree-connectors">
         {spouseLines.map((line) => <path className={`spouse-connector${line.status ? " is-ended" : ""}`} key={line.id} d={line.path} fill="none" />)}
         {hooks.map((hook) => <g className="parent-connector" key={hook.key}>

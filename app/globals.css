@@ -1486,9 +1486,12 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .person-panel-bar button, .focus-back, .canvas-controls button { min-width:2.75rem; min-height:2.75rem; }
   .lang-pick { min-width:2.75rem; min-height:2.75rem; }
   .identify-matches button, .fill-row-head { min-height:2.75rem; }
-  /* the chips that fold a branch are the tree's main control on a touch
-     screen, and they were as little as 19px tall */
-  .branch-chip { min-height:2.75rem; padding:.5rem .8rem; }
+  /* The chips that fold a branch are the tree's main control on a touch
+     screen. They live inside the canvas transform, so a board opened at 0.66
+     to fit an iPad rendered a 44pt chip at 29 - the same counter-scale the
+     map markers use keeps a thumb's worth of chip at any zoom. */
+  .branch-chip { min-height:2.75rem; padding:.5rem .8rem;
+    transform:translate(-50%, 0) scale(calc(1 / var(--tree-scale, 1))); transform-origin:top center; }
   .settings-gear, .sidebar-toggle, .account-menu-button { min-width:2.75rem; min-height:2.75rem; }
   .chat-edge-reveal { width:2.75rem; }
   .public-chat-composer > button, .chat-send { min-width:2.75rem; min-height:2.75rem; }
