@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 75**, `BUILD_ID=6d357d6`.
+- The live release is **Version 77**, `BUILD_ID=677c41d`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":75,"build":"6d357d6","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":77,"build":"677c41d","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -28,8 +28,10 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–75 (2026-08-26)
+### Versions 54–77 (2026-08-26)
 
+- **Version 77** (`677c41d`): a viewer no longer sees bare "Biography"/"Siblings" headings with nothing under them — profile sections render only when they hold something or the viewer can add to them; the chat focus banner wraps instead of ellipsising. Also `scripts/normalize-deploy-config.mjs`: vinext 1.0.0-beta.3 now writes the host's placeholder `site-creator-d1`/`site-creator-r2` bindings into `dist/server/wrangler.json` (which `.wrangler/deploy/config.json` redirects wrangler to), and wrangler refuses to deploy two bindings of the same name — **run the script after every build, before `wrangler deploy`**.
+- **Version 76** (`d76d6a9`): the owner's dark-mode notes, in one pass. (1) **Legibility**: the warm sepia scale went neutral and Apple-grade (`--paper #131314`, `--stage #0b0b0c`, `--sidebar #1c1c1e`, `--card #2c2c2e`, `--ink #f5f5f7`, `--muted #9a9aa1`, `--danger #ff6b61`), and every hardcoded warm literal in `globals.css` (`rgba(38,37,32,…)`, `#2b2a25`, greenish hairlines, warm shadows) was swept to the neutral equivalents. Four rules were still light-mode and rendered as invisible text: the biography (`#3b3b3d`), the selected gender pill (light fill under light ink), the user chat bubbles (near-white on near-white) and the delete/remove controls (`#b42318`). Silhouette discs, the loading skeleton and the pedigree connectors were bright on dark and are now tinted. (2) **Profile header**: back/forward/close moved out of a floating absolute cluster into a sticky `.person-panel-bar` — a long name can no longer run under them. (3) **Section grammar**: `Parents`/`Spouse`/`Children`/`Siblings`/`Biography` are sentence-case ~15px headings with real space above, the ＋ is a 1.95rem glass circle at the far end of its own heading row, and the Born/Died stat labels are muted rather than accent. (4) **Person-scoped chat**: selecting someone replaces the generic welcome and family-wide prompts with `PersonFocusBanner` (portrait, name, life line, relationship counts, and a plain sentence saying what typing here does), the placeholder becomes "Ask about {first}…", and the old composer context chip is gone. (5) The two attachment buttons became one ＋ with an "Add files / Add a folder" menu (`AttachMenu`). (6) The canvas hint retires after five seconds or on the first selection.
 - **Version 75** (`6d357d6`): the stage gradients flattened to a single dark tone (`#141613`) on the Tree/Family canvas and the timeline/map background — with the contained, docked layout the gradient added nothing (owner call).
 - **Version 74** (`ace7bc6`): **the site is dark** — the owner's Maps reference was dark mode, and the frost finally has something to show against. Tokens flipped to a warm near-black palette (`--paper #171614`, raised `--card #24231f`, bright sage `--accent #8fba9c` for text/rings with a deeper `--accent-fill #457156` for primary buttons, hairline `--line rgba(255,255,255,.12)`); every hardcoded light value in `globals.css` was swept to a dark equivalent (cards, glass, borders, hovers, error/amber tints, portrait tints, the world map, dialogs; grain switched to screen blend); the Tree/Family stage sits on a dark green-tinted radial gradient (`.stage-bg` + the canvas rule); inputs/selects get dark surfaces; JSX light classes (bg-white, red/amber notices, `bg-[#eef4f1]`) swept. Verified live: dark frosted profile with content hazing beneath, dark rowed cards, dark chrome and glass controls over the gradient stage.
 - **Version 73** (`fddcacd`): the ＋ Add a person button and its dialog are removed (people are created through the chat and the profile's relationship pickers); the chat rail default narrows 15% to 330px (`--chat-width` fallbacks updated; still user-resizable 300–560).
@@ -221,8 +223,15 @@ Production deployment:
 
 ```sh
 npm run build
-npx wrangler deploy --config wrangler.jsonc --keep-vars
+node scripts/normalize-deploy-config.mjs
+npx wrangler deploy --keep-vars
 ```
+
+The normalize step is required: `vinext build` writes `dist/server/wrangler.json`
+and points wrangler at it through `.wrangler/deploy/config.json`, and since
+vinext 1.0.0-beta.3 that generated file carries the host's placeholder
+`site-creator-d1` / `site-creator-r2` bindings next to ours. Wrangler rejects
+duplicate binding names, so the deploy fails until the placeholders are dropped.
 
 Post-deploy identity check:
 
