@@ -322,7 +322,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
       {[...primaryChildren.keys()].filter((id) => visibleSet.has(id) && positions.has(id)).map((id) => {
         const p = positions.get(id)!;
         const isFolded = collapsed.has(id);
-        return <button key={`chip-${id}`} type="button" className="branch-chip" style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} family members` : "Fold this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); const next = new Set(collapsed); if (isFolded) next.delete(id); else next.add(id); setCollapsedState(next); }}>{isFolded ? `▸ ${hiddenCounts.get(id) ?? 0}` : "▾"}</button>;
+        return <button key={`chip-${id}`} type="button" className="branch-chip" style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} hidden family members` : "Hide this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); const next = new Set(collapsed); if (isFolded) next.delete(id); else next.add(id); setCollapsedState(next); }}>{isFolded ? `Show ${hiddenCounts.get(id) ?? 0} more` : "Hide branch"}</button>;
       })}
     </div>
     <CanvasCursor mode={cursorMode} cursorRef={cursorRef} />
