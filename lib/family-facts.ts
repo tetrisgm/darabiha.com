@@ -90,8 +90,14 @@ export function familyFactoids(tree: FamilyTree, today = new Date()): FamilyFact
     if (parts.length > 1) { const name = parts.slice(1).join(" "); surnames.set(name, (surnames.get(name) ?? 0) + 1); }
     if (parts.length) given.set(parts[0], (given.get(parts[0]) ?? 0) + 1);
   }
-  const busiest = [...decades.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (busiest && busiest[1] > 2) facts.push({ kind: "factoid", text: `More of the family was born in the ${busiest[0]} than in any other decade — ${busiest[1]} births.`, ask: `Who was born in the ${busiest[0]}, and what was happening to the family then?` });
+  // Most of the 412 records carry no birth year, so this is a fact about the
+  // dates the archive holds, not about the family - and it is only worth
+  // saying when the leading decade is clearly ahead of the next one.
+  const byDecade = [...decades.entries()].sort((a, b) => b[1] - a[1]);
+  const datedBirths = [...decades.values()].reduce((sum, count) => sum + count, 0);
+  if (byDecade[0] && byDecade[0][1] >= 5 && byDecade[0][1] >= (byDecade[1]?.[1] ?? 0) + 2) {
+    facts.push({ kind: "factoid", text: `Of the ${datedBirths} birth years the archive records, more fall in the ${byDecade[0][0]} than in any other decade — ${byDecade[0][1]} of them.`, ask: `Who was born in the ${byDecade[0][0]}, and what was happening to the family then?` });
+  }
 
   const twoNames = [...surnames.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2);
   if (twoNames.length === 2 && twoNames[1][1] > 2) {
