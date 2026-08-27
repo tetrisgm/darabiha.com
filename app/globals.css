@@ -1372,3 +1372,19 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .archive-view-switcher { max-width:100%; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
 .archive-view-switcher::-webkit-scrollbar { display:none; }
 .archive-view-switcher button { flex:none; }
+
+/* The bar's right-hand group and the canvas column were still pushing the
+   page past a phone: 451px of Sign in pill on a 390px screen. The tab strip
+   gives up its space first, the columns are allowed to shrink, and on a
+   phone the language switcher keeps its flags but drops its words while the
+   search - which the chat and the List view both cover - stands down. */
+.family-shell > * { min-width:0; }
+@media (max-width: 900px) {
+  .site-action-bar .archive-view-switcher { flex:1 1 auto; min-width:0; }
+  .site-action-bar > :last-child { flex:none; }
+}
+@media (max-width: 720px) {
+  .lang-switch-label, .lang-pick-name { display:none; }
+  .lang-switch { gap:.1rem; padding:.1rem; }
+  .tree-search { display:none; }
+}
