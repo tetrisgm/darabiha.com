@@ -301,7 +301,9 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const commit = (person: Person, keepLayout: boolean, element: HTMLElement | null) => {
     onPreview(null);
     if (keepLayout) { onSelectOnly(person); return; }
-    holdInPlace.current = element?.getBoundingClientRect() ?? null;
+    // the card, not the button inside it: the focal card is measured the
+    // same way, and a button sits differently within a taller focal card
+    holdInPlace.current = element?.closest(".ped-card")?.getBoundingClientRect() ?? null;
     onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
