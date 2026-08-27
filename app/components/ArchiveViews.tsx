@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { buildTimeline, mapFamilyPlaces, type MappedPlace } from "../../lib/archive-views";
 import { buildFamilyStats } from "../../lib/family-stats";
 import { onThisDay } from "../../lib/family-facts";
@@ -29,6 +29,19 @@ export function TimelineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
 export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSelectPlace: (place: MappedPlace) => void }) {
   const { t } = useLanguage();
   const { mapped, unmapped } = mapFamilyPlaces(tree);
+  // Two cities a few kilometres apart (Tehran and Qazvin) overlap their labels
+  // at any sane zoom. The busier place keeps its label; the quieter one shows
+  // its count and reveals its name on hover.
+  const quietLabels = useMemo(() => {
+    const quiet = new Set<string>();
+    const ranked = [...mapped].sort((a, b) => b.people.length - a.people.length);
+    const kept: typeof ranked = [];
+    for (const place of ranked) {
+      const collides = kept.some((other) => Math.abs(other.x - place.x) < 6 && Math.abs(other.y - place.y) < 2.4);
+      if (collides) quiet.add(place.key); else kept.push(place);
+    }
+    return quiet;
+  }, [mapped]);
   // The map pans and zooms with the same grammar as the Tree and Family
   // canvases: drag or wheel to pan, ctrl/cmd+wheel or the buttons to zoom.
   // Zoom bottoms out at 1 - the frame already shows the whole world.
@@ -36,6 +49,34 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
   const [scale, setScale] = useState(1);
   const dragRef = useRef<{ id: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const [panning, setPanning] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const framed = useRef(false);
+  // Open on the family, not on the whole planet: frame the recorded places
+  // (Paris to Darab, in this archive) with room to breathe.
+  useEffect(() => {
+    if (framed.current || !mapped.length) return;
+    const frame = requestAnimationFrame(() => {
+      const stage = stageRef.current, board = boardRef.current;
+      if (!stage || !board) return;
+      const stageBox = stage.getBoundingClientRect();
+      const boardBox = board.getBoundingClientRect();
+      if (!stageBox.width || !boardBox.width) return;
+      framed.current = true;
+      const xs = mapped.map((place) => place.x / 100), ys = mapped.map((place) => place.y / 100);
+      const spanX = Math.max(...xs) - Math.min(...xs), spanY = Math.max(...ys) - Math.min(...ys);
+      const midX = (Math.max(...xs) + Math.min(...xs)) / 2, midY = (Math.max(...ys) + Math.min(...ys)) / 2;
+      // 2.2x padding keeps labels off the edges; never zoom past 4x
+      const next = Math.max(1, Math.min(4,
+        Math.min(stageBox.width / Math.max(boardBox.width * spanX * 2.2, 1), stageBox.height / Math.max(boardBox.height * spanY * 2.6, 1))));
+      setScale(next);
+      setPan({
+        x: (boardBox.width * (0.5 - midX)) * next,
+        y: (boardBox.height * (0.5 - midY)) * next,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mapped]);
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button")) return;
     dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
@@ -66,7 +107,7 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
   // Full-bleed like the other canvases: the stage is the whole tab, and the
   // 2:1 board (which the marker percentages are calibrated to) covers it.
   return <section className="archive-view family-map-view" aria-label="Family places">
-    <div className="world-map" role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"}
+    <div className="world-map" ref={stageRef} role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}>
       <div className="canvas-controls map-zoom" role="group" aria-label="Map zoom controls">
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(0.9, { x: 0, y: 0 })} aria-label={t("map.zoomOut")} title={t("map.zoomOut")}>−</button>
@@ -74,11 +115,11 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(1.1, { x: 0, y: 0 })} aria-label={t("map.zoomIn")} title={t("map.zoomIn")}>＋</button>
       </div>
       <div className="world-map-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`, "--map-scale": String(scale) } as React.CSSProperties}>
-      <div className="world-map-board">
+      <div className="world-map-board" ref={boardRef}>
       <svg viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {WORLD_COUNTRY_PATHS.map((d, index) => <path d={d} key={index} />)}
       </svg>
-      {mapped.map((location) => <button type="button" className="map-marker" style={{ left: `${location.x}%`, top: `${location.y}%`, zIndex: 4 + location.people.length }} key={location.key} onClick={() => onSelectPlace(location)} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
+      {mapped.map((location) => <button type="button" className={`map-marker ${quietLabels.has(location.key) ? "is-quiet" : ""}`} style={{ left: `${location.x}%`, top: `${location.y}%`, zIndex: 4 + location.people.length }} key={location.key} onClick={() => onSelectPlace(location)} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
       {!mapped.length && <p className="map-empty">Add a birth or death city and country to place someone on the map.</p>}
       </div>
       </div>

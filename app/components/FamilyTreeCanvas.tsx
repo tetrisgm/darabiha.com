@@ -213,11 +213,16 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     return () => cancelAnimationFrame(frame);
   }, [focusPersonId, visibleSet, fullLayout, collapsed]);
   const lastCentered = useRef<string | null>(null);
+  const enteredView = useRef(false);
   useEffect(() => {
     const person = focusPersonId ? tree.people.find((candidate) => candidate.id === focusPersonId) : undefined;
     if (!person || !positions.has(person.id) || lastCentered.current === person.id) return;
+    const first = !enteredView.current;
+    enteredView.current = true;
     lastCentered.current = person.id;
-    centerOn(person);
+    // arriving in the Tree view should simply BE centred; only a later change
+    // of focus is worth animating
+    centerOn(person, !first);
   }, [focusPersonId, positions]);
   // open on the patriarch: world x 0 is the layout anchor
   const centered = useRef(false);

@@ -110,12 +110,14 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   // Map mode: a clicked city opens the panel as a list of its people; opening
   // one of them swaps in the profile, and closing it returns to the list.
   const [placeFocus, setPlaceFocus] = useState<MappedPlace | null>(null);
-  const [chatWidth, setChatWidth] = useState(330);
+  // The profile panel takes exactly this width, so the two are one column and
+  // no view is ever half-hidden behind a panel.
+  const [chatWidth, setChatWidth] = useState(480);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       try {
         const saved = Number(window.localStorage.getItem("darabiha-chat-width"));
-        if (saved >= 300 && saved <= 560) setChatWidth(saved);
+        if (saved >= 420 && saved <= 620) setChatWidth(saved);
       } catch { /* private mode */ }
     });
     return () => cancelAnimationFrame(frame);
@@ -124,7 +126,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = chatWidth;
-    const clampWidth = (value: number) => Math.min(560, Math.max(300, value));
+    const clampWidth = (value: number) => Math.min(620, Math.max(420, value));
     // a fast resize drag sweeps across the chat text; suspend selection until release
     document.body.style.userSelect = "none";
     const onMove = (move: PointerEvent) => setChatWidth(clampWidth(startWidth + move.clientX - startX));

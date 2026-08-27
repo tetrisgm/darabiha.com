@@ -27,7 +27,13 @@ html, body { overscroll-behavior: none; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); font-family: var(--font-sans), Arial, sans-serif; }
 button, textarea { font: inherit; }
-button { cursor: pointer; }
+/* Safari drops back to cursor:auto over a button's descendants when they are
+   positioned or laid out as flex/grid children, so every interactive element
+   states its cursor AND hands it down. (The pattern ramine.net settled on.) */
+button, [role="button"], [role="tab"], summary, label[for], a[href],
+input[type="button"], input[type="submit"], input[type="reset"] { cursor: pointer; }
+button *, [role="button"] *, [role="tab"] *, summary *, a[href] * { cursor: inherit; }
+button:disabled, button:disabled * { cursor: default; }
 
 .family-shell { position: relative; isolation: isolate; }
 .site-action-bar { left: 430px; right: 0; transition: left 220ms ease; }
@@ -663,10 +669,10 @@ main.chat-collapsed .person-drawer-backdrop { left: 0; }
 .person-add-photo:hover { border-color:var(--accent); color:var(--accent); background:var(--wash); }
 
 /* chat sidebar: resizable, driven by --chat-width */
-.chat-sidebar { width:var(--chat-width,330px); flex:0 0 var(--chat-width,330px); }
+.chat-sidebar { width:var(--chat-width,480px); flex:0 0 var(--chat-width,480px); }
 .chat-resize-handle { position:absolute; top:0; right:-3px; bottom:0; width:7px; cursor:col-resize; z-index:35; }
 .chat-resize-handle:hover { background:linear-gradient(to right, transparent, rgba(67,104,79,.25), transparent); }
-.site-action-bar { left:calc(var(--chat-width,330px) + 16px); }
+.site-action-bar { left:calc(var(--chat-width,480px) + 16px); }
 main.chat-collapsed .site-action-bar { left:16px; }
 
 /* example prompts in the empty thread */
@@ -730,10 +736,10 @@ main.chat-collapsed .site-action-bar { left:16px; }
 /* the action bar yields to the profile panel instead of covering it */
 main.has-person .site-action-bar { left:calc(var(--chat-width,330px) + 30rem + 16px); }
 main.chat-collapsed.has-person .site-action-bar { left:calc(30rem + 16px); }
-@media (max-width: 900px) { main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-bar { left:calc(var(--chat-width,330px) + 16px); } main.chat-collapsed.has-person .site-action-bar { left:16px; } }
+@media (max-width: 900px) { main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-bar { left:calc(var(--chat-width,480px) + 16px); } main.chat-collapsed.has-person .site-action-bar { left:16px; } }
 
 /* hover preview: slides over the profile slot */
-.person-hover-preview { position:fixed; top:0; bottom:0; left:var(--chat-width,330px); z-index:40; width:min(100%,30rem); overflow:hidden; animation:preview-in .25s var(--ease) both; pointer-events:none; }
+.person-hover-preview { position:fixed; top:0; bottom:0; left:var(--chat-width,480px); z-index:40; width:min(100%,30rem); overflow:hidden; animation:preview-in .25s var(--ease) both; pointer-events:none; }
 @media (max-width: 900px) { .person-hover-preview { left:0; z-index:65; } }
 main.chat-collapsed .person-hover-preview { left:0; }
 @keyframes preview-in { from { opacity:0; transform:translateX(-14px); } to { opacity:1; transform:none; } }
@@ -810,11 +816,11 @@ main.chat-collapsed .person-hover-preview { left:0; }
 /* ============ Maps parity: docked bar, dense panel, rowed lists ============ */
 
 /* the action bar docks flush like Maps chrome - no island */
-.site-action-bar { top:0; height:3.6rem; right:0; border-radius:0; border:0; border-bottom:1px solid rgba(255,255,255,.09); box-shadow:none; left:var(--chat-width,330px); background:rgba(24,24,26,.72); }
+.site-action-bar { top:0; height:3.6rem; right:0; border-radius:0; border:0; border-bottom:1px solid rgba(255,255,255,.09); box-shadow:none; left:var(--chat-width,480px); background:rgba(24,24,26,.72); }
 main.chat-collapsed .site-action-bar { left:0; }
-main.has-person .site-action-bar { left:calc(var(--chat-width,330px) + 30rem); }
+main.has-person .site-action-bar { left:var(--chat-width,480px); }
 main.chat-collapsed.has-person .site-action-bar { left:30rem; }
-@media (max-width: 900px) { main.has-person .site-action-bar { left:var(--chat-width,330px); } main.chat-collapsed.has-person .site-action-bar { left:0; } }
+@media (max-width: 900px) { main.has-person .site-action-bar { left:var(--chat-width,480px); } main.chat-collapsed.has-person .site-action-bar { left:0; } }
 
 /* hero: name + one subtitle line, Maps-style */
 .person-subtitle { margin:.3rem 0 0; color:var(--muted); font-size:.92rem; }
@@ -1018,7 +1024,7 @@ main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-ba
 .person-hover-preview { left:0; width:max(var(--chat-width,330px), 30rem); z-index:46; }
 @media (max-width: 900px) {
   .person-panel { position:fixed; width:min(100%,26rem); z-index:60; }
-  main.has-person .site-action-bar { left:var(--chat-width,330px); }
+  main.has-person .site-action-bar { left:var(--chat-width,480px); }
   main.chat-collapsed.has-person .site-action-bar { left:0; }
   .person-hover-preview { width:min(100%,26rem); }
 }
@@ -1142,10 +1148,10 @@ html[lang="fa"] { font-variant-numeric: normal; }
 [dir="rtl"] .chat-resize-handle { right: auto; left: -3px; }
 [dir="rtl"] .chat-edge-reveal { left: auto; right: 0; border-left: 1px solid var(--line); border-right: 0;
   border-radius: .8rem 0 0 .8rem; transform: translateY(-50%) translateX(0) scaleX(-1); }
-[dir="rtl"] .site-action-bar { left: 0; right: var(--chat-width,330px); }
+[dir="rtl"] .site-action-bar { left: 0; right: var(--chat-width,480px); }
 [dir="rtl"] main.chat-collapsed .site-action-bar { right: 0; }
 [dir="rtl"] main.has-person .site-action-bar, [dir="rtl"] main.chat-collapsed.has-person .site-action-bar {
-  left: 0; right: max(var(--chat-width,330px), 30rem); }
+  left: 0; right: var(--chat-width,480px); }
 [dir="rtl"] .person-panel { left: auto; right: 0; border-right: 0; border-left: 1px solid var(--line);
   box-shadow: -18px 0 50px rgba(0,0,0,.45); }
 [dir="rtl"] .person-hover-preview { left: auto; right: 0; }
@@ -1181,3 +1187,9 @@ html[lang="fa"] { font-variant-numeric: normal; }
 @media (max-width: 1700px) { .lang-pick-name { display:none; } }
 @media (max-width: 1280px) { .lang-switch-label { display:none; } }
 @media (max-width: 1080px) { .lang-switch { display:none; } }
+/* a crowded pair of cities: the quieter one keeps its disc, and its name
+   appears when you point at it */
+.map-marker.is-quiet > strong { opacity:0; transform:translateX(-.35rem); pointer-events:none;
+  transition:opacity .15s var(--ease), transform .15s var(--ease); }
+.map-marker.is-quiet:hover > strong, .map-marker.is-quiet:focus-visible > strong { opacity:1; transform:none; }
+.map-marker:hover { z-index:40 !important; }
