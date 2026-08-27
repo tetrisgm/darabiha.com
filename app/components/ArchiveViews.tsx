@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { buildTimeline, mapFamilyPlaces, type MappedPlace } from "../../lib/archive-views";
+import { buildFamilyStats } from "../../lib/family-stats";
 import { WORLD_COUNTRY_PATHS } from "../../lib/world-map-paths";
 import type { FamilyTree, Person } from "../../lib/types";
 
@@ -79,5 +80,61 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
       </div>
     </div>
     {unmapped.length > 0 && <p className="unmapped-places">Recorded locations awaiting map coordinates: {unmapped.join(" · ")}</p>}
+  </section>;
+}
+
+
+/** What the archive knows about itself: how complete it is, how long the
+ * family has lived, where it has lived, and which names recur. Every number is
+ * computed from the records as they stand. */
+export function StatisticsView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+  const stats = buildFamilyStats(tree);
+  const pct = (count: number) => stats.people ? Math.round((count / stats.people) * 100) : 0;
+  const peak = Math.max(1, ...stats.births.map((entry) => entry.count));
+  const bars = (rows: { label: string; count: number }[]) => {
+    const most = Math.max(1, ...rows.map((row) => row.count));
+    return <ul className="stat-bars">{rows.map((row) => <li key={row.label}>
+      <span className="stat-bar-label">{row.label}</span>
+      <span className="stat-bar-track"><span className="stat-bar-fill" style={{ width: `${(row.count / most) * 100}%` }} /></span>
+      <span className="stat-bar-count">{row.count}</span>
+    </li>)}</ul>;
+  };
+  return <section className="archive-view archive-stats" aria-label="Family statistics">
+    <div className="archive-view-heading"><p className="eyebrow">Statistics</p><h2>The shape of the family</h2><p>Everything here is counted from the records as they stand today.</p></div>
+    <div className="stat-cards">
+      <div className="stat-card"><strong>{stats.people}</strong><span>people recorded</span></div>
+      <div className="stat-card"><strong>{stats.relationships.parent + stats.relationships.spouse}</strong><span>{stats.relationships.parent} parent links · {stats.relationships.spouse} marriages</span></div>
+      <div className="stat-card"><strong>{stats.stories}</strong><span>family stories</span></div>
+      <div className="stat-card"><strong>{stats.lifespans.median ?? "—"}</strong><span>median lifespan, from {stats.lifespans.count} completed lives</span></div>
+      {stats.lifespans.longest && <div className="stat-card"><strong>{stats.lifespans.longest.years}</strong><span>the longest life recorded — {stats.lifespans.longest.name}</span></div>}
+      <div className="stat-card"><strong>{stats.men} / {stats.women}</strong><span>men / women{stats.unrecordedGender ? ` · ${stats.unrecordedGender} unrecorded` : ""}</span></div>
+    </div>
+    <div className="stat-sections">
+      <section><h3>How complete the records are</h3>
+        {bars([
+          { label: `Birth date (${pct(stats.withBirthDate)}%)`, count: stats.withBirthDate },
+          { label: `Biography (${pct(stats.withBiography)}%)`, count: stats.withBiography },
+          { label: `Photograph (${pct(stats.withPhoto)}%)`, count: stats.withPhoto },
+        ])}
+        <p className="stat-note">Out of {stats.people} people. The Fill-in tab lists what is missing, record by record.</p>
+      </section>
+      <section><h3>Generations</h3>{bars(stats.generations)}</section>
+      {stats.births.length > 0 && <section><h3>Recorded births by decade</h3>
+        <ul className="stat-decades">{stats.births.map((entry) => <li key={entry.decade}>
+          <span className="stat-decade-bar" style={{ height: `${Math.max(6, (entry.count / peak) * 100)}%` }} title={`${entry.count} in the ${entry.decade}`} />
+          <span className="stat-decade-label">{entry.decade.replace("0s", "0")}</span>
+        </li>)}</ul>
+        <p className="stat-note">Only {stats.withBirthDate} of {stats.people} records carry a birth date, so this is the shape of what is known, not of the family.</p>
+      </section>}
+      <section><h3>Places</h3>{bars(stats.places)}</section>
+      <section><h3>Family names</h3>{bars(stats.surnames)}</section>
+      <section><h3>Given names</h3>{bars(stats.givenNames)}</section>
+      <section><h3>Largest families</h3>
+        <ul className="stat-people">{stats.largestFamilies.map((entry) => {
+          const person = tree.people.find((candidate) => candidate.displayName === entry.name);
+          return <li key={entry.name}><button type="button" disabled={!person} onClick={() => person && onSelect(person)}>{entry.name}</button><span>{entry.children} children</span></li>;
+        })}</ul>
+      </section>
+    </div>
   </section>;
 }

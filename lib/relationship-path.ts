@@ -137,7 +137,10 @@ export function relationshipSentence(result: RelationshipResult): string {
     return `${result.from.displayName} and ${result.to.displayName} are not connected by any recorded relationship.`;
   }
   if (result.relationship === "the same person") return `${result.from.displayName} is the same person.`;
-  const shared = result.sharedAncestors.length
+  // on a direct line the "shared ancestor" is one of the two people, which
+  // reads as nonsense ("Haj Chorok is your great-grandfather. They share Haj Chorok.")
+  const direct = result.sharedAncestors.some((person) => person.id === result.from.id || person.id === result.to.id);
+  const shared = result.sharedAncestors.length && !direct
     ? ` They share ${result.sharedAncestors.map((person) => person.displayName).join(" and ")}.`
     : "";
   return `${result.to.displayName} is ${result.from.displayName}'s ${result.relationship}.${shared}`;

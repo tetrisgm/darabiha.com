@@ -1046,3 +1046,28 @@ main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-ba
 .chat-fact:disabled { cursor:default; }
 .chat-fact-label { display:block; color:var(--accent); font-size:.62rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; margin-bottom:.3rem; }
 .chat-fact > span:last-child { display:block; font-size:.86rem; line-height:1.5; letter-spacing:-.005em; }
+
+/* statistics */
+.archive-stats { overflow-y:auto; }
+.stat-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(13rem, 1fr)); gap:.7rem; margin-top:2.2rem; max-width:74rem; }
+.stat-card { border:1px solid var(--line); border-radius:1rem; background:rgba(44,44,46,.72); padding:1rem 1.1rem; }
+.stat-card strong { display:block; font-family:var(--font-serif),Georgia,serif; font-size:2rem; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.stat-card span { display:block; margin-top:.25rem; color:var(--muted); font-size:.8rem; line-height:1.45; }
+.stat-sections { display:grid; grid-template-columns:repeat(auto-fit, minmax(20rem, 1fr)); gap:1.6rem 2.4rem; margin-top:2.4rem; max-width:74rem; }
+.stat-sections h3 { margin:0 0 .8rem; font-family:var(--font-serif),Georgia,serif; font-size:1.15rem; font-weight:600; }
+.stat-bars { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.45rem; }
+.stat-bars li { display:grid; grid-template-columns:minmax(6rem, 11rem) 1fr auto; align-items:center; gap:.6rem; font-size:.82rem; }
+.stat-bar-label { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stat-bar-track { height:.5rem; border-radius:999px; background:rgba(255,255,255,.07); overflow:hidden; }
+.stat-bar-fill { display:block; height:100%; border-radius:999px; background:color-mix(in srgb,var(--accent) 70%,transparent); }
+.stat-bar-count { color:var(--ink); font-variant-numeric:tabular-nums; font-size:.78rem; }
+.stat-note { margin:.7rem 0 0; color:var(--muted); font-size:.76rem; line-height:1.5; }
+.stat-decades { list-style:none; margin:0; padding:0; display:flex; align-items:flex-end; gap:.25rem; height:7rem; }
+.stat-decades li { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:.35rem; }
+.stat-decade-bar { width:100%; border-radius:.25rem .25rem 0 0; background:color-mix(in srgb,var(--accent) 55%,transparent); }
+.stat-decade-label { color:var(--muted); font-size:.6rem; font-variant-numeric:tabular-nums; }
+.stat-people { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.3rem; }
+.stat-people li { display:flex; align-items:baseline; justify-content:space-between; gap:1rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+.stat-people button { font-size:.86rem; font-weight:600; text-align:left; }
+.stat-people button:not(:disabled):hover { color:var(--accent); }
+.stat-people span { color:var(--muted); font-size:.78rem; font-variant-numeric:tabular-nums; }

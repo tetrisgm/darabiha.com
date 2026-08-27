@@ -59,4 +59,8 @@ describe("relationship paths", () => {
     const result = describeRelationship(tree, "me", "cous")!;
     expect(relationshipSentence(result)).toBe("Cousin is Me's first cousin. They share Grandfather and Grandmother.");
   });
+
+  it("does not claim a direct ancestor is shared with himself", () => {
+    expect(relationshipSentence(describeRelationship(tree, "me", "gf")!)).toBe("Grandfather is Me's grandfather.");
+  });
 });
