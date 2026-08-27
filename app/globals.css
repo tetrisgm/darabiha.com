@@ -247,7 +247,7 @@ button:disabled, button:disabled * { cursor: default; }
 .family-canvas img { -webkit-user-drag: none; user-select: none; }
 .build-version { position: fixed; left: .75rem; bottom: .55rem; z-index: 20; color: rgba(255,255,255,.52); font: 500 .65rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .03em; pointer-events: none; }
 .tree-viewport { position:absolute; inset:0; z-index:1; transform-origin:center; pointer-events:none; touch-action:none; }
-.canvas-controls { position:absolute; right:1.25rem; bottom:1.25rem; z-index:12; display:flex; align-items:center; gap:.15rem; border:1px solid rgba(255,255,255,.09); border-radius:.75rem; background:rgba(44,44,46,.88); padding:.25rem; color:var(--ink); box-shadow:0 10px 30px rgba(0,0,0,.45); backdrop-filter:blur(14px); }
+.canvas-controls { position:absolute; right:.6rem; bottom:.6rem; z-index:12; display:flex; align-items:center; gap:.15rem; border:1px solid rgba(255,255,255,.09); border-radius:.75rem; background:rgba(44,44,46,.88); padding:.25rem; color:var(--ink); box-shadow:0 10px 30px rgba(0,0,0,.45); backdrop-filter:blur(14px); }
 .canvas-controls button { display:flex; height:2rem; min-width:2rem; align-items:center; justify-content:center; border:0; border-radius:.5rem; background:transparent; color:inherit; font-size:1.15rem; line-height:1; }
 .canvas-controls button:hover { background:rgba(255,255,255,.14); }
 .canvas-controls .canvas-zoom-level { min-width:3.6rem; font-size:.72rem; font-variant-numeric:tabular-nums; }
@@ -731,7 +731,7 @@ main.chat-collapsed .site-action-bar { left:16px; }
 .ped-card.is-focal { transform:none; }
 @keyframes ped-swap { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
 .ped-columns { animation: ped-swap .45s var(--ease) both; }
-.ped-zoom { position:absolute; right:1.2rem; bottom:1.2rem; z-index:5; }
+.ped-zoom { position:absolute; right:.6rem; bottom:.6rem; z-index:5; }
 
 /* the action bar yields to the profile panel instead of covering it */
 main.has-person .site-action-bar { left:calc(var(--chat-width,330px) + 30rem + 16px); }
@@ -986,7 +986,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .world-map[data-panning="true"] { cursor:-webkit-grabbing; cursor:grabbing; }
 .world-map-layer { position:absolute; inset:0; transform-origin:center; }
 .world-map-layer svg { position:absolute; inset:3%; width:94%; height:94%; }
-.world-map .map-zoom { position:absolute; right:1rem; bottom:1rem; z-index:6; }
+.world-map .map-zoom { position:absolute; right:.6rem; bottom:.6rem; z-index:6; }
 .world-map .map-marker { cursor:pointer; }
 
 /* the map fills its tab edge-to-edge, like every other canvas */
@@ -1155,7 +1155,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
 [dir="rtl"] .person-panel { left: auto; right: 0; border-right: 0; border-left: 1px solid var(--line);
   box-shadow: -18px 0 50px rgba(0,0,0,.45); }
 [dir="rtl"] .person-hover-preview { left: auto; right: 0; }
-[dir="rtl"] .canvas-controls, [dir="rtl"] .ped-zoom, [dir="rtl"] .world-map .map-zoom { right: auto; left: 1.2rem; }
+[dir="rtl"] .canvas-controls, [dir="rtl"] .ped-zoom, [dir="rtl"] .world-map .map-zoom { right: auto; left: .6rem; }
 [dir="rtl"] .canvas-legend { left: auto; right: 16px; }
 [dir="rtl"] .build-version { left: auto; right: .75rem; }
 [dir="rtl"] .family-map-view .unmapped-places { left: auto; right: 1rem; }
