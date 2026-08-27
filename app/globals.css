@@ -1332,3 +1332,19 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .person-panel { background:var(--sidebar); }
   .person-panel-bar { background:var(--sidebar); }
 }
+
+/* A phone has no hover, so the photograph's actions - set as portrait, who
+   else is in this, remove - were unreachable: they live behind :hover on the
+   tile. On a coarse pointer they sit under the photograph instead, always
+   visible, at a size a thumb can hit. */
+@media (hover: none) {
+  .person-modal-v2 .photo-tile { width:calc(50% - .25rem); aspect-ratio:auto; overflow:visible; }
+  .person-modal-v2 .photo-tile img { aspect-ratio:1; border-radius:.7rem; }
+  .person-modal-v2 .photo-tile-actions { position:static; inset:auto; opacity:1; flex-direction:row; flex-wrap:wrap;
+    gap:.25rem; padding:.35rem 0 0; background:transparent; }
+  .person-modal-v2 .photo-tile-actions button { flex:1 1 auto; min-height:2rem; font-size:.7rem; }
+  .person-modal-v2 .photo-tile-badge { bottom:auto; top:.35rem; }
+  /* thumb-sized rather than cursor-sized */
+  .gender-pick { padding:.4rem .95rem; }
+  .person-modal-v2 .inline-edit { padding:.25rem .4rem; }
+}
