@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { buildTimeline, mapFamilyPlaces, type MappedPlace } from "../../lib/archive-views";
 import { buildFamilyStats } from "../../lib/family-stats";
 import { onThisDay } from "../../lib/family-facts";
@@ -29,19 +29,9 @@ export function TimelineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
 export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSelectPlace: (place: MappedPlace) => void }) {
   const { t } = useLanguage();
   const { mapped, unmapped } = mapFamilyPlaces(tree);
-  // Two cities a few kilometres apart (Tehran and Qazvin) overlap their labels
-  // at any sane zoom. The busier place keeps its label; the quieter one shows
-  // its count and reveals its name on hover.
-  const quietLabels = useMemo(() => {
-    const quiet = new Set<string>();
-    const ranked = [...mapped].sort((a, b) => b.people.length - a.people.length);
-    const kept: typeof ranked = [];
-    for (const place of ranked) {
-      const collides = kept.some((other) => Math.abs(other.x - place.x) < 6 && Math.abs(other.y - place.y) < 2.4);
-      if (collides) quiet.add(place.key); else kept.push(place);
-    }
-    return quiet;
-  }, [mapped]);
+  // The board's own width, untransformed, so screen distances can be worked
+  // out from the percentages the places are placed at.
+  const [boardWidth, setBoardWidth] = useState(0);
   // The map pans and zooms with the same grammar as the Tree and Family
   // canvases: drag or wheel to pan, ctrl/cmd+wheel or the buttons to zoom.
   // Zoom bottoms out at 1 - the frame already shows the whole world.
@@ -52,6 +42,19 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
   const stageRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const framed = useRef(false);
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const measure = () => setBoardWidth(board.offsetWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(board);
+    return () => observer.disconnect();
+  }, []);
+
+  // a handful of places: cheap enough to plan every render, and the React
+  // Compiler memoizes it for free
+  const labelPlan = planLabels(mapped, scale, boardWidth);
   // Open on the family, not on the whole planet: frame the recorded places
   // (Paris to Darab, in this archive) with room to breathe.
   useEffect(() => {
@@ -119,7 +122,7 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
       <svg viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {WORLD_COUNTRY_PATHS.map((d, index) => <path d={d} key={index} />)}
       </svg>
-      {mapped.map((location) => <button type="button" className={`map-marker ${quietLabels.has(location.key) ? "is-quiet" : ""}`} style={{ left: `${location.x}%`, top: `${location.y}%`, zIndex: 4 + location.people.length }} key={location.key} onClick={() => onSelectPlace(location)} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
+      {mapped.map((location) => <button type="button" className={`map-marker is-${labelPlan.get(location.key) ?? "right"}`} style={{ left: `${location.x}%`, top: `${location.y}%`, zIndex: 4 + location.people.length }} key={location.key} onClick={() => onSelectPlace(location)} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
       {!mapped.length && <p className="map-empty">Add a birth or death city and country to place someone on the map.</p>}
       </div>
       </div>
@@ -185,6 +188,30 @@ export function StatisticsView({ tree, onSelect }: { tree: FamilyTree; onSelect:
   </section>;
 }
 
+
+/** Labels collide in SCREEN space, and markers hold their screen size as the
+ * map zooms - so two cities that overlap at 1x are legible at 4x. The busier
+ * place keeps the right side, a crowded neighbour flips to the left, and only
+ * a label with nowhere to go steps back to its count until hovered. */
+function planLabels(mapped: MappedPlace[], scale: number, boardWidth: number): Map<string, "right" | "left" | "quiet"> {
+  if (!boardWidth) return new Map();
+  const boardHeight = boardWidth / 2;
+  const LABEL = 132, DISC = 34, ROW = 24;
+  const placed: { y: number; from: number; to: number }[] = [];
+  const sides: [string, "right" | "left" | "quiet"][] = [];
+  const overlaps = (y: number, from: number, to: number) => placed.some((other) =>
+    Math.abs(other.y - y) < ROW && from < other.to && to > other.from);
+  for (const place of [...mapped].sort((a, b) => b.people.length - a.people.length)) {
+    const x = (place.x / 100) * boardWidth * scale;
+    const y = (place.y / 100) * boardHeight * scale;
+    const right = { from: x - DISC / 2, to: x + DISC / 2 + LABEL };
+    const left = { from: x - DISC / 2 - LABEL, to: x + DISC / 2 };
+    if (!overlaps(y, right.from, right.to)) { sides.push([place.key, "right"]); placed.push({ y, ...right }); }
+    else if (!overlaps(y, left.from, left.to)) { sides.push([place.key, "left"]); placed.push({ y, ...left }); }
+    else { sides.push([place.key, "quiet"]); placed.push({ y, from: x - DISC / 2, to: x + DISC / 2 }); }
+  }
+  return new Map(sides);
+}
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 

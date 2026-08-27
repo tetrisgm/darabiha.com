@@ -1192,6 +1192,8 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .map-marker.is-quiet > strong { opacity:0; transform:translateX(-.35rem); pointer-events:none;
   transition:opacity .15s var(--ease), transform .15s var(--ease); }
 .map-marker.is-quiet:hover > strong, .map-marker.is-quiet:focus-visible > strong { opacity:1; transform:none; }
+/* a crowded neighbour puts its name on the other side rather than losing it */
+.map-marker.is-left > strong { left:auto; right:1.6rem; padding:.35rem .7rem .35rem .55rem; }
 .map-marker:hover { z-index:40 !important; }
 .fill-question-photo { display:block; margin:.7rem 0 .2rem; border:1px solid var(--line); border-radius:.9rem; overflow:hidden; max-width:26rem; }
 .fill-question-photo img { display:block; width:100%; height:auto; }
