@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 92**, `BUILD_ID=9d74a76`.
+- The live release is **Version 96**, `BUILD_ID=2739bf1`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":92,"build":"9d74a76","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":96,"build":"2739bf1","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -29,8 +29,12 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–92 (2026-08-26)
+### Versions 54–96 (2026-08-26)
 
+- **Version 96** (`2739bf1`): panel frost raised to near-solid (.94) — over the chat's text the .78 glass let the words beneath ghost through.
+- **Version 95** (`06b9b31`): map zoom anchors at the cursor (wheel) or the stage center (buttons) — it scaled around the board center, so zooming toward Iran flew Iran off the screen.
+- **Version 94** (`d8f241e`): **the panels take the chat's footprint instead of forming a second column** (owner: hovering someone near the canvas edge slid a panel over the very card being pointed at, and profile+chat are rarely wanted at once). The profile, hover preview, and place panel now overlay the chat column at `max(var(--chat-width), 30rem)` wide, z-index 45 under the action bar; the canvas keeps its full width, nothing reflows on open, and `main.has-person` only shifts the action bar to `max(chat-width, 30rem)`. Mobile (≤900px) keeps the fixed full-height overlay. Also: **map markers are counter-scaled** (`scale(calc(1/var(--map-scale)))`) so they hold their on-screen size as the map zooms — Tehran's disc sat exactly on Qazvin's and grew with it; zoom reaches 8×; markers with more people stack on top (zIndex 4+count), which is what makes Qazvin (5 people) clickable under Tehran (1).
+- **Version 93** (`d8c6cff`): **clicking a city lists its people in the panel** (owner request) instead of jumping into the first person's profile. `PlacePanel` shows the city's roster as preview cards — portrait, life years, Born here / Died here / Born and died here (nothing for country-only mappings) — sorted by birth year; a card opens the profile in the same slot, and closing it returns to the list because the place focus survives (`placeFocus` state, cleared on view change). The suite walks marker → list → profile → back-to-list.
 - **Version 92** (`9d74a76`): antimeridian fix — Russia's and Fiji's rings cross 180° and drew horizontal lines across the whole map; the generator now splits a ring at any half-width jump and closes each part at the map edge.
 - **Version 91** (`9dca77e`): **the map is the real world now** (owner: the blobs "literally don't look like the world at all", and borders were wanted). `scripts/generate_world_map.mjs` fetches world-atlas `countries-110m` (Natural Earth, public domain), decodes the TopoJSON without dependencies, projects equirectangular into the 1000×500 viewBox and writes `lib/world-map-paths.ts` (~112 KB, 176 countries, one path each so borders read; Antarctica omitted; hairline non-scaling strokes; dark landmasses on the dark ocean). **Markers now project from real lat/lon with the identical mapping** — the old tables were eyeballed percentages tuned to the blobs. New places in the table: Qazvin, Qom, Darab, Saveh, Karbala; the spelling variants **Ghazvin/Teheran map as aliases without touching any record**, which put Nasser Darabiha on the map and emptied the unmapped-places pill. Keep the board 2:1 and regenerate with the script if the geometry ever needs changing.
 - **Version 90** (`24d532a`): **the map fills its tab edge-to-edge** (owner: no reason for the heading text there). The Places heading and the framed 2:1 box are gone; the stage is full-bleed like the Tree/Family canvases, with the 2:1 board (the surface the marker percentages are calibrated to — keep it 2:1 or the markers drift off the continents) sized to cover the stage, and the unmapped-places note as a glass pill bottom-left. (The "Ghazvin" spelling gap that pill exposed was closed in V91 by a mapper alias, not a record edit.)
