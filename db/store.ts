@@ -542,13 +542,20 @@ export async function listOpenQuestions(): Promise<OpenQuestion[]> {
     .map((check) => ({
       id: check.id, question: check.question, evidence: check.evidence,
       actionSummary: check.kind === "duplicate"
-        ? "Confirming records that these are one person; an editor merges them."
-        : "Confirming records the answer for an editor to apply.",
-      needsAnswerText: false, status: "open" as const, createdAt: "",
+        ? "Answering records the verdict; an editor merges them if they are one person."
+        : "Your answer is recorded for an editor to apply.",
+      needsAnswerText: false,
+      choices: check.choices,
+      status: "open" as const, createdAt: "",
     }));
+  const meta = (json: string | null) => {
+    if (!json) return {} as { choices?: OpenQuestion["choices"]; imageId?: string | null };
+    try { const parsed = JSON.parse(json); return { choices: parsed.choices, imageId: parsed.imageId ?? null }; } catch { return {}; }
+  };
   return [...result.results.map((row) => ({
     id: row.id, question: row.question, evidence: row.evidence, actionSummary: row.actionSummary,
     needsAnswerText: Boolean(row.proposalJson && JSON.parse(row.proposalJson).actions?.some((action: QuestionAction) => "nameFromAnswer" in action && action.nameFromAnswer)),
+    ...meta(row.proposalJson),
     status: row.status, createdAt: row.createdAt,
   })), ...derived];
 }

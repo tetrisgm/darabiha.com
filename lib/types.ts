@@ -51,6 +51,11 @@ export type OpenQuestion = {
   actionSummary: string | null;
   /** confirm needs the reviewer to supply a name (e.g. an unnamed spouse) */
   needsAnswerText: boolean;
+  /** the answers worth offering as buttons - a yes/no question should be
+   * answered by pressing Yes, not by typing */
+  choices?: { label: string; verdict: "confirm" | "deny" }[];
+  /** a photograph the question is about, shown with it */
+  imageId?: string | null;
   status: "open" | "confirmed" | "denied";
   createdAt: string;
 };

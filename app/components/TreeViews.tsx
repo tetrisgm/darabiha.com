@@ -501,19 +501,33 @@ function OpenQuestionsCard({ onTreeChange }: { onTreeChange: (tree: FamilyTree) 
       <p>{t("fill.questionsIntro")}</p>
       {notice && <p className="fill-questions-notice" role="status">{notice}</p>}
     </div>
-    {questions.map((question) => <div className="fill-question" key={question.id}>
-      <p className="fill-question-text">{question.question}</p>
-      {question.evidence && <p className="fill-question-evidence">{question.evidence}</p>}
-      {question.actionSummary && <p className="fill-question-action">{question.actionSummary}</p>}
-      <div className="fill-question-answer">
-        <input className="fill-input" value={notes[question.id] ?? ""} placeholder={question.needsAnswerText ? t("fill.namePlaceholder") : t("fill.notePlaceholder")}
-          onChange={(event) => setNotes((current) => ({ ...current, [question.id]: event.target.value }))} aria-label={`Answer for: ${question.question}`} />
-        <button type="button" className="fill-save" disabled={busyId !== null || (question.needsAnswerText && !notes[question.id]?.trim())}
-          onClick={() => answer(question, "confirm")}>{question.needsAnswerText ? t("fill.recordName") : t("fill.confirm")}</button>
-        <button type="button" className="fill-skip" disabled={busyId !== null}
-          onClick={() => answer(question, "deny")}>{question.needsAnswerText ? t("fill.notKnown") : t("fill.deny")}</button>
-      </div>
-    </div>)}
+    {questions.map((question) => {
+      // a yes/no question is answered by pressing yes, never by typing it
+      const choices = question.choices?.length
+        ? question.choices
+        : [{ label: question.needsAnswerText ? t("fill.recordName") : t("fill.confirm"), verdict: "confirm" as const },
+           { label: question.needsAnswerText ? t("fill.notKnown") : t("fill.deny"), verdict: "deny" as const }];
+      const needsNote = question.needsAnswerText;
+      return <div className="fill-question" key={question.id}>
+        <p className="fill-question-text">{question.question}</p>
+        {question.imageId && <a className="fill-question-photo" href={`/api/photos/${question.imageId}`} target="_blank" rel="noreferrer">
+          {/* eslint-disable-next-line @next/next/no-img-element -- archive evidence served from R2 */}
+          <img src={`/api/photos/${question.imageId}`} alt="The photograph this question is about" loading="lazy" />
+        </a>}
+        {question.evidence && <p className="fill-question-evidence">{question.evidence}</p>}
+        {question.actionSummary && <p className="fill-question-action">{question.actionSummary}</p>}
+        <div className="fill-question-answer">
+          <input className="fill-input" value={notes[question.id] ?? ""} placeholder={needsNote ? t("fill.namePlaceholder") : t("fill.notePlaceholder")}
+            onChange={(event) => setNotes((current) => ({ ...current, [question.id]: event.target.value }))} aria-label={`Answer for: ${question.question}`} />
+          <div className="fill-question-choices">
+            {choices.map((choice) => <button type="button" key={choice.label}
+              className={choice.verdict === "confirm" ? "fill-save" : "fill-skip"}
+              disabled={busyId !== null || (needsNote && choice.verdict === "confirm" && !notes[question.id]?.trim())}
+              onClick={() => answer(question, choice.verdict)}>{choice.label}</button>)}
+          </div>
+        </div>
+      </div>;
+    })}
   </div>;
 }
 

@@ -1193,3 +1193,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
   transition:opacity .15s var(--ease), transform .15s var(--ease); }
 .map-marker.is-quiet:hover > strong, .map-marker.is-quiet:focus-visible > strong { opacity:1; transform:none; }
 .map-marker:hover { z-index:40 !important; }
+.fill-question-photo { display:block; margin:.7rem 0 .2rem; border:1px solid var(--line); border-radius:.9rem; overflow:hidden; max-width:26rem; }
+.fill-question-photo img { display:block; width:100%; height:auto; }
+.fill-question-photo:hover { border-color:var(--accent); }
+.fill-question-choices { display:flex; gap:.5rem; flex-wrap:wrap; }

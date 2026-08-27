@@ -10,6 +10,8 @@ export type RecordCheck = {
   question: string;
   evidence: string;
   personIds: string[];
+  /** the two readings on offer, so the answer is a button not an essay */
+  choices?: { label: string; verdict: "confirm" | "deny" }[];
 };
 
 const year = (value: string | null | undefined) => {
@@ -41,6 +43,7 @@ export function runRecordChecks(tree: FamilyTree): RecordCheck[] {
     const born = year(person.birthDate), died = year(person.deathDate);
     if (born && died && died < born) {
       checks.push({ id: `chk-died-before-born-${person.id}`, kind: "impossible", personIds: [person.id],
+        choices: [{ label: "Noted — an editor will fix it", verdict: "confirm" }, { label: "The dates are right", verdict: "deny" }],
         question: `${person.displayName}'s death is recorded before their birth. Which date is wrong?`,
         evidence: `The record says born ${person.birthDate}, died ${person.deathDate}.` });
     }
@@ -84,7 +87,8 @@ export function runRecordChecks(tree: FamilyTree): RecordCheck[] {
     if (/(?:over|more than) a hundred|over 100 years/i.test(story.body) && died - born < 100) {
       checks.push({ id: `chk-story-age-${story.id}-${subject.id}`, kind: "conflict", personIds: [subject.id],
         question: `Was ${subject.displayName} over a hundred when he died, or ${died - born} as the dates say?`,
-        evidence: `The story “${story.title}” says he was over a hundred years old, but the record has ${subject.birthDate}–${subject.deathDate}, which is ${died - born} years.` });
+        evidence: `The story “${story.title}” says he was over a hundred years old, but the record has ${subject.birthDate}–${subject.deathDate}, which is ${died - born} years.`,
+        choices: [{ label: "Over a hundred", verdict: "confirm" }, { label: `${died - born}, as recorded`, verdict: "deny" }] });
     }
   }
 
@@ -110,6 +114,7 @@ export function runRecordChecks(tree: FamilyTree): RecordCheck[] {
         const datesDiffer = bornA && bornB && Math.abs(bornA - bornB) > 3;
         if (bothPlaced || datesDiffer) continue;
         checks.push({ id: `chk-duplicate-${key}-${[a.id, b.id].sort().join("-")}`, kind: "duplicate", personIds: [a.id, b.id],
+          choices: [{ label: "Yes, one person", verdict: "confirm" }, { label: "No, two people", verdict: "deny" }],
           question: `Are these two records the same person: ${label(a)} and ${label(b)}?`,
           evidence: `Both are recorded as “${a.displayName}”. ${parentsA.size ? "One has recorded parents and the other does not" : parentsB.length ? "One has recorded parents and the other does not" : "Neither has recorded parents"}, so the archive cannot tell them apart on its own.` });
       }
