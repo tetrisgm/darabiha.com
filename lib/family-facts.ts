@@ -99,9 +99,15 @@ export function familyFactoids(tree: FamilyTree, today = new Date()): FamilyFact
     facts.push({ kind: "factoid", text: `Of the ${datedBirths} birth years the archive records, more fall in the ${byDecade[0][0]} than in any other decade — ${byDecade[0][1]} of them.`, ask: `Who was born in the ${byDecade[0][0]}, and what was happening to the family then?` });
   }
 
+  // Two names side by side are two families unless one spells the other -
+  // Darabi and Darabiha are one name, Darabi and Jaberian are two.
   const twoNames = [...surnames.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2);
   if (twoNames.length === 2 && twoNames[1][1] > 2) {
-    facts.push({ kind: "factoid", text: `The family name is written two ways: ${twoNames[0][1]} people carry ${twoNames[0][0]} and ${twoNames[1][1]} carry ${twoNames[1][0]}.`, ask: `Why does the family name appear as both ${twoNames[0][0]} and ${twoNames[1][0]}?` });
+    const [first, second] = twoNames;
+    const variant = first[0].startsWith(second[0]) || second[0].startsWith(first[0]);
+    facts.push(variant
+      ? { kind: "factoid", text: `The family name is written two ways: ${first[1]} people carry ${first[0]} and ${second[1]} carry ${second[0]}.`, ask: `Why does the family name appear as both ${first[0]} and ${second[0]}?` }
+      : { kind: "factoid", text: `Two family names run through the archive: ${first[0]}, carried by ${first[1]} people, and ${second[0]}, carried by ${second[1]}.`, ask: `How did the ${first[0]} and ${second[0]} families come together?` });
   }
   const repeated = [...given.entries()].sort((a, b) => b[1] - a[1])[0];
   if (repeated && repeated[1] > 2) facts.push({ kind: "factoid", text: `${repeated[0]} is the most repeated given name in the family — ${repeated[1]} people carry it.`, ask: `Who are the people named ${repeated[0]}, and were they named after one another?` });
