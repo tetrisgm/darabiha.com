@@ -72,31 +72,6 @@ export function familyFactoids(tree: FamilyTree, today = new Date()): FamilyFact
     childrenOf.set(link.fromPersonId, (childrenOf.get(link.fromPersonId) ?? 0) + 1);
   }
 
-  const longest = withYears.map((person) => ({ person, age: year(person.deathDate)! - year(person.birthDate)! }))
-    .sort((a, b) => b.age - a.age)[0];
-  if (longest) facts.push({ kind: "factoid", personId: longest.person.id, text: `${longest.person.displayName} lived the longest life the archive records — ${longest.age} years, from ${year(longest.person.birthDate)} to ${year(longest.person.deathDate)}.`, ask: `Tell me about ${longest.person.displayName} and the years they lived through.` });
-
-  const mostChildren = [...childrenOf.entries()].sort((a, b) => b[1] - a[1])[0];
-  const parent = mostChildren && tree.people.find((person) => person.id === mostChildren[0]);
-  if (parent && mostChildren[1] > 1) facts.push({ kind: "factoid", personId: parent.id, text: `${parent.displayName} has the most recorded children in the family: ${mostChildren[1]}.`, ask: `Who are ${parent.displayName}'s children, and what became of them?` });
-
-  const oldest = tree.people.filter((person) => year(person.birthDate)).sort((a, b) => year(a.birthDate)! - year(b.birthDate)!)[0];
-  if (oldest) facts.push({ kind: "factoid", personId: oldest.id, text: `The earliest recorded birth in the family is ${oldest.displayName}, in ${year(oldest.birthDate)} — ${today.getFullYear() - year(oldest.birthDate)!} years ago.`, ask: `Tell me about ${oldest.displayName}, the earliest person the archive records.` });
-
-  const places = new Map<string, number>();
-  for (const person of tree.people) {
-    for (const city of [person.birthCity, person.deathCity]) {
-      if (city) places.set(city, (places.get(city) ?? 0) + 1);
-    }
-  }
-  const topPlace = [...places.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (topPlace) facts.push({ kind: "factoid", text: `${topPlace[0]} appears in more records than anywhere else — ${topPlace[1]} births and deaths.`, ask: `What is the family's connection to ${topPlace[0]}?` });
-
-  if (tree.stories.length) facts.push({ kind: "factoid", text: `The archive holds ${tree.stories.length} family ${tree.stories.length === 1 ? "story" : "stories"}, kept in the Persian they were written in with an English translation beside them.`, ask: "What stories does the archive hold, and who is in them?" });
-
-  const generations = new Set(tree.people.map((person) => year(person.birthDate)).filter(Boolean).map((born) => Math.floor((born! - 1700) / 25)));
-  if (generations.size > 3) facts.push({ kind: "factoid", text: `${tree.people.length} people are recorded here, spanning roughly ${generations.size} generations.`, ask: "Walk me down the generations, from the earliest ancestor to the youngest child." });
-
   // What the numbers themselves say. Each is one pass over the people, cheap
   // enough for a per-request greeting on the Worker's budget.
   const spans = withYears.map((person) => year(person.deathDate)! - year(person.birthDate)!).filter((age) => age >= 0).sort((a, b) => a - b);
@@ -128,6 +103,32 @@ export function familyFactoids(tree: FamilyTree, today = new Date()): FamilyFact
   const women = tree.people.filter((person) => person.gender === "female").length;
   const men = tree.people.filter((person) => person.gender === "male").length;
   if (women > 5 && men > 5) facts.push({ kind: "factoid", text: `${women} women and ${men} men are recorded in the archive.`, ask: "Tell me about the women in the family — what does the archive record about them?" });
+
+  const longest = withYears.map((person) => ({ person, age: year(person.deathDate)! - year(person.birthDate)! }))
+    .sort((a, b) => b.age - a.age)[0];
+  if (longest) facts.push({ kind: "factoid", personId: longest.person.id, text: `${longest.person.displayName} lived the longest life the archive records — ${longest.age} years, from ${year(longest.person.birthDate)} to ${year(longest.person.deathDate)}.`, ask: `Tell me about ${longest.person.displayName} and the years they lived through.` });
+
+  const mostChildren = [...childrenOf.entries()].sort((a, b) => b[1] - a[1])[0];
+  const parent = mostChildren && tree.people.find((person) => person.id === mostChildren[0]);
+  if (parent && mostChildren[1] > 1) facts.push({ kind: "factoid", personId: parent.id, text: `${parent.displayName} has the most recorded children in the family: ${mostChildren[1]}.`, ask: `Who are ${parent.displayName}'s children, and what became of them?` });
+
+  const oldest = tree.people.filter((person) => year(person.birthDate)).sort((a, b) => year(a.birthDate)! - year(b.birthDate)!)[0];
+  if (oldest) facts.push({ kind: "factoid", personId: oldest.id, text: `The earliest recorded birth in the family is ${oldest.displayName}, in ${year(oldest.birthDate)} — ${today.getFullYear() - year(oldest.birthDate)!} years ago.`, ask: `Tell me about ${oldest.displayName}, the earliest person the archive records.` });
+
+  const places = new Map<string, number>();
+  for (const person of tree.people) {
+    for (const city of [person.birthCity, person.deathCity]) {
+      if (city) places.set(city, (places.get(city) ?? 0) + 1);
+    }
+  }
+  const topPlace = [...places.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (topPlace) facts.push({ kind: "factoid", text: `${topPlace[0]} appears in more records than anywhere else — ${topPlace[1]} births and deaths.`, ask: `What is the family's connection to ${topPlace[0]}?` });
+
+  if (tree.stories.length) facts.push({ kind: "factoid", text: `The archive holds ${tree.stories.length} family ${tree.stories.length === 1 ? "story" : "stories"}, kept in the Persian they were written in with an English translation beside them.`, ask: "What stories does the archive hold, and who is in them?" });
+
+  const generations = new Set(tree.people.map((person) => year(person.birthDate)).filter(Boolean).map((born) => Math.floor((born! - 1700) / 25)));
+  if (generations.size > 3) facts.push({ kind: "factoid", text: `${tree.people.length} people are recorded here, spanning roughly ${generations.size} generations.`, ask: "Walk me down the generations, from the earliest ancestor to the youngest child." });
+
 
   return facts;
 }
