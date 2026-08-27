@@ -296,7 +296,13 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
           <div className="chat-resize-handle" onPointerDown={startChatResize} aria-hidden="true" />
         </aside>
         <button className={`chat-edge-reveal ${chatCollapsed ? "is-visible" : ""}`} onClick={() => setChatCollapsed(false)} aria-label="Show family chat" title="Show family chat">›</button>
-        {hoverPreview && viewMode === "family" && hoverPreview.id !== selectedPerson?.id && <PersonHoverPreview person={hoverPreview} tree={tree} standalone={!selectedPerson} />}
+        {hoverPreview && viewMode === "family" && hoverPreview.id !== selectedPerson?.id && (
+          // the hover preview IS the profile: the same panel a click opens,
+          // rendered read-only and inert
+          <div className="person-hover-preview" aria-hidden="true">
+            <PersonModalV2 key={hoverPreview.id} person={hoverPreview} tree={tree} canEdit={false} onClose={() => {}} onSelect={() => {}} onTreeChange={() => {}} />
+          </div>
+        )}
         {!selectedPerson && placeFocus && viewMode === "map" && <PlacePanel place={placeFocus} tree={tree} onPick={(person) => openPerson(person, true, false)} onClose={() => setPlaceFocus(null)} />}
         {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
         <section className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -356,28 +362,6 @@ function LinkedText({ text, people, exceptId, onSelect }: { text: string; people
   return <>{nodes}</>;
 }
 
-function PersonHoverPreview({ person, tree, standalone }: { person: Person; tree: FamilyTree; standalone: boolean }) {
-  const buckets = relatedPeople(tree, person.id);
-  const born = person.birthDate?.slice(0, 4), died = person.deathDate?.slice(0, 4);
-  const life = born && died ? `${born}–${died}` : born ? `b. ${born}` : died ? `d. ${died}` : "";
-  const origin = locationLine(person.birthCity, person.birthCountry, person.birthPlace);
-  const names = (people: Person[]) => people.map((relative) => relative.displayName).join(", ");
-  return <aside className={`person-hover-preview ${standalone ? "is-standalone" : ""}`} aria-hidden="true">
-    <div className="person-hover-hero">
-      {person.photoAttachmentId ? <img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}
-      <div>
-        <h3>{person.displayName}</h3>
-        {person.gender === "female" && person.maidenName && <p className="person-maiden">née {person.maidenName}</p>}
-        <p>{[life, origin].filter(Boolean).join(" · ") || "no dates recorded"}</p>
-      </div>
-    </div>
-    {buckets.parents.length > 0 && <p><span className="eyebrow">Parents</span>{names(buckets.parents)}</p>}
-    {buckets.spouses.length > 0 && <p><span className="eyebrow">Spouse</span>{names(buckets.spouses)}</p>}
-    {buckets.children.length > 0 && <p><span className="eyebrow">Children</span>{names(buckets.children)}</p>}
-    {buckets.siblings.length > 0 && <p><span className="eyebrow">Siblings</span>{names(buckets.siblings)}</p>}
-    {person.biography && <p className="person-hover-bio">{person.biography.length > 220 ? `${person.biography.slice(0, 220)}…` : person.biography}</p>}
-  </aside>;
-}
 
 /** The selection belongs to the input, not to the thread: a chip attached to
  * the top of the composer says whose record the next message goes to, and

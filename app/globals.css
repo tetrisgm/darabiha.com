@@ -733,17 +733,14 @@ main.chat-collapsed.has-person .site-action-bar { left:calc(30rem + 16px); }
 @media (max-width: 900px) { main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-bar { left:calc(var(--chat-width,330px) + 16px); } main.chat-collapsed.has-person .site-action-bar { left:16px; } }
 
 /* hover preview: slides over the profile slot */
-.person-hover-preview { position:fixed; top:0; bottom:0; left:var(--chat-width,330px); z-index:40; width:min(100%,30rem); overflow:hidden; background:var(--card); border-right:1px solid var(--line); padding:6rem 2.5rem 2.5rem; box-shadow:12px 0 40px rgba(var(--shadow-tint),.12); animation:preview-in .25s var(--ease) both; pointer-events:none; }
-@media (max-width: 900px) { .person-hover-preview { left:0; z-index:65; padding-top:2.5rem; } }
+.person-hover-preview { position:fixed; top:0; bottom:0; left:var(--chat-width,330px); z-index:40; width:min(100%,30rem); overflow:hidden; animation:preview-in .25s var(--ease) both; pointer-events:none; }
+@media (max-width: 900px) { .person-hover-preview { left:0; z-index:65; } }
 main.chat-collapsed .person-hover-preview { left:0; }
 @keyframes preview-in { from { opacity:0; transform:translateX(-14px); } to { opacity:1; transform:none; } }
-.person-hover-hero { display:flex; align-items:center; gap:1rem; margin-bottom:1.2rem; }
-.person-hover-hero .ped-portrait, .person-hover-hero .person-modal-photo { height:4rem; width:4rem; flex:none; border-radius:1rem; }
-.person-hover-hero h3 { margin:0; font-family:var(--font-serif),Georgia,serif; font-size:1.6rem; font-weight:600; letter-spacing:-.01em; }
-.person-hover-hero p { margin:.15rem 0 0; color:var(--muted); font-size:.85rem; }
-.person-hover-preview > p { margin:.55rem 0; font-size:.88rem; line-height:1.5; }
-.person-hover-preview > p .eyebrow { display:block; color:var(--accent); font-weight:700; margin-bottom:.1rem; }
-.person-hover-bio { color:var(--muted); border-top:1px dashed var(--line); padding-top:.8rem; margin-top:1rem !important; }
+/* the shell hosts the real profile panel; the panel fills it and loses its
+   own placement, and the dead nav chrome hides while keeping its space */
+.person-hover-preview .person-panel { position:absolute; inset:0; width:auto; animation:none; }
+.person-hover-preview .person-panel-bar > * { visibility:hidden; }
 
 /* ============ closing pass: Maps-style panel language ============ */
 
@@ -932,7 +929,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .attach-popover svg { width:1rem; height:1rem; flex:none; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 
 /* Apple-grade text: tighter display tracking, quieter secondary lines */
-.person-modal-v2 h2, .person-hover-hero h3, .archive-view-heading h2 { letter-spacing:-.02em; }
+.person-modal-v2 h2, .archive-view-heading h2 { letter-spacing:-.02em; }
 .chat-bubble, .chat-suggestion, .relationship-row-main .rel-name { letter-spacing:-.005em; }
 .ped-col-label { color:var(--muted); font-size:.68rem; letter-spacing:.07em; font-weight:600; }
 .ped-copy > span, .ped-place { color:var(--muted); }
