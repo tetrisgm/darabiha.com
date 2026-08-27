@@ -42,36 +42,8 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const containerRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef(new Map<string, HTMLDivElement>());
   const [paths, setPaths] = useState<string[]>([]);
-  // Hovering a card shows the board that clicking it would give. It holds
-  // until the pointer leaves the stage - clearing it when the hovered card
-  // moves out from under the pointer, which the new layout does, would flicker.
-  const [preview, setPreview] = useState<{ id: string; forFocus: string } | null>(null);
-  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Where the pointer was when the current preview began. Swapping the board
-  // slides a different card under a pointer that never moved, and mouseenter
-  // fires for it - so without this the two boards trade places forever.
-  const pointerAt = useRef({ x: 0, y: 0 });
-  const previewAt = useRef<{ x: number; y: number } | null>(null);
-  // Where the hovered card sat, and where the camera was, when the preview
-  // opened. The board reorganises around that card without it moving, which
-  // is what keeps the pointer over the same person instead of chasing a card
-  // that slid out from under it.
-  const previewAnchor = useRef<{ rect: DOMRect; pan: { x: number; y: number } } | null>(null);
-  const hoverCard = useRef<HTMLElement | null>(null);
-  const panValue = useRef({ x: 0, y: 0 });
-  /** Has the pointer moved since the current preview opened? Everything that
-   *  starts or ends a preview asks this first, because swapping the board
-   *  fires enter and leave events for a pointer that never went anywhere. */
-  const travelled = () => {
-    const anchor = previewAt.current;
-    return !anchor || Math.hypot(pointerAt.current.x - anchor.x, pointerAt.current.y - anchor.y) > 6;
-  };
-  // A preview belongs to the board it was opened on, so a real navigation
-  // retires it by definition - no effect has to chase focusId and reset it.
-  const previewId = preview && preview.forFocus === focusId && maps.byId.has(preview.id) ? preview.id : null;
-  const activeId = previewId ?? focusId;
   const model = useMemo(() => {
-    const focal = maps.byId.get(activeId) ?? tree.people[0];
+    const focal = maps.byId.get(focusId) ?? tree.people[0];
     if (!focal) return null;
     const get = (id: string) => maps.byId.get(id);
     const parents = (maps.parentsOf.get(focal.id) ?? []).map(get).filter(Boolean) as Person[];
@@ -125,7 +97,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       for (const kid of kids) links.push([`gc-${kid.id}`, `child-${child.id}`]);
     }
     return { focal, father, mother, spouses, children, siblings, childGroups, grandSlots, greatSlots, grandkidGroups, links };
-  }, [maps, tree, activeId]);
+  }, [maps, tree, focusId]);
   // The instruction is for the first few seconds only: it retires on its own,
   // and immediately once a person has been picked.
   const [hintExpired, setHintExpired] = useState(false);
@@ -137,7 +109,6 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const panRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef(new Map<string, HTMLDivElement>());
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  useEffect(() => { panValue.current = pan; }, [pan]);
   const [scale, setScale] = useState(1);
   /* The board fits itself to the stage, but the stage changes width when the
      chat collapses beside it - so the fit follows, right up until the reader
@@ -149,7 +120,6 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const pedCursorRef = useRef<HTMLSpanElement>(null);
   const [cursorMode, setCursorMode] = useState<"grab" | "grabbing" | "pointer">("grab");
   const positionPedCursor = (event: React.PointerEvent) => {
-    if (event.pointerType !== "touch") pointerAt.current = { x: event.clientX, y: event.clientY };
     const cursor = pedCursorRef.current;
     if (!cursor || event.pointerType === "touch") return;
     cursor.style.left = `${event.clientX}px`;
@@ -157,10 +127,6 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     cursor.dataset.visible = "true";
     const target = event.target as Element;
     setCursorMode(dragRef.current ? "grabbing" : target.closest?.("button, summary") ? "pointer" : "grab");
-    // Moving off the cards and onto open canvas gives the board back - but
-    // only for a pointer that actually travelled. Swapping the board fires a
-    // fresh enter for whatever now lies under a pointer that never moved.
-    if (previewId && !dragRef.current && !target.closest?.(".ped-card") && travelled()) { cancelHover(); endPreview(); }
   };
   const hidePedCursor = () => {
     if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
@@ -210,21 +176,6 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     settle();
     return () => cancelAnimationFrame(frame);
   }, [focusId, stageWidth]);
-  /* A preview must not move anything the reader is looking at. The board
-     reorganises around the hovered person, and the camera shifts by exactly
-     the distance their card would otherwise have travelled - so it stays put,
-     the pointer stays on it, and only the family around it changes. Committed
-     before paint, so there is nothing to see. */
-  useLayoutEffect(() => {
-    const anchor = previewAnchor.current;
-    if (!anchor || !previewId) return;
-    const card = slotRefs.current.get("focal");
-    if (!card) return;
-    const now = card.getBoundingClientRect();
-    const dx = (anchor.rect.left + anchor.rect.width / 2) - (now.left + now.width / 2);
-    const dy = (anchor.rect.top + anchor.rect.height / 2) - (now.top + now.height / 2);
-    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) setPan((current) => ({ x: current.x + dx, y: current.y + dy }));
-  }, [activeId, previewId]);
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button, summary, select, input, a")) return;
     dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
@@ -333,49 +284,11 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     if (element) slotRefs.current.set(key, element);
     else slotRefs.current.delete(key);
   };
-  const beginHover = (person: Person, element: HTMLElement | null, viaPointer = true) => {
-    onPreview(person);
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverCard.current = element;
-    if (person.id === activeId || (viaPointer && !travelled())) return;
-    hoverTimer.current = setTimeout(() => {
-      const rect = hoverCard.current?.getBoundingClientRect();
-      if (!rect) return;
-      previewAt.current = { ...pointerAt.current };
-      previewAnchor.current = { rect, pan: { ...panValue.current } };
-      setPreview({ id: person.id, forFocus: focusId });
-    }, 340);
-  };
-  const cancelHover = () => {
-    onPreview(null);
-    if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = null;
-  };
-  const endPreview = () => {
-    const anchor = previewAnchor.current;
-    previewAnchor.current = null;
-    previewAt.current = null;
-    setPreview(null);
-    if (anchor) setPan(anchor.pan);
-  };
-  /* Swapping the board removes the card under the pointer, and React reports
-     that as the pointer leaving the whole stage - four milliseconds after the
-     preview opened, which closed it again. Only a pointer that is really
-     outside the stage has left it. */
-  const leaveStage = (event: React.PointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    if (event.clientX > rect.left && event.clientX < rect.right && event.clientY > rect.top && event.clientY < rect.bottom) return;
-    hidePedCursor();
-    cancelHover();
-    endPreview();
-  };
+  // Hovering a card shows that person's record beside the board and nothing
+  // else. It used to redraw the board around them, which moved everything the
+  // reader was looking at.
   const commit = (person: Person, keepLayout: boolean) => {
-    cancelHover();
-    endPreview();
-    // Navigating draws a different board, which puts a different card under a
-    // pointer that has not moved since the click. Anchoring here means it
-    // cannot preview until the reader actually moves.
-    previewAt.current = { ...pointerAt.current };
+    onPreview(null);
     if (keepLayout) onSelectOnly(person); else onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
@@ -388,7 +301,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     const behind = hiddenRelativeCount(person.id, maps, onBoard);
     return <div ref={setRef(key)} className={`ped-card ped-card-md ${person.id === (selectedId ?? focal.id) ? "is-selected" : ""}`} key={key}>
       <button type="button" onClick={() => commit(person, keepLayout)}
-        onMouseEnter={(event) => beginHover(person, event.currentTarget)} onMouseLeave={cancelHover} onFocus={(event) => beginHover(person, event.currentTarget, false)} onBlur={cancelHover}>
+        onMouseEnter={() => onPreview(person)} onMouseLeave={() => onPreview(null)} onFocus={() => onPreview(person)} onBlur={() => onPreview(null)}>
         {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
         <span className="ped-copy">
           <strong>{person.displayName}</strong>
@@ -402,14 +315,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     <div ref={setRef(key)} className="ped-card ped-card-sm ped-ghost" key={key}>
       <button type="button" onClick={() => onOpen(target)} title="Open the record to add this relative">＋ {label}</button>
     </div>;
-  return <section className="focus-view ped-view" aria-label="Family around one person" data-preview={previewId ? "true" : "false"}>
+  return <section className="focus-view ped-view" aria-label="Family around one person">
     <div className="focus-toolbar">
       <div className="focus-nav">
         <button type="button" className="focus-back" onClick={onBack} disabled={!canBack} aria-label={t("family.back")}>←</button>
         <button type="button" className="focus-back" onClick={onForward} disabled={!canForward} aria-label={t("family.forward")}>→</button>
       </div>
-      <p className="focus-hint" data-visible={hintVisible && !previewId ? "true" : "false"} aria-hidden={!hintVisible || Boolean(previewId)}>{t("family.hint")}</p>
-      {previewId && <p className="focus-preview-note">{t("family.previewing").replace("{name}", focal.displayName)}</p>}
+      <p className="focus-hint" data-visible={hintVisible ? "true" : "false"} aria-hidden={!hintVisible}>{t("family.hint")}</p>
     </div>
     <div className="canvas-controls ped-zoom" role="group" aria-label="Family zoom controls">
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoom((current) => Math.max(0.4, current * 0.9))} aria-label="Zoom out" title="Zoom out">−</button>
@@ -418,7 +330,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     </div>
     <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
-      onPointerEnter={positionPedCursor} onPointerLeave={leaveStage}>
+      onPointerEnter={positionPedCursor} onPointerLeave={() => { hidePedCursor(); onPreview(null); }}>
       <PedCursor mode={cursorMode} cursorRef={pedCursorRef} />
       <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
         <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>

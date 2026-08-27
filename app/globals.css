@@ -1253,13 +1253,6 @@ html[lang="fa"] { font-variant-numeric: normal; }
   background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent); }
 [dir="rtl"] .ped-more { margin-left:0; margin-right:auto; }
 
-/* Hovering a card shows the board a click would give; the note says so, and
-   the tint keeps a preview from being mistaken for where you actually are. */
-.focus-preview-note { margin:0; color:var(--accent); font-size:.76rem; font-weight:600; letter-spacing:.01em; }
-.ped-view[data-preview="true"] .ped-columns { opacity:.9; }
-.ped-view[data-preview="true"] .ped-col-focal .ped-card.is-selected,
-.ped-view[data-preview="true"] .ped-col-focal > .ped-couple > .ped-card {
-  outline:1px dashed color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:3px; }
 
 /* The column label sat in the flow, so centring the column put the cards
    half a label below the focal card. The body holds the cards alone; the
@@ -1267,10 +1260,6 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .ped-col-body { position:relative; display:flex; flex-direction:column; gap:inherit; }
 .ped-col-body > .ped-col-label { position:absolute; bottom:calc(100% + .4rem); left:0; margin:0; }
 
-/* A preview is not a navigation: the board changes around a card that stays
-   exactly where it is, so it must not also slide, fade or re-animate. */
-.ped-view[data-preview="true"] .ped-columns { animation:none; }
-.ped-view[data-preview="true"] .ped-pan { transition:none; }
 
 /* The portrait is the first photograph, not a separate thing in the header:
    one wrapping row that starts with it and runs on to more lines. */
