@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 74**, `BUILD_ID=ace7bc6`.
+- The live release is **Version 75**, `BUILD_ID=6d357d6`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":74,"build":"ace7bc6","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":75,"build":"6d357d6","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -28,8 +28,9 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–74 (2026-08-26)
+### Versions 54–75 (2026-08-26)
 
+- **Version 75** (`6d357d6`): the stage gradients flattened to a single dark tone (`#141613`) on the Tree/Family canvas and the timeline/map background — with the contained, docked layout the gradient added nothing (owner call).
 - **Version 74** (`ace7bc6`): **the site is dark** — the owner's Maps reference was dark mode, and the frost finally has something to show against. Tokens flipped to a warm near-black palette (`--paper #171614`, raised `--card #24231f`, bright sage `--accent #8fba9c` for text/rings with a deeper `--accent-fill #457156` for primary buttons, hairline `--line rgba(255,255,255,.12)`); every hardcoded light value in `globals.css` was swept to a dark equivalent (cards, glass, borders, hovers, error/amber tints, portrait tints, the world map, dialogs; grain switched to screen blend); the Tree/Family stage sits on a dark green-tinted radial gradient (`.stage-bg` + the canvas rule); inputs/selects get dark surfaces; JSX light classes (bg-white, red/amber notices, `bg-[#eef4f1]`) swept. Verified live: dark frosted profile with content hazing beneath, dark rowed cards, dark chrome and glass controls over the gradient stage.
 - **Version 73** (`fddcacd`): the ＋ Add a person button and its dialog are removed (people are created through the chat and the profile's relationship pickers); the chat rail default narrows 15% to 330px (`--chat-width` fallbacks updated; still user-resizable 300–560).
 - **Version 72** (`b9a48d1`): Maps parity, structural round — the owner compared screenshots and the two "looked nothing alike", so the LAYOUT grammar converged: the floating island action bar is **docked** flush to the top of the content column (full-width glass strip, hairline bottom edge, no radius/margins; the `left` offsets track the open panels); the profile hero carries a single **subtitle line** under the name (née · years · birthplace, no dangling separators); the stat strip tightened; **relationships are full-width grouped list rows** in bordered cards with hairline separators (name left, year + marriage status right, inline status select and remove ×) replacing the two-column floating chips; chat suggestions use the same rowed-card idiom instead of pills. Verified live on Jila's profile.
