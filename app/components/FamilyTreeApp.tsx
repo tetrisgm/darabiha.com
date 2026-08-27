@@ -227,7 +227,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         <nav className="archive-view-switcher" aria-label="Archive view">{VIEW_MODES.filter((mode) => mode !== "fill" || viewer.canEdit).map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{VIEW_LABELS[mode]}</button>)}</nav>
         <div className="relative flex items-center gap-4">
           <TreeSearch tree={tree} onPick={(person) => openPerson(person)} />
-          {signInEnabled && !viewer.signedIn && <a className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" href="/settings">Sign in</a>}
+          {signInEnabled && !viewer.signedIn && <a className="rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#365844]" href="/settings">Sign in</a>}
           {viewer.signedIn && <><button className="account-menu-button" aria-label="Account menu" onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-white p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href="/settings">Settings</a><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>Sign out</a></div>}</>}
           {!viewer.signedIn && <a className="settings-gear" href="/settings" aria-label="Site settings" title="Site settings">⚙</a>}
         </div>
@@ -270,7 +270,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                   {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{error}</p>}
                 </div>
                 <div className="pt-5">
-                  <button className="mb-4 rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--accent)]" onClick={() => setAddingPerson(true)}>＋ Add a person</button>
+                  <button className="mb-4 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#365844]" onClick={() => setAddingPerson(true)}>＋ Add a person</button>
                   {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
                   <div className="editor-composer rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
                     {selectedPerson && <PersonContextCard person={selectedPerson} tree={tree} note={viewer.canEdit ? "Details you share are applied to this person." : "Questions are answered about this person."} onClear={closePerson} />}
@@ -279,7 +279,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                       <input ref={fileRef} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
                       <input ref={(node) => { folderRef.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
                       <div className="flex items-center gap-2"><button className="composer-file-button" onClick={() => fileRef.current?.click()} aria-label="Add files">＋ Add files</button><button className="composer-folder-button" onClick={() => folderRef.current?.click()} aria-label="Add a folder">Add folder</button></div>
-                      <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
+                      <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent)] text-white transition hover:bg-[#365844] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
                     </div>
                   </div>
                 </div>
@@ -290,7 +290,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         </aside>
         <button className={`chat-edge-reveal ${chatCollapsed ? "is-visible" : ""}`} onClick={() => setChatCollapsed(false)} aria-label="Show family chat" title="Show family chat">›</button>
         {hoverPreview && viewMode === "family" && hoverPreview.id !== selectedPerson?.id && <PersonHoverPreview person={hoverPreview} tree={tree} standalone={!selectedPerson} />}
-        {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+        {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onShowInTree={(person) => { setViewMode("tree"); setHighlightedIds([person.id]); setFocalId(person.id); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
         <section className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
           <div className="relative h-full min-h-0">
@@ -326,8 +326,8 @@ function AddPersonModal({ tree, onClose, onAdded }: { tree: FamilyTree; onClose:
   const input = (label: string, field: keyof typeof form, type = "text") => <label className="person-editor-field"><span>{label}</span><input className="modal-input" type={type} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>;
   return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" aria-labelledby="add-person-title" onClick={(event) => event.stopPropagation()}>
     <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">New record</p><h2 id="add-person-title" className="font-serif text-3xl">Add a person</h2><p className="mt-2 text-sm text-[var(--muted)]">Enter what you know now. We’ll check the family tree before creating a new record.</p>
-    {duplicate && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6"><strong>{duplicate.displayName}</strong> is already in the tree, born {duplicate.birthDate || "with no recorded birth date"}. Is this the same person?<div className="mt-3 flex flex-wrap gap-2"><button className="rounded-full bg-[var(--ink)] px-4 py-2 text-xs font-semibold text-white" onClick={() => save("update", duplicate.id)}>Use existing person</button><button className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-xs font-semibold" onClick={() => { setDuplicate(null); save("add"); }}>Create new person</button></div></div>}
-    <div className="modal-editor person-editor-grid">{input("Full name", "displayName")}<label className="person-editor-field"><span>Sex</span><select className="modal-input" value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as typeof form.gender })}><option value="">Not recorded</option><option value="female">Female</option><option value="male">Male</option></select></label>{input("Birth date", "birthDate", "date")}{input("Birth city", "birthCity")}{input("Birth country", "birthCountry")}{input("Death date", "deathDate", "date")}{input("Death city", "deathCity")}{input("Death country", "deathCountry")}<label className="person-editor-field person-editor-wide"><span>Biography, memories, or notes</span><textarea className="modal-input min-h-24" value={form.biography} onChange={(event) => setForm({ ...form, biography: event.target.value })} /></label>{error && <p className="text-sm text-red-700">{error}</p>}<button className="rounded-full bg-[var(--ink)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !form.displayName.trim()} onClick={add}>{busy ? "Checking…" : "Add person"}</button></div>
+    {duplicate && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6"><strong>{duplicate.displayName}</strong> is already in the tree, born {duplicate.birthDate || "with no recorded birth date"}. Is this the same person?<div className="mt-3 flex flex-wrap gap-2"><button className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-white" onClick={() => save("update", duplicate.id)}>Use existing person</button><button className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-xs font-semibold" onClick={() => { setDuplicate(null); save("add"); }}>Create new person</button></div></div>}
+    <div className="modal-editor person-editor-grid">{input("Full name", "displayName")}<label className="person-editor-field"><span>Sex</span><select className="modal-input" value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as typeof form.gender })}><option value="">Not recorded</option><option value="female">Female</option><option value="male">Male</option></select></label>{input("Birth date", "birthDate", "date")}{input("Birth city", "birthCity")}{input("Birth country", "birthCountry")}{input("Death date", "deathDate", "date")}{input("Death city", "deathCity")}{input("Death country", "deathCountry")}<label className="person-editor-field person-editor-wide"><span>Biography, memories, or notes</span><textarea className="modal-input min-h-24" value={form.biography} onChange={(event) => setForm({ ...form, biography: event.target.value })} /></label>{error && <p className="text-sm text-red-700">{error}</p>}<button className="rounded-full bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !form.displayName.trim()} onClick={add}>{busy ? "Checking…" : "Add person"}</button></div>
   </section></div>;
 }
 
@@ -413,13 +413,14 @@ function PersonContextCard({ person, tree, note, onClear }: { person: Person; tr
   </div>;
 }
 
-function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
+function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange, onShowInTree }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void; onShowInTree: (person: Person) => void }) {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [relationEditor, setRelationEditor] = useState<string | null>(null);
   const [relativeQuery, setRelativeQuery] = useState("");
   const [relativeChoice, setRelativeChoice] = useState("");
   const [editingBio, setEditingBio] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -480,6 +481,30 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
         ? <button type="button" className="person-modal-photo-button" onClick={() => canEdit && photoRef.current?.click()} aria-label={canEdit ? "Change portrait" : "Portrait"} title={canEdit ? "Click to change the portrait" : undefined}><img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /></button>
         : canEdit && <button type="button" className="person-add-photo" onClick={() => photoRef.current?.click()}>＋ Add photo</button>}
     </div>
+    <div className="person-actions">
+      <button type="button" className="person-action is-primary" onClick={() => onShowInTree(person)}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.4" /><circle cx="5.5" cy="18" r="2.4" /><circle cx="18.5" cy="18" r="2.4" /><path d="M12 7.5v4M12 11.5l-5 4.2M12 11.5l5 4.2" /></svg>
+        <span>Tree</span>
+      </button>
+      <button type="button" className="person-action" onClick={() => (document.querySelector(".editor-composer textarea, .public-chat-composer textarea") as HTMLTextAreaElement | null)?.focus()}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.4 3.4A.6.6 0 0 1 4.6 19V16" /></svg>
+        <span>Ask AI</span>
+      </button>
+      {canEdit && <button type="button" className="person-action" onClick={() => photoRef.current?.click()}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="13" rx="2.5" /><circle cx="12" cy="12.5" r="3.4" /><path d="M9 6l1.2-2h3.6L15 6" /></svg>
+        <span>Photo</span>
+      </button>}
+      {canEdit && <div className="person-action-wrap">
+        <button type="button" className={`person-action ${moreOpen ? "is-open" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-expanded={moreOpen}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="18" cy="12" r="1.4" /></svg>
+          <span>More</span>
+        </button>
+        {moreOpen && <div className="person-more-menu">
+          {person.photoAttachmentId && <button type="button" onClick={async () => { setMoreOpen(false); try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>Remove portrait</button>}
+          <button type="button" className="is-danger" disabled={saving} onClick={() => { setMoreOpen(false); deletePerson(); }}>Delete person</button>
+        </div>}
+      </div>}
+    </div>
     <div className="person-facts">
       <div><span className="eyebrow">Born</span><p className="fact-line"><InlineText value={person.birthDate} placeholder="add date" canEdit={canEdit} onSave={patchField("birthDate")} className="fact-date" /> in <InlineText value={person.birthCity} placeholder="city" canEdit={canEdit} onSave={patchField("birthCity")} />, <InlineText value={person.birthCountry} placeholder="country" canEdit={canEdit} onSave={patchField("birthCountry")} />{!canEdit && !person.birthDate && "Birth date not recorded"}</p></div>
       <div><span className="eyebrow">Died</span><p className="fact-line"><InlineText value={person.deathDate} placeholder="add date · empty means living" canEdit={canEdit} onSave={patchField("deathDate")} className="fact-date" /> in <InlineText value={person.deathCity} placeholder="city" canEdit={canEdit} onSave={patchField("deathCity")} />, <InlineText value={person.deathCountry} placeholder="country" canEdit={canEdit} onSave={patchField("deathCountry")} />{!canEdit && !person.deathDate && "Still living / unknown"}</p></div>
@@ -494,7 +519,6 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
     </div>
     <div className="modal-relationships">{([['Parents', buckets.parents], ['Spouse', buckets.spouses], ['Children', buckets.children], ['Siblings', buckets.siblings]] as [string, Person[]][]).map(([label, people]) => <div className="relationship-group" key={label}><div className="relationship-heading"><p className="eyebrow">{label}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => { setRelationEditor(relationEditor === label ? null : label); setRelativeQuery(""); setRelativeChoice(""); }} aria-label={`Add ${label.toLocaleLowerCase()}`}>＋</button>}</div><div className="relationship-chips">{people.map((relative) => { const link = relation(relative, label); return <span className="relationship-chip-wrap" key={relative.id}><button className="relationship-chip" onClick={() => onSelect(relative)}>{relative.displayName}{relative.birthDate ? ` · ${relative.birthDate.slice(0, 4)}` : ""}{label === "Spouse" && link?.status ? ` · ${link.status}` : ""}</button>{label === "Spouse" && canEdit && link && <select className="marriage-status" value={link.status ?? ""} aria-label={`Marriage status with ${relative.displayName}`} onChange={async (event) => { try { await post({ action: "relationship_status", relationshipId: link.id, status: event.target.value || null }); setNotice("Marriage status saved"); } catch { setNotice("Could not save status"); } }}><option value="">married</option><option value="divorced">divorced</option><option value="widowed">widowed</option></select>}{canEdit && link && <button className="relationship-remove" onClick={() => removeRelationship(link.id)} aria-label={`Remove ${relative.displayName}`}>×</button>}</span>; })}</div>{relationEditor === label && <div className="relative-picker"><input className="modal-input" value={relativeQuery} autoFocus placeholder={`Find or create a ${label.toLocaleLowerCase().replace(/s$/, "")}`} onChange={(event) => { setRelativeQuery(event.target.value); setRelativeChoice(""); }} />{relativeQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && candidate.displayName.toLocaleLowerCase().includes(relativeQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={() => { setRelativeChoice(candidate.id); setRelativeQuery(candidate.displayName); }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}{locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace) ? ` · ${locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace)}` : ""}</span></button>)}</div>}<button type="button" className="relative-add-button" disabled={!relativeQuery.trim() || saving} onClick={() => addRelative(label)}>{relativeChoice ? "Add selected person" : "Use this name"}</button></div>}</div>)}</div>
     {notice && <p className="modal-notice" role="status">{notice}</p>}
-    {canEdit && <div className="person-delete-footer">{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>Remove portrait</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>Delete person</button></div>}
   </section>;
 }
 
@@ -539,7 +563,7 @@ function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeople
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
           {focusPerson && <PersonContextCard person={focusPerson} tree={tree} note="Questions are answered about this person." onClear={onClearFocus} />}
           <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(); } }} className="min-h-24 w-full resize-none bg-transparent px-2 py-1 pr-12 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Who are the children of…?" aria-label="Search the family archive" />
-          <button onClick={ask} disabled={busy || !question.trim()} className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--ink)] text-white transition hover:bg-[var(--accent)] disabled:opacity-40" aria-label="Search the family archive">↑</button>
+          <button onClick={ask} disabled={busy || !question.trim()} className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent)] text-white transition hover:bg-[#365844] disabled:opacity-40" aria-label="Search the family archive">↑</button>
         </div>
       </div>
     </div>

@@ -762,3 +762,33 @@ main.chat-collapsed .person-hover-preview { left:0; }
 .person-hover-preview > p { margin:.55rem 0; font-size:.88rem; line-height:1.5; }
 .person-hover-preview > p .eyebrow { display:block; color:var(--accent); font-weight:700; margin-bottom:.1rem; }
 .person-hover-bio { color:var(--muted); border-top:1px dashed var(--line); padding-top:.8rem; margin-top:1rem !important; }
+
+/* ============ closing pass: Maps-style panel language ============ */
+
+/* profile action tiles: icon over label, one primary */
+.person-actions { position:relative; display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:.55rem; margin:1.4rem 0 1.5rem; }
+.person-action-wrap { position:relative; display:contents; }
+.person-action { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.4rem; border:1px solid var(--line); border-radius:.95rem; background:white; padding:.75rem .3rem .6rem; font-size:.7rem; font-weight:650; color:var(--ink); box-shadow:0 1px 2px rgba(var(--shadow-tint),.05); }
+.person-action svg { width:1.35rem; height:1.35rem; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.person-action svg circle { fill:currentColor; stroke:none; }
+.person-action.is-primary svg circle, .person-action.is-primary { color:white; }
+.person-action.is-primary { background:var(--accent); border-color:var(--accent); }
+.person-action.is-primary:hover { background:#365844; }
+.person-action:hover:not(.is-primary), .person-action.is-open { border-color:var(--accent); color:var(--accent); }
+.person-more-menu { position:absolute; right:0; top:calc(100% + .4rem); z-index:10; min-width:11rem; border:1px solid var(--line); border-radius:.8rem; background:white; padding:.3rem; box-shadow:0 16px 44px rgba(var(--shadow-tint),.18); }
+.person-more-menu button { display:block; width:100%; border-radius:.55rem; padding:.55rem .8rem; text-align:left; font-size:.82rem; font-weight:600; }
+.person-more-menu button:hover { background:var(--wash); }
+.person-more-menu button.is-danger { color:#8c3a2b; }
+.person-more-menu button.is-danger:hover { background:#fdf0ee; }
+
+/* facts as a Maps-style stat strip */
+.person-modal-v2 .person-facts { display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--line); border-radius:1rem; background:white; overflow:visible; margin-bottom:1.4rem; }
+.person-modal-v2 .person-facts > div { padding:.85rem 1rem; }
+.person-modal-v2 .person-facts > div + div { border-left:1px solid var(--line); }
+.person-modal-v2 .person-facts .eyebrow { color:var(--accent); font-weight:700; }
+
+/* settings + fill primaries follow the accent language */
+.settings-signin { background:var(--accent); }
+.settings-signin:hover { background:#365844; }
+.settings-add button, .fill-save, .relative-add-button { background:var(--accent) !important; color:white; }
+.settings-add button:hover:not(:disabled), .fill-save:hover:not(:disabled), .relative-add-button:hover:not(:disabled) { background:#365844 !important; }
