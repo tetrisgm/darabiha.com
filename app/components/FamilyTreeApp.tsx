@@ -114,6 +114,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [hoverPreview, setHoverPreview] = useState<Person | null>(null);
+  const [hoverPlace, setHoverPlace] = useState<MappedPlace | null>(null);
   // Map mode: a clicked city opens the panel as a list of its people; opening
   // one of them swaps in the profile, and closing it returns to the list.
   const [placeFocus, setPlaceFocus] = useState<MappedPlace | null>(null);
@@ -347,11 +348,16 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
           <div className="chat-resize-handle" onPointerDown={startChatResize} aria-hidden="true" />
         </aside>
         <button className={`chat-edge-reveal ${chatCollapsed ? "is-visible" : ""}`} onClick={() => setChatCollapsed(false)} aria-label={t("chat.reveal")} title={t("chat.reveal")}>›</button>
-        {hoverPreview && viewMode === "family" && hoverPreview.id !== selectedPerson?.id && (
+        {hoverPreview && (viewMode === "family" || viewMode === "list") && hoverPreview.id !== selectedPerson?.id && (
           // the hover preview IS the profile: the same panel a click opens,
           // rendered read-only and inert
           <div className="person-hover-preview" aria-hidden="true">
             <PersonModalV2 key={hoverPreview.id} person={hoverPreview} tree={tree} canEdit={false} preview onClose={() => {}} onSelect={() => {}} onTreeChange={() => {}} />
+          </div>
+        )}
+        {hoverPlace && viewMode === "map" && hoverPlace.key !== placeFocus?.key && (
+          <div className="person-hover-preview" aria-hidden="true">
+            <PlacePanel key={hoverPlace.key} place={hoverPlace} onPick={() => {}} onClose={() => {}} />
           </div>
         )}
         {!selectedPerson && placeFocus && viewMode === "map" && <PlacePanel place={placeFocus} onPick={(person) => openPerson(person, true, false)} onClose={() => setPlaceFocus(null)} />}
@@ -363,13 +369,13 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
             <div className="relative h-full min-h-0 overflow-hidden stage-bg">
               {viewMode !== "timeline" && viewMode !== "map" && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
               {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} selectedId={selectedPerson?.id ?? null} canBack canForward onBack={() => window.history.back()} onForward={() => window.history.forward()} onPick={(person) => openPerson(person)} onSelectOnly={(person) => openPerson(person, true, false)} onPreview={setHoverPreview} onOpen={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
-              {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => openPerson(person)} />}
+              {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => openPerson(person)} onPreview={setHoverPreview} />}
               {viewMode === "fill" && viewer.canEdit && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
               {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
               {viewMode === "timeline" && <TimelineView tree={tree} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
               {viewMode === "calendar" && treeLoaded && <CalendarView tree={tree} onSelect={(person) => openPerson(person)} />}
               {viewMode === "stats" && treeLoaded && <StatisticsView tree={tree} onSelect={(person) => openPerson(person)} />}
-              {viewMode === "map" && <WorldMapView tree={tree} onSelectPlace={(place) => { setPlaceFocus(place); setSelectedPerson(null); setHighlightedIds(place.people.map((person) => person.id)); }} />}
+              {viewMode === "map" && <WorldMapView tree={tree} onPreviewPlace={setHoverPlace} onSelectPlace={(place) => { setHoverPlace(null); setPlaceFocus(place); setSelectedPerson(null); setHighlightedIds(place.people.map((person) => person.id)); }} />}
             </div>
           </div>
         </section>

@@ -420,7 +420,7 @@ function buildDescentModel(tree: FamilyTree) {
 }
 
 /** The whole family as a collapsible indented outline. */
-export function OutlineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
+export function OutlineView({ tree, onSelect, onPreview }: { tree: FamilyTree; onSelect: (person: Person) => void; onPreview?: (person: Person | null) => void }) {
   const model = useMemo(() => {
     const { maps, kidsOf } = buildDescentModel(tree);
     const placedAsSpouse = new Set<string>();
@@ -442,9 +442,13 @@ export function OutlineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (p
     const kids = (kidsOf.get(person.id) ?? []).map((id) => maps.byId.get(id)).filter(Boolean) as Person[];
     kids.sort((a, b) => (Number(a.birthDate?.slice(0, 4)) || 9999) - (Number(b.birthDate?.slice(0, 4)) || 9999) || a.displayName.localeCompare(b.displayName));
     const line = <span className="outline-line">
-      <button type="button" className="outline-name" onClick={() => onSelect(person)}>{person.displayName}</button>
+      <button type="button" className="outline-name" onClick={() => onSelect(person)}
+        onMouseEnter={() => onPreview?.(person)} onMouseLeave={() => onPreview?.(null)}
+        onFocus={() => onPreview?.(person)} onBlur={() => onPreview?.(null)}>{person.displayName}</button>
       {years(person) && <span className="outline-years">{years(person)}</span>}
-      {spouses.map((spouse) => <span className="outline-spouse" key={spouse.id}>⚭ <button type="button" onClick={() => onSelect(spouse)}>{spouse.displayName}</button>{years(spouse) ? ` ${years(spouse)}` : ""}</span>)}
+      {spouses.map((spouse) => <span className="outline-spouse" key={spouse.id}>⚭ <button type="button" onClick={() => onSelect(spouse)}
+        onMouseEnter={() => onPreview?.(spouse)} onMouseLeave={() => onPreview?.(null)}
+        onFocus={() => onPreview?.(spouse)} onBlur={() => onPreview?.(null)}>{spouse.displayName}</button>{years(spouse) ? ` ${years(spouse)}` : ""}</span>)}
     </span>;
     if (!kids.length) return <div className="outline-leaf" key={person.id}>{line}</div>;
     return <details key={person.id} open>

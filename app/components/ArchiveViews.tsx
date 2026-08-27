@@ -26,7 +26,7 @@ export function TimelineView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
   </section>;
 }
 
-export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSelectPlace: (place: MappedPlace) => void }) {
+export function WorldMapView({ tree, onSelectPlace, onPreviewPlace }: { tree: FamilyTree; onSelectPlace: (place: MappedPlace) => void; onPreviewPlace?: (place: MappedPlace | null) => void }) {
   const { t } = useLanguage();
   const { mapped, unmapped } = mapFamilyPlaces(tree);
   // The board's own width, untransformed, so screen distances can be worked
@@ -116,7 +116,12 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
   // 2:1 board (which the marker percentages are calibrated to) covers it.
   return <section className="archive-view family-map-view" aria-label="Family places">
     <div className="world-map" ref={stageRef} role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"} data-framed={hasFramed ? "true" : "false"}
-      onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}>
+      onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
+      onDoubleClick={(event) => {
+        // a map zooms in where you double-click, around the point you chose
+        const rect = event.currentTarget.getBoundingClientRect();
+        zoomAt(1.6, { x: event.clientX - (rect.left + rect.width / 2), y: event.clientY - (rect.top + rect.height / 2) });
+      }}>
       <div className="canvas-controls map-zoom" role="group" aria-label="Map zoom controls">
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomAt(0.9, { x: 0, y: 0 })} aria-label={t("map.zoomOut")} title={t("map.zoomOut")}>−</button>
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => { setScale(1); setPan({ x: 0, y: 0 }); }} className="canvas-zoom-level" aria-label={t("map.reset")} title={t("map.reset")}>{Math.round(scale * 100)}%</button>
@@ -127,7 +132,9 @@ export function WorldMapView({ tree, onSelectPlace }: { tree: FamilyTree; onSele
       <svg viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {WORLD_COUNTRY_PATHS.map((d, index) => <path d={d} key={index} />)}
       </svg>
-      {mapped.map((location) => <button type="button" className={`map-marker is-${labelPlan.get(location.key) ?? "right"}`} style={{ left: `${location.x}%`, top: `${location.y}%`, zIndex: 4 + location.people.length }} key={location.key} onClick={() => onSelectPlace(location)} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
+      {mapped.map((location) => <button type="button" className={`map-marker is-${labelPlan.get(location.key) ?? "right"}`} style={{ left: `${location.x}%`, top: `${location.y}%`, zIndex: 4 + location.people.length }} key={location.key} onClick={() => onSelectPlace(location)}
+        onMouseEnter={() => onPreviewPlace?.(location)} onMouseLeave={() => onPreviewPlace?.(null)}
+        onFocus={() => onPreviewPlace?.(location)} onBlur={() => onPreviewPlace?.(null)} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
       {!mapped.length && <p className="map-empty">Add a birth or death city and country to place someone on the map.</p>}
       </div>
       </div>
@@ -198,23 +205,44 @@ export function StatisticsView({ tree, onSelect }: { tree: FamilyTree; onSelect:
  * map zooms - so two cities that overlap at 1x are legible at 4x. The busier
  * place keeps the right side, a crowded neighbour flips to the left, and only
  * a label with nowhere to go steps back to its count until hovered. */
-function planLabels(mapped: MappedPlace[], scale: number, boardWidth: number): Map<string, "right" | "left" | "quiet"> {
+type LabelSide = "right" | "left" | "above" | "below" | "quiet";
+
+/** Where each city's name can sit without landing on another one.
+ *
+ * A name that will not fit beside its pin is not hidden any more: it is tried
+ * above and below first, because a second city a little way down the map has
+ * room over its own head even when the space beside it is taken. Only a name
+ * with nowhere at all to go steps back to its count until hovered. */
+function planLabels(mapped: MappedPlace[], scale: number, boardWidth: number): Map<string, LabelSide> {
   if (!boardWidth) return new Map();
   const boardHeight = boardWidth / 2;
   // measured from the rendered labels: 30px tall, at most ~90px wide
-  const LABEL = 132, DISC = 34, ROW = 34;
+  const LABEL = 132, DISC = 34, ROW = 34, STACK = 30;
   const placed: { y: number; from: number; to: number }[] = [];
-  const sides: [string, "right" | "left" | "quiet"][] = [];
-  const overlaps = (y: number, from: number, to: number) => placed.some((other) =>
+  const sides: [string, LabelSide][] = [];
+  const free = (y: number, from: number, to: number) => !placed.some((other) =>
     Math.abs(other.y - y) < ROW && from < other.to && to > other.from);
   for (const place of [...mapped].sort((a, b) => b.people.length - a.people.length)) {
     const x = (place.x / 100) * boardWidth * scale;
     const y = (place.y / 100) * boardHeight * scale;
-    const right = { from: x - DISC / 2, to: x + DISC / 2 + LABEL };
-    const left = { from: x - DISC / 2 - LABEL, to: x + DISC / 2 };
-    if (!overlaps(y, right.from, right.to)) { sides.push([place.key, "right"]); placed.push({ y, ...right }); }
-    else if (!overlaps(y, left.from, left.to)) { sides.push([place.key, "left"]); placed.push({ y, ...left }); }
-    else { sides.push([place.key, "quiet"]); placed.push({ y, from: x - DISC / 2, to: x + DISC / 2 }); }
+    // beside the pin first, then over its head, then under its feet
+    const options: [LabelSide, number, number, number][] = [
+      ["right", y, x - DISC / 2, x + DISC / 2 + LABEL],
+      ["left", y, x - DISC / 2 - LABEL, x + DISC / 2],
+      ["above", y - STACK, x - LABEL / 2, x + LABEL / 2],
+      ["below", y + STACK, x - LABEL / 2, x + LABEL / 2],
+    ];
+    const found = options.find(([, atY, from, to]) => free(atY, from, to));
+    if (found) {
+      const [side, atY, from, to] = found;
+      sides.push([place.key, side]);
+      placed.push({ y: atY, from, to });
+      // the pin itself still occupies its own row wherever the name went
+      if (side === "above" || side === "below") placed.push({ y, from: x - DISC / 2, to: x + DISC / 2 });
+    } else {
+      sides.push([place.key, "quiet"]);
+      placed.push({ y, from: x - DISC / 2, to: x + DISC / 2 });
+    }
   }
   return new Map(sides);
 }
