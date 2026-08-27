@@ -161,7 +161,7 @@ test("uploading a document needs a form and an editor", async ({ page, browser }
   expect((await page.request.post("/api/documents")).status()).toBe(403);
 });
 
-for (const [label, width, height] of [["iPhone", 390, 844], ["iPad portrait", 820, 1180], ["iPad landscape", 1180, 820]] as const) {
+for (const [label, width, height] of [["iPhone", 390, 844], ["iPad mini portrait", 744, 1133], ["iPad portrait", 820, 1180], ["iPad landscape", 1180, 820], ["iPad Pro landscape", 1366, 1024]] as const) {
   test(`${label} fits the screen and every control is thumb-sized`, async ({ browser, baseURL }) => {
     const context = await browser.newContext({
       viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2,
@@ -183,6 +183,20 @@ for (const [label, width, height] of [["iPhone", 390, 844], ["iPad portrait", 82
     expect(report.inner).toBe(width);
     expect(report.doc).toBeLessThanOrEqual(report.inner + 1);
     expect(report.small, `controls under Apple's 44pt: ${report.small.join(", ")}`).toEqual([]);
+
+    // every view must be reachable: either the strip shows all its segments,
+    // or it has given way to the picker, which holds them all
+    const views = await page.evaluate(() => {
+      const strip = document.querySelector(".archive-view-switcher");
+      const picker = document.querySelector(".archive-view-picker select") as HTMLSelectElement | null;
+      const stripShown = strip ? getComputedStyle(strip).display !== "none" : false;
+      if (!stripShown) return { control: "picker", total: picker?.options.length ?? 0, reachable: picker?.options.length ?? 0 };
+      const tabs = [...strip!.querySelectorAll("button")];
+      const onScreen = tabs.filter((b) => { const r = b.getBoundingClientRect(); return r.left >= -1 && r.right <= window.innerWidth + 1; });
+      return { control: "strip", total: tabs.length, reachable: onScreen.length };
+    });
+    expect(views.total).toBeGreaterThan(4);
+    expect(views.reachable, `${views.control} hides views`).toBe(views.total);
     await context.close();
   });
 }
