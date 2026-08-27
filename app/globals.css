@@ -725,8 +725,6 @@ main.chat-collapsed .site-action-bar { left:16px; }
 /* family view: uniform cards, selection highlight, progressive relayout */
 .ped-card.is-selected { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent), 0 14px 34px rgba(var(--shadow-tint),.14); }
 .ped-card.is-focal { transform:none; }
-@keyframes ped-swap { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
-.ped-columns { animation: ped-swap .45s var(--ease) both; }
 /* a child of .ped-view, not of the padded .ped-stage: an offset inside the
    stage is measured from the padding, which pushed it off the corner */
 .ped-zoom { position:absolute; right:.6rem; bottom:.6rem; z-index:5; }
@@ -1533,6 +1531,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .site-action-bar .tree-search { display:none; }
 }
 
-/* A board rebuilt around a card that must not move does not get the arrival
-   flourish: the rise is what would make the card look like it moved. */
-.ped-view[data-hold="true"] .ped-columns { animation:none; }
+/* The board used to fade in and rise ten pixels whenever the focus changed.
+   It has no arrival flourish now: a card the reader clicked must sit still,
+   and every attempt to keep the animation for other cases left the camera
+   measuring a board that was still moving. */
