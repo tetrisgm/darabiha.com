@@ -160,12 +160,27 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const hidePedCursor = () => {
     if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
   };
+  const fitted = useRef(false);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
+    let frame = 0;
+    let lastWidth = -1;
+    const settle = () => {
+      const width = containerRef.current?.getBoundingClientRect().width ?? 0;
+      // The stage animates open when the chat collapses beside it; the first
+      // fit waits for two frames that agree on the width, or it would size
+      // the board to a stage still on its way out.
+      if (!width || (!fitted.current && width !== lastWidth)) { lastWidth = width; frame = requestAnimationFrame(settle); return; }
+      if (!fitted.current) {
+        fitted.current = true;
+        // three 13rem columns with 3.2rem between them is what makes the board
+        // read as a family; a phone gets the whole arrangement, scaled down,
+        // instead of the middle column and two ghosts
+        if (width < 720) setScale(Math.max(0.4, Math.min(1, width / 720)));
+      }
       setPanMode("idle");
       setPan({ x: 0, y: 0 });
       // after the zero-pan layout paints, land the focal card on the stage center
-      requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
         const stage = containerRef.current;
         const focalCard = slotRefs.current.get("focal");
         if (!stage || !focalCard) return;
@@ -176,7 +191,8 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
           y: (stageRect.top + stageRect.height / 2) - (cardRect.top + cardRect.height / 2),
         });
       });
-    });
+    };
+    settle();
     return () => cancelAnimationFrame(frame);
   }, [focusId]);
   /* A preview must not move anything the reader is looking at. The board
