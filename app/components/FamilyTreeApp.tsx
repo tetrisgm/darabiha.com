@@ -205,7 +205,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     // Compact width - a phone, or an iPad in Slide Over - is one column: the
     // chat fills it, so choosing a view has to get the chat out of the way or
     // the tab appears to do nothing at all. An iPad has room for both.
-    if (typeof window !== "undefined" && window.innerWidth < 768) setChatCollapsed(true);
+    if (typeof window !== "undefined" && window.innerWidth <= 743) setChatCollapsed(true);
     if (mode !== "map") setPlaceFocus(null);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
   };

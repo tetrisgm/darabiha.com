@@ -1298,7 +1298,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
    1174px. A document that wide makes the browser zoom the whole archive down
    to a third of its size, record panel included, and nothing on the page
    looks wrong from the inside: it is the viewport that gave way. */
-@media (max-width: 767px) {
+@media (max-width: 743px) {
   .chat-sidebar { width:min(var(--chat-width,480px),100vw); flex:0 0 min(var(--chat-width,480px),100vw); }
   /* The bar spans the phone, so the shell has to start below it - otherwise
      it lies over the top of whatever is in the first column, including the
@@ -1314,7 +1314,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .site-action-bar { gap:.5rem; }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 743px) {
   /* .family-shell is isolation:isolate, so the record panel's z-index is
      confined inside it. With the panel covering the whole phone, the shell
      has to sit above the header and the version stamp or they paint over it -
@@ -1446,7 +1446,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
    At 768pt and above is regular: an iPad, which should be given a real split
    rather than a stretched phone. A 480pt chat took 62% of an iPad in portrait
    and left the family board 288pt to live in. */
-@media (min-width: 768px) and (max-width: 1100px) {
+@media (min-width: 744px) and (max-width: 1100px) {
   .chat-sidebar { width:clamp(20rem, 38vw, 26rem); flex:0 0 clamp(20rem, 38vw, 26rem); }
   .site-action-bar,
   main.has-person .site-action-bar,
@@ -1470,7 +1470,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .person-panel-bar { padding-top:env(safe-area-inset-top); }
 .canvas-controls, .ped-zoom, .world-map .map-zoom { bottom:calc(.6rem + env(safe-area-inset-bottom)); }
 .build-version { bottom:calc(.6rem + env(safe-area-inset-bottom)); }
-@media (max-width: 767px) {
+@media (max-width: 743px) {
   .family-shell { padding-top:calc(3.6rem + env(safe-area-inset-top)); }
   .chat-sidebar > div { padding-bottom:calc(1.5rem + env(safe-area-inset-bottom)); }
 }
@@ -1486,4 +1486,12 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .person-panel-bar button, .focus-back, .canvas-controls button { min-width:2.75rem; min-height:2.75rem; }
   .lang-pick { min-width:2.75rem; min-height:2.75rem; }
   .identify-matches button, .fill-row-head { min-height:2.75rem; }
+  /* the chips that fold a branch are the tree's main control on a touch
+     screen, and they were as little as 19px tall */
+  .branch-chip { min-height:2.75rem; padding:.5rem .8rem; }
+  .settings-gear, .sidebar-toggle, .account-menu-button { min-width:2.75rem; min-height:2.75rem; }
+  .chat-edge-reveal { width:2.75rem; }
+  .public-chat-composer > button, .chat-send { min-width:2.75rem; min-height:2.75rem; }
+  .settings-signin, .site-action-bar a[href] { min-height:2.75rem; display:inline-flex; align-items:center; }
+  .tree-search input { min-height:2.75rem; }
 }
