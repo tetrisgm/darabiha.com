@@ -1335,16 +1335,25 @@ html[lang="fa"] { font-variant-numeric: normal; }
 
 /* A phone has no hover, so the photograph's actions - set as portrait, who
    else is in this, remove - were unreachable: they live behind :hover on the
-   tile. On a coarse pointer they sit under the photograph instead, always
-   visible, at a size a thumb can hit. */
+   tile. On a coarse pointer the tile becomes a column - picture, then its
+   actions underneath - rather than an overlay, so nothing depends on hover
+   and nothing overlaps. The image carries the frame the tile used to. */
 @media (hover: none) {
-  .person-modal-v2 .photo-tile { width:calc(50% - .25rem); aspect-ratio:auto; overflow:visible; }
-  .person-modal-v2 .photo-tile img { aspect-ratio:1; border-radius:.7rem; }
+  .person-modal-v2 .photo-tile { width:calc(50% - .25rem); aspect-ratio:auto; overflow:visible;
+    display:flex; flex-direction:column; border:0; border-radius:0; background:transparent; box-shadow:none; }
+  .person-modal-v2 .photo-tile img { width:100%; height:auto; aspect-ratio:1;
+    border:1px solid var(--line); border-radius:.8rem; }
+  .person-modal-v2 .photo-tile.is-portrait img { border-color:color-mix(in srgb,var(--accent) 55%,transparent);
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent); }
+  .person-modal-v2 .photo-tile-badge { top:.4rem; bottom:auto; }
   .person-modal-v2 .photo-tile-actions { position:static; inset:auto; opacity:1; flex-direction:row; flex-wrap:wrap;
     gap:.25rem; padding:.35rem 0 0; background:transparent; }
   .person-modal-v2 .photo-tile-actions button { flex:1 1 auto; min-height:2rem; font-size:.7rem; }
-  .person-modal-v2 .photo-tile-badge { bottom:auto; top:.35rem; }
+  .person-modal-v2 .photo-tile-add { aspect-ratio:1; border:1px dashed var(--line); border-radius:.8rem; }
   /* thumb-sized rather than cursor-sized */
   .gender-pick { padding:.4rem .95rem; }
   .person-modal-v2 .inline-edit { padding:.25rem .4rem; }
+  .relationship-remove { min-width:2rem; min-height:2rem; }
+  .marriage-status { min-height:2rem; }
+  .photo-remove-button, .person-delete-button { min-height:2rem; padding:.3rem .6rem; }
 }
