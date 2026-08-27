@@ -666,14 +666,30 @@ export async function listDocumentQueue(limit = 40): Promise<QueuedDocument[]> {
 }
 
 /** Takes the oldest waiting document and marks it as being read, so two
- *  drains running at once cannot read the same file twice. */
+ *  drains running at once cannot read the same file twice.
+ *
+ *  A claim that never finishes - the request was abandoned, the tab closed,
+ *  the Worker cut off mid-read - would otherwise strand that document in
+ *  "reading" for good, so a claim older than ten minutes is treated as
+ *  abandoned and the document goes back in the queue. Ten minutes is well
+ *  past any real read and short enough that nobody waits on it. */
+const CLAIM_MINUTES = 10;
+
 export async function claimNextDocument(): Promise<QueuedDocument | null> {
   await ensureSchema();
+  const stale = new Date(Date.now() - CLAIM_MINUTES * 60_000).toISOString();
   const row = await env.DB.prepare(`SELECT id, attachment_id AS attachmentId, filename, uploaded_by AS uploadedBy,
     status, result, created_at AS createdAt, processed_at AS processedAt
-    FROM document_queue WHERE status = 'pending' ORDER BY created_at LIMIT 1`).first<QueuedDocument>();
+    FROM document_queue
+    WHERE status = 'pending' OR (status = 'reading' AND (processed_at IS NULL OR processed_at < ?))
+    ORDER BY created_at LIMIT 1`).bind(stale).first<QueuedDocument>();
   if (!row) return null;
-  const claimed = await env.DB.prepare("UPDATE document_queue SET status = 'reading' WHERE id = ? AND status = 'pending'").bind(row.id).run();
+  const now = new Date().toISOString();
+  // processed_at doubles as "last touched": set on the claim so an abandoned
+  // one can be recognised, and overwritten when the read finishes
+  const claimed = await env.DB.prepare(`UPDATE document_queue SET status = 'reading', processed_at = ?
+    WHERE id = ? AND (status = 'pending' OR (status = 'reading' AND (processed_at IS NULL OR processed_at < ?)))`)
+    .bind(now, row.id, stale).run();
   if (!claimed.meta.changes) return null;
   return { ...row, status: "reading" };
 }

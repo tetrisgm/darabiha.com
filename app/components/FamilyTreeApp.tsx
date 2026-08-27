@@ -398,7 +398,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                         if (!chosen.length) return;
                         const body = new FormData();
                         for (const file of chosen) body.append("files", file);
-                        setIngesting(`Sending ${chosen.length} document${chosen.length === 1 ? "" : "s"} to the archive…`);
+                        setIngesting(`Reading ${chosen.length === 1 ? chosen[0].name : `${chosen.length} documents`}… this can take a minute.`);
                         try {
                           const response = await fetch("/api/documents", { method: "POST", body });
                           if (!response.ok) { setIngesting("Those documents could not be sent."); return; }
