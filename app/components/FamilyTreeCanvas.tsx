@@ -256,16 +256,22 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = [], focusPer
     const dx = hold.at.left - now.left, dy = hold.at.top - now.top;
     if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) setView((current) => ({ ...current, x: current.x + dx, y: current.y + dy }));
   }, [positions]);
-  // open on the patriarch: world x 0 is the layout anchor
+  // Open on the patriarch: world x 0 is the layout anchor. The canvas animates
+  // open when the chat collapses beside it, so the frame waits for a width
+  // that has stopped moving - measured mid-transition it once latched onto
+  // 8.8px and left the whole tree off the edge of a phone, permanently.
   const centered = useRef(false);
   useLayoutEffect(() => {
     if (!ready || centered.current) return;
     let raf = 0;
+    let last = -1;
     const attempt = () => {
-      const rect = cursorRef.current?.parentElement?.getBoundingClientRect();
-      if (!rect || !rect.width) { raf = requestAnimationFrame(attempt); return; }
+      const width = cursorRef.current?.parentElement?.getBoundingClientRect().width ?? 0;
+      if (!width || width !== last) { last = width; raf = requestAnimationFrame(attempt); return; }
       centered.current = true;
-      setView({ x: rect.width / 2, y: 30, scale: 1 });
+      // a card is 15rem wide; on a narrow canvas open far enough out to see
+      // more than one of them
+      setView({ x: width / 2, y: 30, scale: clampScale(Math.min(1, width / 640)) });
     };
     attempt();
     return () => cancelAnimationFrame(raf);
