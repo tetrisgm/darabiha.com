@@ -164,9 +164,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const setViewMode = (mode: ViewMode) => {
     viewChosen.current = true;
     setViewModeState(mode);
-    // One column on a phone: the chat fills it, so choosing a view has to get
-    // the chat out of the way or the tab appears to do nothing at all.
-    if (typeof window !== "undefined" && window.innerWidth <= 720) setChatCollapsed(true);
+    // One column on a phone or a tablet: the chat takes most of it, so
+    // choosing a view has to get the chat out of the way or the tab appears
+    // to do nothing at all.
+    if (typeof window !== "undefined" && window.innerWidth <= 900) setChatCollapsed(true);
     if (mode !== "map") setPlaceFocus(null);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
   };

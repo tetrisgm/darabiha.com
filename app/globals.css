@@ -1309,7 +1309,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
    1174px. A document that wide makes the browser zoom the whole archive down
    to a third of its size, record panel included, and nothing on the page
    looks wrong from the inside: it is the viewport that gave way. */
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   .chat-sidebar { width:min(var(--chat-width,480px),100vw); flex:0 0 min(var(--chat-width,480px),100vw); }
   /* The bar spans the phone, so the shell has to start below it - otherwise
      it lies over the top of whatever is in the first column, including the
@@ -1322,13 +1322,10 @@ html[lang="fa"] { font-variant-numeric: normal; }
   main.has-person .site-action-bar,
   main.chat-collapsed .site-action-bar,
   main.chat-collapsed.has-person .site-action-bar { left:0; right:0; }
-  /* the header's own row scrolls instead of widening the page */
-  .site-action-bar { gap:.5rem; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
-  .site-action-bar::-webkit-scrollbar { display:none; }
-  .site-action-bar > * { flex:none; }
+  .site-action-bar { gap:.5rem; }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 900px) {
   /* .family-shell is isolation:isolate, so the record panel's z-index is
      confined inside it. With the panel covering the whole phone, the shell
      has to sit above the header and the version stamp or they paint over it -
@@ -1365,3 +1362,13 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .marriage-status { min-height:2rem; }
   .photo-remove-button, .person-delete-button { min-height:2rem; padding:.3rem .6rem; }
 }
+
+/* The header's contents outgrew it at every width - 1437px of them on a
+   1400px desktop - which scrolled the whole page sideways. The tab strip is
+   what stretches, and it is the one part of the bar with nothing escaping it,
+   so it carries the scroll; the account menu opens out of the bar and must
+   not be clipped, which is why the bar itself does not. */
+.site-action-bar > * { min-width:0; }
+.archive-view-switcher { max-width:100%; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; }
+.archive-view-switcher::-webkit-scrollbar { display:none; }
+.archive-view-switcher button { flex:none; }
