@@ -733,3 +733,7 @@ main.chat-collapsed .site-action-bar { left:16px; }
 
 /* tabs as a real flex item so the header can never overlap them */
 .site-action-bar .archive-view-switcher { position:static; transform:none; }
+
+/* legal pages */
+.legal-page h2 { margin:1.1rem 0 .2rem; font-family:var(--font-serif),Georgia,serif; font-size:1.15rem; font-weight:600; }
+.legal-page p { margin:.35rem 0; }
