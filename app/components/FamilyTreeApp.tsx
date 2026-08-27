@@ -162,11 +162,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   };
   // what the archive volunteers before it is asked: an anniversary today, or
   // a fact about the family, with openers worth tapping
-  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; suggestions: string[] } | null>(null);
+  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] } | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/greeting")
-      .then((response) => response.ok ? response.json() as Promise<{ fact: string | null; personId: string | null; suggestions: string[] }> : null)
+      .then((response) => response.ok ? response.json() as Promise<{ fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] }> : null)
       .then((data) => { if (!cancelled && data) setGreeting(data); })
       .catch(() => { /* the chat works without it */ });
     return () => { cancelled = true; };
@@ -299,18 +299,18 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                     <span className="chat-fact-label">{t("chat.fromArchive")}</span>
                     <span>{greeting.fact}</span>
                   </button>}
-                  {messages.length === 0 && <div className="chat-suggestions">
-                    {(selectedPerson ? [
-                      `What do we know about ${selectedPerson.displayName.split(" ")[0]}?`,
-                      `${selectedPerson.displayName.split(" ")[0]} was born in …`,
-                      `${selectedPerson.displayName.split(" ")[0]} had a sibling named …`,
-                    ] : greeting?.suggestions?.length ? greeting.suggestions : [
-                      "Who has the most descendants?",
-                      "What do we know about Ramazan Darabi?",
-                      "My cousin was born in Tehran in 1985 — record him",
-                      "Which records are missing birth dates?",
-                    ]).map((prompt) => <button type="button" className="chat-suggestion" key={prompt} onClick={() => { setInput(prompt); inputRef.current?.focus(); }}>{prompt}</button>)}
-                  </div>}
+                  {messages.length === 0 && (selectedPerson
+                    ? <div className="chat-suggestions">{[
+                        `What do we know about ${selectedPerson.displayName.split(" ")[0]}?`,
+                        `${selectedPerson.displayName.split(" ")[0]} was born in …`,
+                        `${selectedPerson.displayName.split(" ")[0]} had a sibling named …`,
+                      ].map((prompt) => <button type="button" className="chat-suggestion" key={prompt} onClick={() => { setInput(prompt); inputRef.current?.focus(); }}>{prompt}</button>)}</div>
+                    : greeting?.factoids?.length
+                      ? <div className="chat-factoids">{greeting.factoids.map((factoid) => <button type="button" className="chat-factoid" key={factoid.text} onClick={() => { setInput(factoid.ask); inputRef.current?.focus(); }}>
+                          <span>{factoid.text}</span>
+                          <span className="chat-factoid-ask">{factoid.ask}</span>
+                        </button>)}</div>
+                      : null)}
                   {messages.map((message, index) => (
                     <div className={`chat-bubble ${message.role === "user" ? "is-user" : ""}`} key={`${message.role}-${index}`}>{message.role === "user" ? message.text : <Markdown text={message.text} />}</div>
                   ))}
@@ -563,7 +563,10 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   }, [onClose]);
   const buckets = relatedPeople(tree, person.id);
   const stories = tree.stories.filter((story) => story.personIds.includes(person.id));
-  const photos = person.photoIds ?? (person.photoAttachmentId ? [person.photoAttachmentId] : []);
+  // the portrait leads the row - it is the photograph of the person, and the
+  // rest of their photographs follow it rather than living somewhere else
+  const photos = (person.photoIds ?? (person.photoAttachmentId ? [person.photoAttachmentId] : []))
+    .slice().sort((a, b) => Number(b === person.photoAttachmentId) - Number(a === person.photoAttachmentId));
   async function post(body: Record<string, unknown>) { const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (!response.ok || !data.tree) throw new Error(data.error || "Request failed"); onTreeChange(data.tree); return data.tree; }
   async function patchFields(patch: Record<string, string>) { try { await post({ action: "update", personId: person.id, patch }); setNotice("Saved"); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save"); } }
   const patchField = (key: string) => (value: string) => patchFields({ [key]: value });
@@ -620,10 +623,27 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
         </p>
         <div className="person-gender-row">{(["female", "male"] as const).map((option) => <button key={option} type="button" className={`gender-pick ${person.gender === option ? "is-active" : ""}`} disabled={!canEdit} onClick={() => canEdit && patchField("gender")(person.gender === option ? "" : option)}>{option === "female" ? t("person.female") : t("person.male")}</button>)}</div>
       </div>
-      {person.photoAttachmentId
-        ? <button type="button" className="person-modal-photo-button" onClick={() => canEdit && photoRef.current?.click()} aria-label={canEdit ? "Change portrait" : "Portrait"} title={canEdit ? "Click to change the portrait" : undefined}><img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /></button>
-        : canEdit && <button type="button" className="person-add-photo" onClick={() => photoRef.current?.click()}>＋ {t("person.addPhoto")}</button>}
     </div>
+    {(photos.length > 0 || canEdit) && <div className="person-photos">
+      <div className="relationship-heading"><p className="eyebrow">{t("person.photographs")}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => photoRef.current?.click()} aria-label="Add a photograph">＋</button>}</div>
+      <div className="photo-grid">
+        {photos.map((id) => <div className={`photo-tile ${id === person.photoAttachmentId ? "is-portrait" : ""}`} key={id}>
+          <img src={`/api/photos/${id}`} alt="" loading="lazy" />
+          {canEdit && <div className="photo-tile-actions">
+            {id !== person.photoAttachmentId && <button type="button" onClick={async () => { try { await post({ action: "set_portrait", personId: person.id, attachmentId: id }); setNotice("Portrait set"); } catch { setNotice("Could not set the portrait"); } }}>{t("person.portrait")}</button>}
+            <button type="button" onClick={() => setPhotoShare(id)}>{t("person.whoElse")}</button>
+            <button type="button" className="is-danger" data-action="unlink" onClick={async () => { try { await post({ action: "unlink_photo", personId: person.id, attachmentId: id }); setNotice("Removed from this record"); } catch { setNotice("Could not remove the photograph"); } }}>{t("person.removePhoto")}</button>
+          </div>}
+          {id === person.photoAttachmentId && <span className="photo-tile-badge">{t("person.portrait")}</span>}
+        </div>)}
+        {canEdit && <button type="button" className="photo-tile photo-tile-add" onClick={() => photoRef.current?.click()} title={t("person.addPhoto")} aria-label={t("person.addPhoto")}>＋</button>}
+      </div>
+      {photoShare && <div className="relative-picker">
+        <input className="modal-input" autoFocus value={shareQuery} placeholder={t("person.whoElsePrompt")} onChange={(event) => setShareQuery(event.target.value)} />
+        {shareQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && !(candidate.photoIds ?? []).includes(photoShare) && candidate.displayName.toLocaleLowerCase().includes(shareQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={async () => { try { await post({ action: "link_photo", personId: candidate.id, attachmentId: photoShare }); setNotice(`Added to ${candidate.displayName}`); setPhotoShare(null); setShareQuery(""); } catch { setNotice("Could not add them to the photograph"); } }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}</span></button>)}</div>}
+        <button type="button" className="fill-skip" onClick={() => { setPhotoShare(null); setShareQuery(""); }}>{t("person.done")}</button>
+      </div>}
+    </div>}
     <div className="person-facts">
       <div><span className="eyebrow">{t("person.born")}</span><p className="fact-line"><InlineText value={person.birthDate} placeholder="add date" canEdit={canEdit} onSave={patchField("birthDate")} className="fact-date" />{(canEdit || person.birthCity || person.birthCountry) && <> in <InlineText value={person.birthCity} placeholder="city" canEdit={canEdit} onSave={patchField("birthCity")} />{(canEdit || (person.birthCity && person.birthCountry)) && ", "}<InlineText value={person.birthCountry} placeholder="country" canEdit={canEdit} onSave={patchField("birthCountry")} /></>}{!canEdit && !person.birthDate && t("person.birthNotRecorded")}</p></div>
       {/* No death date does not mean "died, date unknown": someone born within a
@@ -639,33 +659,13 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
             ? <button type="button" className="inline-edit is-empty" onClick={() => setRecordingDeath(true)}>{t("person.recordDeath")}</button>
             : <>{t("person.stillLiving")}</>}
       </p>
-      {canEdit && deathRecorded && <button type="button" className="fact-correction" onClick={() => {
-        if (!window.confirm(`Clear the death recorded for ${person.displayName} and show them as living?`)) return;
-        void patchFields({ deathDate: "", deathCity: "", deathCountry: "", burialPlace: "" });
-      }}>{t("person.notLiving")}</button>}
+      {canEdit && deathRecorded && <button type="button" className="fact-clear" title={t("person.clearDeath")} aria-label={t("person.clearDeath")}
+        onClick={() => void patchFields({ deathDate: "", deathCity: "", deathCountry: "", burialPlace: "" })}>×</button>}
       </div>
-      {(person.residence || canEdit) && <div className="person-fact-wide"><span className="eyebrow">{presumedLiving ? t("person.lives") : t("person.lived")}</span><p className="fact-line"><InlineText value={person.residence} placeholder={t("person.residencePlaceholder")} canEdit={canEdit} onSave={patchField("residence")} /></p></div>}
+      {/* only for the living: where a person died is already recorded above */}
+      {presumedLiving && (person.residence || canEdit) && <div className="person-fact-wide"><span className="eyebrow">{t("person.lives")}</span><p className="fact-line"><InlineText value={person.residence} placeholder={t("person.residencePlaceholder")} canEdit={canEdit} onSave={patchField("residence")} /></p></div>}
       {(person.burialPlace || (canEdit && deathRecorded)) && <div className="person-fact-wide"><span className="eyebrow">{t("person.buried")}</span><p className="fact-line"><InlineText value={person.burialPlace} placeholder={t("person.burialPlaceholder")} canEdit={canEdit} onSave={patchField("burialPlace")} /></p></div>}
     </div>
-    {(photos.length > 1 || (canEdit && photos.length > 0)) && <div className="person-photos">
-      <div className="relationship-heading"><p className="eyebrow">{t("person.photographs")}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => photoRef.current?.click()} aria-label="Add a photograph">＋</button>}</div>
-      <div className="photo-grid">
-        {photos.map((id) => <div className={`photo-tile ${id === person.photoAttachmentId ? "is-portrait" : ""}`} key={id}>
-          <img src={`/api/photos/${id}`} alt="" loading="lazy" />
-          {canEdit && <div className="photo-tile-actions">
-            {id !== person.photoAttachmentId && <button type="button" onClick={async () => { try { await post({ action: "set_portrait", personId: person.id, attachmentId: id }); setNotice("Portrait set"); } catch { setNotice("Could not set the portrait"); } }}>{t("person.portrait")}</button>}
-            <button type="button" onClick={() => setPhotoShare(id)}>{t("person.whoElse")}</button>
-            <button type="button" className="is-danger" data-action="unlink" onClick={async () => { try { await post({ action: "unlink_photo", personId: person.id, attachmentId: id }); setNotice("Removed from this record"); } catch { setNotice("Could not remove the photograph"); } }}>{t("person.removePhoto")}</button>
-          </div>}
-          {id === person.photoAttachmentId && <span className="photo-tile-badge">{t("person.portrait")}</span>}
-        </div>)}
-      </div>
-      {photoShare && <div className="relative-picker">
-        <input className="modal-input" autoFocus value={shareQuery} placeholder={t("person.whoElsePrompt")} onChange={(event) => setShareQuery(event.target.value)} />
-        {shareQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && !(candidate.photoIds ?? []).includes(photoShare) && candidate.displayName.toLocaleLowerCase().includes(shareQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={async () => { try { await post({ action: "link_photo", personId: candidate.id, attachmentId: photoShare }); setNotice(`Added to ${candidate.displayName}`); setPhotoShare(null); setShareQuery(""); } catch { setNotice("Could not add them to the photograph"); } }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}</span></button>)}</div>}
-        <button type="button" className="fill-skip" onClick={() => { setPhotoShare(null); setShareQuery(""); }}>{t("person.done")}</button>
-      </div>}
-    </div>}
     {(person.biography || canEdit) && <div className="person-biography-block">
       <div className="relationship-heading"><p className="eyebrow">{t("person.biography")}</p></div>
       {editingBio
@@ -716,11 +716,11 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
 function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeopleMentioned, onOpenPerson }: { signedIn: boolean; tree: FamilyTree; focusPerson: Person | null; onClearFocus: () => void; onPeopleMentioned: (people: Person[]) => void; onOpenPerson: (person: Person) => void }) {
   const { t } = useLanguage();
   const [question, setQuestion] = useState("");
-  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; suggestions: string[] } | null>(null);
+  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] } | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/greeting").then((response) => response.ok ? response.json() : null)
-      .then((data) => { if (!cancelled && data) setGreeting(data as { fact: string | null; personId: string | null; suggestions: string[] }); })
+      .then((data) => { if (!cancelled && data) setGreeting(data as { fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] }); })
       .catch(() => { /* the chat works without it */ });
     return () => { cancelled = true; };
   }, []);
@@ -739,7 +739,10 @@ function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeople
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
       <div className={`flex flex-1 flex-col items-center overflow-y-auto pb-5 text-center ${asked.length || focusPerson ? "justify-start" : "justify-center"}`}>
-        {!asked.length && !focusPerson ? <><h3 className="mt-0 font-serif text-2xl">{t("chat.title")}</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">{t("chat.intro")}</p>{greeting?.fact && <button type="button" className="chat-fact" onClick={() => { const person = greeting.personId ? tree.people.find((candidate) => candidate.id === greeting.personId) : null; if (person) onOpenPerson(person); }} disabled={!greeting.personId}><span className="chat-fact-label">{t("chat.fromArchive")}</span><span>{greeting.fact}</span></button>}{greeting?.suggestions?.length ? <div className="chat-suggestions">{greeting.suggestions.map((prompt) => <button type="button" className="chat-suggestion" key={prompt} onClick={() => setQuestion(prompt)}>{prompt}</button>)}</div> : null}{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> {t("chat.thinking")}</p>}{!busy && reply && <div className="public-chat-answer"><Markdown text={reply} /></div>}</div>}
+        {!asked.length && !focusPerson ? <><h3 className="mt-0 font-serif text-2xl">{t("chat.title")}</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">{t("chat.intro")}</p>{greeting?.fact && <button type="button" className="chat-fact" onClick={() => { const person = greeting.personId ? tree.people.find((candidate) => candidate.id === greeting.personId) : null; if (person) onOpenPerson(person); }} disabled={!greeting.personId}><span className="chat-fact-label">{t("chat.fromArchive")}</span><span>{greeting.fact}</span></button>}{greeting?.factoids?.length ? <div className="chat-factoids">{greeting.factoids.map((factoid) => <button type="button" className="chat-factoid" key={factoid.text} onClick={() => setQuestion(factoid.ask)}>
+          <span>{factoid.text}</span>
+          <span className="chat-factoid-ask">{factoid.ask}</span>
+        </button>)}</div> : null}{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> {t("chat.thinking")}</p>}{!busy && reply && <div className="public-chat-answer"><Markdown text={reply} /></div>}</div>}
       </div>
       <div>
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)]">

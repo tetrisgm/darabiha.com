@@ -52,6 +52,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   // fires for it - so without this the two boards trade places forever.
   const pointerAt = useRef({ x: 0, y: 0 });
   const previewAt = useRef<{ x: number; y: number } | null>(null);
+  // Where the hovered card sat, and where the camera was, when the preview
+  // opened. The board reorganises around that card without it moving, which
+  // is what keeps the pointer over the same person instead of chasing a card
+  // that slid out from under it.
+  const previewAnchor = useRef<{ rect: DOMRect; pan: { x: number; y: number } } | null>(null);
+  const hoverCard = useRef<HTMLElement | null>(null);
+  const panValue = useRef({ x: 0, y: 0 });
   /** Has the pointer moved since the current preview opened? Everything that
    *  starts or ends a preview asks this first, because swapping the board
    *  fires enter and leave events for a pointer that never went anywhere. */
@@ -128,6 +135,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const panRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef(new Map<string, HTMLDivElement>());
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  useEffect(() => { panValue.current = pan; }, [pan]);
   const [scale, setScale] = useState(1);
   const [panMode, setPanMode] = useState<"idle" | "drag" | "glide">("idle");
   const dragRef = useRef<{ id: number; x: number; y: number; panX: number; panY: number } | null>(null);
@@ -168,7 +176,22 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeId]);
+  }, [focusId]);
+  /* A preview must not move anything the reader is looking at. The board
+     reorganises around the hovered person, and the camera shifts by exactly
+     the distance their card would otherwise have travelled - so it stays put,
+     the pointer stays on it, and only the family around it changes. Committed
+     before paint, so there is nothing to see. */
+  useLayoutEffect(() => {
+    const anchor = previewAnchor.current;
+    if (!anchor || !previewId) return;
+    const card = slotRefs.current.get("focal");
+    if (!card) return;
+    const now = card.getBoundingClientRect();
+    const dx = (anchor.rect.left + anchor.rect.width / 2) - (now.left + now.width / 2);
+    const dy = (anchor.rect.top + anchor.rect.height / 2) - (now.top + now.height / 2);
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) setPan((current) => ({ x: current.x + dx, y: current.y + dy }));
+  }, [activeId, previewId]);
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button, summary, select, input, a")) return;
     dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
@@ -277,12 +300,16 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     if (element) slotRefs.current.set(key, element);
     else slotRefs.current.delete(key);
   };
-  const beginHover = (person: Person, viaPointer = true) => {
+  const beginHover = (person: Person, element: HTMLElement | null, viaPointer = true) => {
     onPreview(person);
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverCard.current = element;
     if (person.id === activeId || (viaPointer && !travelled())) return;
     hoverTimer.current = setTimeout(() => {
+      const rect = hoverCard.current?.getBoundingClientRect();
+      if (!rect) return;
       previewAt.current = { ...pointerAt.current };
+      previewAnchor.current = { rect, pan: { ...panValue.current } };
       setPreviewId(person.id);
     }, 340);
   };
@@ -291,7 +318,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
   };
-  const endPreview = () => { previewAt.current = null; setPreviewId(null); };
+  const endPreview = () => {
+    const anchor = previewAnchor.current;
+    previewAnchor.current = null;
+    previewAt.current = null;
+    setPreviewId(null);
+    if (anchor) setPan(anchor.pan);
+  };
   /* Swapping the board removes the card under the pointer, and React reports
      that as the pointer leaving the whole stage - four milliseconds after the
      preview opened, which closed it again. Only a pointer that is really
@@ -318,7 +351,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     const behind = hiddenRelativeCount(person.id, maps, onBoard);
     return <div ref={setRef(key)} className={`ped-card ped-card-md ${person.id === (selectedId ?? focal.id) ? "is-selected" : ""}`} key={key}>
       <button type="button" onClick={() => commit(person, keepLayout)}
-        onMouseEnter={() => beginHover(person)} onMouseLeave={cancelHover} onFocus={() => beginHover(person, false)} onBlur={cancelHover}>
+        onMouseEnter={(event) => beginHover(person, event.currentTarget)} onMouseLeave={cancelHover} onFocus={(event) => beginHover(person, event.currentTarget, false)} onBlur={cancelHover}>
         {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
         <span className="ped-copy">
           <strong>{person.displayName}</strong>

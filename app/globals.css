@@ -1266,3 +1266,34 @@ html[lang="fa"] { font-variant-numeric: normal; }
    label hangs above it. */
 .ped-col-body { position:relative; display:flex; flex-direction:column; gap:inherit; }
 .ped-col-body > .ped-col-label { position:absolute; bottom:calc(100% + .4rem); left:0; margin:0; }
+
+/* A preview is not a navigation: the board changes around a card that stays
+   exactly where it is, so it must not also slide, fade or re-animate. */
+.ped-view[data-preview="true"] .ped-columns { animation:none; }
+.ped-view[data-preview="true"] .ped-pan { transition:none; }
+
+/* The portrait is the first photograph, not a separate thing in the header:
+   one wrapping row that starts with it and runs on to more lines. */
+.person-modal-v2 .person-photos { margin:1rem 0 0; }
+.person-modal-v2 .photo-grid { display:flex; flex-wrap:wrap; gap:.5rem; }
+.person-modal-v2 .photo-tile { flex:none; width:5.6rem; }
+.person-modal-v2 .photo-tile-add { display:flex; align-items:center; justify-content:center;
+  border-style:dashed; background:transparent; color:var(--muted); font-size:1.2rem; }
+.person-modal-v2 .photo-tile-add:hover { border-color:var(--accent); color:var(--accent); background:var(--wash); }
+
+/* Clearing a death is a small x beside it, not a sentence. */
+.fact-clear { justify-self:start; width:1.4rem; height:1.4rem; margin-top:.15rem; border-radius:.4rem;
+  border:1px solid transparent; background:transparent; color:var(--muted); font-size:.95rem; line-height:1; }
+.fact-clear:hover { border-color:var(--line); background:rgba(255,107,97,.14); color:var(--danger); }
+
+/* Facts the archive can state from its own numbers, each a way in: the fact
+   reads first, the question it opens sits under it in the accent. */
+.chat-factoids { display:flex; flex-direction:column; gap:.5rem; margin-top:1rem; }
+.chat-factoid { display:flex; flex-direction:column; gap:.3rem; width:100%; text-align:left;
+  border:1px solid var(--line); border-radius:.9rem; background:rgba(44,44,46,.7);
+  padding:.7rem .9rem; font-size:.84rem; line-height:1.45; color:var(--ink);
+  transition:border-color .18s, background .18s; }
+.chat-factoid:hover { border-color:color-mix(in srgb,var(--accent) 45%,transparent); background:var(--wash); }
+.chat-factoid-ask { color:var(--muted); font-size:.75rem; line-height:1.4; }
+.chat-factoid:hover .chat-factoid-ask { color:var(--accent); }
+[dir="rtl"] .chat-factoid { text-align:right; }

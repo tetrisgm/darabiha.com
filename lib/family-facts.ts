@@ -3,7 +3,14 @@ import type { FamilyTree, Person } from "./types";
 /** Something the archive can say without being asked: an anniversary falling
  * today, or a fact drawn from the shape of the tree. Used to greet a reader
  * before their first question, and by the archivist when asked for one. */
-export type FamilyFact = { kind: "onThisDay" | "factoid"; text: string; personId?: string };
+export type FamilyFact = {
+  kind: "onThisDay" | "factoid";
+  text: string;
+  personId?: string;
+  /** what to ask the archivist when a reader taps the fact, so a number is a
+   *  way into the family rather than a dead end */
+  ask?: string;
+};
 
 const year = (value: string | null | undefined) => {
   const parsed = Number(String(value ?? "").slice(0, 4));
@@ -67,14 +74,14 @@ export function familyFactoids(tree: FamilyTree, today = new Date()): FamilyFact
 
   const longest = withYears.map((person) => ({ person, age: year(person.deathDate)! - year(person.birthDate)! }))
     .sort((a, b) => b.age - a.age)[0];
-  if (longest) facts.push({ kind: "factoid", personId: longest.person.id, text: `${longest.person.displayName} lived the longest life the archive records — ${longest.age} years, from ${year(longest.person.birthDate)} to ${year(longest.person.deathDate)}.` });
+  if (longest) facts.push({ kind: "factoid", personId: longest.person.id, text: `${longest.person.displayName} lived the longest life the archive records — ${longest.age} years, from ${year(longest.person.birthDate)} to ${year(longest.person.deathDate)}.`, ask: `Tell me about ${longest.person.displayName} and the years they lived through.` });
 
   const mostChildren = [...childrenOf.entries()].sort((a, b) => b[1] - a[1])[0];
   const parent = mostChildren && tree.people.find((person) => person.id === mostChildren[0]);
-  if (parent && mostChildren[1] > 1) facts.push({ kind: "factoid", personId: parent.id, text: `${parent.displayName} has the most recorded children in the family: ${mostChildren[1]}.` });
+  if (parent && mostChildren[1] > 1) facts.push({ kind: "factoid", personId: parent.id, text: `${parent.displayName} has the most recorded children in the family: ${mostChildren[1]}.`, ask: `Who are ${parent.displayName}'s children, and what became of them?` });
 
   const oldest = tree.people.filter((person) => year(person.birthDate)).sort((a, b) => year(a.birthDate)! - year(b.birthDate)!)[0];
-  if (oldest) facts.push({ kind: "factoid", personId: oldest.id, text: `The earliest recorded birth in the family is ${oldest.displayName}, in ${year(oldest.birthDate)} — ${today.getFullYear() - year(oldest.birthDate)!} years ago.` });
+  if (oldest) facts.push({ kind: "factoid", personId: oldest.id, text: `The earliest recorded birth in the family is ${oldest.displayName}, in ${year(oldest.birthDate)} — ${today.getFullYear() - year(oldest.birthDate)!} years ago.`, ask: `Tell me about ${oldest.displayName}, the earliest person the archive records.` });
 
   const places = new Map<string, number>();
   for (const person of tree.people) {
@@ -83,12 +90,44 @@ export function familyFactoids(tree: FamilyTree, today = new Date()): FamilyFact
     }
   }
   const topPlace = [...places.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (topPlace) facts.push({ kind: "factoid", text: `${topPlace[0]} appears in more records than anywhere else — ${topPlace[1]} births and deaths.` });
+  if (topPlace) facts.push({ kind: "factoid", text: `${topPlace[0]} appears in more records than anywhere else — ${topPlace[1]} births and deaths.`, ask: `What is the family's connection to ${topPlace[0]}?` });
 
-  if (tree.stories.length) facts.push({ kind: "factoid", text: `The archive holds ${tree.stories.length} family ${tree.stories.length === 1 ? "story" : "stories"}, kept in the Persian they were written in with an English translation beside them.` });
+  if (tree.stories.length) facts.push({ kind: "factoid", text: `The archive holds ${tree.stories.length} family ${tree.stories.length === 1 ? "story" : "stories"}, kept in the Persian they were written in with an English translation beside them.`, ask: "What stories does the archive hold, and who is in them?" });
 
   const generations = new Set(tree.people.map((person) => year(person.birthDate)).filter(Boolean).map((born) => Math.floor((born! - 1700) / 25)));
-  if (generations.size > 3) facts.push({ kind: "factoid", text: `${tree.people.length} people are recorded here, spanning roughly ${generations.size} generations.` });
+  if (generations.size > 3) facts.push({ kind: "factoid", text: `${tree.people.length} people are recorded here, spanning roughly ${generations.size} generations.`, ask: "Walk me down the generations, from the earliest ancestor to the youngest child." });
+
+  // What the numbers themselves say. Each is one pass over the people, cheap
+  // enough for a per-request greeting on the Worker's budget.
+  const spans = withYears.map((person) => year(person.deathDate)! - year(person.birthDate)!).filter((age) => age >= 0).sort((a, b) => a - b);
+  if (spans.length >= 8) {
+    const median = spans.length % 2 ? spans[(spans.length - 1) / 2] : Math.round((spans[spans.length / 2 - 1] + spans[spans.length / 2]) / 2);
+    facts.push({ kind: "factoid", text: `Half of the ${spans.length} completed lives in the archive reached ${median} years or more.`, ask: `Which lives in the family were the longest, and which ended early?` });
+  }
+
+  const decades = new Map<string, number>();
+  const surnames = new Map<string, number>();
+  const given = new Map<string, number>();
+  for (const person of tree.people) {
+    const born = year(person.birthDate);
+    if (born) decades.set(`${Math.floor(born / 10) * 10}s`, (decades.get(`${Math.floor(born / 10) * 10}s`) ?? 0) + 1);
+    const parts = person.displayName.split(/\s+/).filter((token) => !/^\(.*\)$/.test(token));
+    if (parts.length > 1) { const name = parts.slice(1).join(" "); surnames.set(name, (surnames.get(name) ?? 0) + 1); }
+    if (parts.length) given.set(parts[0], (given.get(parts[0]) ?? 0) + 1);
+  }
+  const busiest = [...decades.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (busiest && busiest[1] > 2) facts.push({ kind: "factoid", text: `More of the family was born in the ${busiest[0]} than in any other decade — ${busiest[1]} births.`, ask: `Who was born in the ${busiest[0]}, and what was happening to the family then?` });
+
+  const twoNames = [...surnames.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2);
+  if (twoNames.length === 2 && twoNames[1][1] > 2) {
+    facts.push({ kind: "factoid", text: `The family name is written two ways: ${twoNames[0][1]} people carry ${twoNames[0][0]} and ${twoNames[1][1]} carry ${twoNames[1][0]}.`, ask: `Why does the family name appear as both ${twoNames[0][0]} and ${twoNames[1][0]}?` });
+  }
+  const repeated = [...given.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (repeated && repeated[1] > 2) facts.push({ kind: "factoid", text: `${repeated[0]} is the most repeated given name in the family — ${repeated[1]} people carry it.`, ask: `Who are the people named ${repeated[0]}, and were they named after one another?` });
+
+  const women = tree.people.filter((person) => person.gender === "female").length;
+  const men = tree.people.filter((person) => person.gender === "male").length;
+  if (women > 5 && men > 5) facts.push({ kind: "factoid", text: `${women} women and ${men} men are recorded in the archive.`, ask: "Tell me about the women in the family — what does the archive record about them?" });
 
   return facts;
 }

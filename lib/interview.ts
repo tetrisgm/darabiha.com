@@ -40,7 +40,7 @@ export function interviewLeads(tree: FamilyTree, focusIds: string[], limit = 6):
     const isDead = has(person.deathDate);
     if (isDead && !has(person.deathCity)) missing.push("where they died");
     if (isDead && !has(person.burialPlace)) missing.push("where they are buried");
-    if (!has(person.residence)) missing.push(isDead ? "where they lived" : "where they live now");
+    if (!isDead && !has(person.residence)) missing.push("where they live now");
     if (!has(person.biography)) missing.push("anything about their life");
     return missing;
   };
