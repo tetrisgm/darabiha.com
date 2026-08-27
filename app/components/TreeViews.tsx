@@ -160,16 +160,23 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       }
       setPanMode("idle");
       setPan({ x: 0, y: 0 });
-      // after the zero-pan layout paints, land the focal card on the stage center
+      // After the zero-pan layout paints, put the focal card where it belongs:
+      // the middle of the stage on arrival, or exactly where the reader
+      // clicked when they chose this person from the board they were reading.
       frame = requestAnimationFrame(() => {
         const stage = containerRef.current;
         const focalCard = slotRefs.current.get("focal");
         if (!stage || !focalCard) return;
         const stageRect = stage.getBoundingClientRect();
         const cardRect = focalCard.getBoundingClientRect();
+        const held = holdInPlace.current;
+        holdInPlace.current = null;
+        const target = held
+          ? { x: held.left + held.width / 2, y: held.top + held.height / 2 }
+          : { x: stageRect.left + stageRect.width / 2, y: stageRect.top + stageRect.height / 2 };
         setPan({
-          x: (stageRect.left + stageRect.width / 2) - (cardRect.left + cardRect.width / 2),
-          y: (stageRect.top + stageRect.height / 2) - (cardRect.top + cardRect.height / 2),
+          x: target.x - (cardRect.left + cardRect.width / 2),
+          y: target.y - (cardRect.top + cardRect.height / 2),
         });
       });
     };
@@ -287,9 +294,15 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   // Hovering a card shows that person's record beside the board and nothing
   // else. It used to redraw the board around them, which moved everything the
   // reader was looking at.
-  const commit = (person: Person, keepLayout: boolean) => {
+  /* Where the clicked card sat on screen. The board is about to be rebuilt
+     around that person, and they should stay exactly where the reader put
+     their pointer - it is the family around them that changes, not them. */
+  const holdInPlace = useRef<DOMRect | null>(null);
+  const commit = (person: Person, keepLayout: boolean, element: HTMLElement | null) => {
     onPreview(null);
-    if (keepLayout) onSelectOnly(person); else onPick(person);
+    if (keepLayout) { onSelectOnly(person); return; }
+    holdInPlace.current = element?.getBoundingClientRect() ?? null;
+    onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
     const meta = [years(person), subtitle].filter(Boolean).join(" · ");
@@ -300,7 +313,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     const keepLayout = person.id === focal.id;
     const behind = hiddenRelativeCount(person.id, maps, onBoard);
     return <div ref={setRef(key)} className={`ped-card ped-card-md ${person.id === (selectedId ?? focal.id) ? "is-selected" : ""}`} key={key}>
-      <button type="button" onClick={() => commit(person, keepLayout)}
+      <button type="button" onClick={(event) => commit(person, keepLayout, event.currentTarget)}
         onMouseEnter={() => onPreview(person)} onMouseLeave={() => onPreview(null)} onFocus={() => onPreview(person)} onBlur={() => onPreview(null)}>
         {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
         <span className="ped-copy">
