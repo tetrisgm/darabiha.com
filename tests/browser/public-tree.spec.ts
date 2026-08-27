@@ -80,21 +80,19 @@ test("canvas wheel pans the camera without scrolling the document", async ({ pag
   const before = await page.locator(".tree-viewport").evaluate((element) => element.style.transform);
   await page.mouse.wheel(0, -300);
   await expect.poll(() => page.locator(".tree-viewport").evaluate((element) => element.style.transform)).not.toBe(before);
-  await expect(page.locator(".canvas-zoom-level")).toHaveText("100%");
   await expect(canvas).toHaveCSS("touch-action", "none");
   await expect(page.locator("html")).toHaveCSS("overscroll-behavior", "none");
 });
 
-test("canvas zoom controls change and reset the zoom percentage", async ({ page }) => {
+test("canvas zoom buttons scale the viewport", async ({ page }) => {
   await openFullTree(page);
-  const level = page.locator(".canvas-zoom-level");
-  await expect(level).toHaveText("100%");
-  await page.getByRole("button", { name: "Zoom in" }).click();
-  await expect(level).toHaveText("110%");
-  await page.getByRole("button", { name: "Zoom out" }).click();
-  await expect(level).toHaveText("99%");
-  await level.click();
-  await expect(level).toHaveText("100%");
+  const scaleOf = () => page.locator(".tree-viewport").evaluate((element) => Number(element.style.transform.match(/scale\(([\d.]+)\)/)?.[1] ?? 1));
+  expect(await scaleOf()).toBeCloseTo(1, 5);
+  await page.getByRole("button", { name: "Zoom in" }).first().click();
+  await expect.poll(scaleOf).toBeGreaterThan(1.05);
+  await page.getByRole("button", { name: "Zoom out" }).first().click();
+  await page.getByRole("button", { name: "Zoom out" }).first().click();
+  await expect.poll(scaleOf).toBeLessThan(1);
 });
 
 test("zoom controls do not show the canvas hand cursor", async ({ page }) => {
