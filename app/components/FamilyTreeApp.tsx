@@ -172,10 +172,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
      There is no timer anywhere - a standing job is the owner's decision, not
      this code's - so the queue moves when an editor is present, which is also
      when someone is there to see what came of it. */
+  const drainRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!viewer.canEdit) return;
     let cancelled = false;
-    void (async () => {
+    const run = async () => {
       for (let guard = 0; guard < 20 && !cancelled; guard += 1) {
         let data: { done?: boolean; read?: { filename: string; summary?: string; failed?: string } | null; pending?: number };
         try {
@@ -195,8 +196,12 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         } catch { /* the next load will show it */ }
         if (!data.pending) return;
       }
-    })();
-    return () => { cancelled = true; };
+    };
+    // an upload calls this the moment its files land, so a document sent by
+    // someone who is standing right there is read while they are still there
+    drainRef.current = () => { void run(); };
+    void run();
+    return () => { cancelled = true; drainRef.current = null; };
   }, [viewer.canEdit]);
 
   const setViewMode = (mode: ViewMode) => {
@@ -227,6 +232,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const [authError] = useState(() => typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("auth_error") : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
+  const sendRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   async function sendMessage() {
@@ -386,9 +392,22 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                     {selectedPerson && <ComposerFocus person={selectedPerson} canEdit onClear={closePerson} />}
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder={selectedPerson ? t("chat.placeholderPerson", { name: selectedPerson.displayName.split(" ")[0] }) : t("chat.placeholder")} aria-label="Message the family archivist" />
                     <div className="mt-2 flex items-center justify-between">
+                      <input ref={sendRef} className="sr-only" type="file" multiple aria-label={t("chat.sendDocuments")} onChange={async (event) => {
+                        const chosen = Array.from(event.target.files ?? []);
+                        event.target.value = "";
+                        if (!chosen.length) return;
+                        const body = new FormData();
+                        for (const file of chosen) body.append("files", file);
+                        setIngesting(`Sending ${chosen.length} document${chosen.length === 1 ? "" : "s"} to the archive…`);
+                        try {
+                          const response = await fetch("/api/documents", { method: "POST", body });
+                          if (!response.ok) { setIngesting("Those documents could not be sent."); return; }
+                          drainRef.current?.();
+                        } catch { setIngesting("Those documents could not be sent."); }
+                      }} />
                       <input ref={fileRef} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
                       <input ref={(node) => { folderRef.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
-                      <AttachMenu onFiles={() => fileRef.current?.click()} onFolder={() => folderRef.current?.click()} />
+                      <AttachMenu onFiles={() => fileRef.current?.click()} onFolder={() => folderRef.current?.click()} onSend={() => sendRef.current?.click()} />
                       <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent-fill)] text-white transition hover:bg-[#3a604a] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label={t("chat.send")}>↑</button>
                     </div>
                   </div>
@@ -496,7 +515,7 @@ function ComposerFocus({ person, canEdit, onClear }: { person: Person; canEdit: 
 }
 
 /** One ＋ that offers the two kinds of attachment, Apple-menu style. */
-function AttachMenu({ onFiles, onFolder }: { onFiles: () => void; onFolder: () => void }) {
+function AttachMenu({ onFiles, onFolder, onSend }: { onFiles: () => void; onFolder: () => void; onSend: () => void }) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -518,6 +537,10 @@ function AttachMenu({ onFiles, onFolder }: { onFiles: () => void; onFolder: () =
       <button type="button" role="menuitem" onClick={() => { setOpen(false); onFolder(); }}>
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.75 6.25V5a1.5 1.5 0 0 1 1.5-1.5h3l1.75 2h6.25a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H4.25a1.5 1.5 0 0 1-1.5-1.5Z" /></svg>
         {t("chat.addFolder")}
+      </button>
+      <button type="button" role="menuitem" onClick={() => { setOpen(false); onSend(); }}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5v11" /><path d="M6 6.5 10 2.5l4 4" /><path d="M3.5 13v3a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-3" /></svg>
+        {t("chat.sendDocuments")}
       </button>
     </div>}
   </div>;
