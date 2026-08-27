@@ -1486,6 +1486,10 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .person-panel-bar button, .focus-back, .canvas-controls button { min-width:2.75rem; min-height:2.75rem; }
   .lang-pick { min-width:2.75rem; min-height:2.75rem; }
   .identify-matches button, .fill-row-head { min-height:2.75rem; }
+  /* the identify card only renders for a signed-in member, which is why an
+     anonymous sweep never saw these */
+  .identify-skip { min-width:2.75rem; min-height:2.75rem; }
+  .modal-input, .fill-input, .fill-search, .gate-form input { min-height:2.75rem; }
   /* The chips that fold a branch are the tree's main control on a touch
      screen. They live inside the canvas transform, so a board opened at 0.66
      to fit an iPad rendered a 44pt chip at 29 - the same counter-scale the
