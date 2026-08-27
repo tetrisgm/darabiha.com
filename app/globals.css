@@ -1297,3 +1297,8 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .chat-factoid-ask { color:var(--muted); font-size:.75rem; line-height:1.4; }
 .chat-factoid:hover .chat-factoid-ask { color:var(--accent); }
 [dir="rtl"] .chat-factoid { text-align:right; }
+
+/* The Died field shares its line with the button that clears it, so the input
+   still takes the width every other field has. */
+.fill-with-clear { display:flex; align-items:center; gap:.4rem; }
+.fill-with-clear .fill-input { flex:1; min-width:0; }
