@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Role = "admin" | "editor" | "viewer" | null;
@@ -69,7 +68,8 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
   const roleRank: Record<string, number> = { admin: 0, editor: 1, viewer: 2 };
   return <main className="settings-page">
     <header className="settings-masthead">
-      <Link className="settings-back-pill" href="/">← Back to the family tree</Link>
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- full page load; client-side Link navigation is unreliable here */}
+        <a className="settings-back-pill" href="/">← Back to the family tree</a>
     </header>
     <section className="settings-panel">
       <h1>Settings</h1>

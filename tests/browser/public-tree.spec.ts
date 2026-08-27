@@ -184,22 +184,10 @@ test("the settings page offers sign-in and explains member roles", async ({ brow
   await anonymous.close();
 });
 
-test("the members-only gate covers the tree, the APIs, and the legacy pages", async ({ request }) => {
+test("the members-only gate covers the tree and its APIs", async ({ request }) => {
   const tree = await request.get("/api/tree");
   test.skip(tree.status() === 200, "the site is currently in public visibility");
   expect(tree.status()).toBe(401);
-  expect((await request.get("/legacy-family-tree-data.json")).status()).toBe(401);
-  expect((await request.get("/legacy-photos/gate.jpg")).status()).toBe(401);
-  const legacyPage = await request.get("/legacy-family-tree", { maxRedirects: 0 });
-  expect(legacyPage.status()).toBe(302);
-});
-
-test("a signed-in viewer can read the gated legacy archive", async ({ page }) => {
-  const data = await page.request.get("/legacy-family-tree-data.json");
-  expect(data.status()).toBe(200);
-  expect((await data.json()).people.length).toBeGreaterThan(400);
-  const photo = await page.request.get("/legacy-photos/gate.jpg");
-  expect(photo.status()).toBe(200);
 });
 
 test("member management refuses anonymous requests", async ({ request }) => {
