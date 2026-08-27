@@ -74,7 +74,7 @@ button { cursor: pointer; }
   mask-image: linear-gradient(to bottom, black, transparent 85%);
 }
 
-.archive-view { position:absolute; inset:0; overflow:auto; padding:7rem clamp(2rem,6vw,7rem) 4rem; background:linear-gradient(150deg,#1b201d 0%,#161816 55%,#131412 100%); }
+.archive-view { position:absolute; inset:0; overflow:auto; padding:7rem clamp(2rem,6vw,7rem) 4rem; background:#141613; }
 .archive-view-heading { max-width:42rem; }
 .archive-view-heading h2 { margin:.2rem 0 0; font-family:var(--font-serif),Georgia,serif; font-size:clamp(2rem,4vw,3.5rem); font-weight:500; letter-spacing:-.035em; }
 .archive-view-heading > p:last-child { margin-top:.75rem; color:var(--muted); line-height:1.6; }
@@ -508,7 +508,7 @@ button:active:not(:disabled) { transform: scale(.98); }
 .ped-lines path { stroke:#cabfa8; }
 
 /* canvas atmosphere */
-#viewport, .family-canvas { background: radial-gradient(130% 115% at 72% -8%, #223029 0%, #191e1b 42%, #121412 100%) !important; }
+#viewport, .family-canvas { background: #141613 !important; }
 
 /* silhouettes in the warm palette */
 .ped-male { background:#e5ebf1; color:#64798f; }
@@ -868,7 +868,7 @@ main.chat-collapsed.has-person .site-action-bar { left:30rem; }
 .chat-suggestion:hover { background:var(--wash); border-color:transparent; color:var(--ink); }
 
 /* ============ dark grammar: gradient stage, dark inputs ============ */
-.stage-bg { background: radial-gradient(130% 115% at 72% -8%, #223029 0%, #191e1b 42%, #121412 100%) !important; }
+.stage-bg { background: #141613 !important; }
 .modal-input, .fill-input, .fill-search, select, textarea { background: var(--card); color: var(--ink); border-color: var(--line); }
 select option { background: var(--card); color: var(--ink); }
 input::placeholder, textarea::placeholder { color: var(--muted); }
