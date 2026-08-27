@@ -341,6 +341,10 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   const commit = (person: Person, keepLayout: boolean) => {
     cancelHover();
     endPreview();
+    // Navigating draws a different board, which puts a different card under a
+    // pointer that has not moved since the click. Anchoring here means it
+    // cannot preview until the reader actually moves.
+    previewAt.current = { ...pointerAt.current };
     if (keepLayout) onSelectOnly(person); else onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
