@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 153**, `BUILD_ID=d70dc45`.
+- The live release is **Version 158**, `BUILD_ID=6b39ee9`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":153,"build":"d70dc45","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":158,"build":"6b39ee9","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -30,6 +30,18 @@ Last updated: 2026-08-27
 - `npm run build` passes.
 - `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
+
+### Versions 154–158 (2026-08-27) — a way in, and knowing who came in
+
+- **Versions 154–155** (`becf3f7`, `ee300c0`): **a family password, a private link, and roles named for what they do.**
+  - Three ways in, not two: open to anyone, behind a shared password, or the member list alone. In password mode a visitor enters it once and a signed cookie remembers that browser for ninety days. **Anyone on the member list is never asked, in any mode** — the owner's requirement.
+  - The password is stored only as a keyed digest and **no request returns it**: the settings card can set one and say whether one exists, and that is all. It is HMAC-SHA256 keyed with `AUTH_SESSION_SECRET` rather than a slow KDF, because this Worker's CPU limit behaves like 10ms and a PBKDF2 worth having does not fit; the strength rests on that secret, which is a Worker secret and **is not in the database**, so the archive's own data cannot be attacked offline. `lib/access.ts` records the trade and what to do if the ceiling is ever raised.
+  - The private link carries a 24-byte token to `/api/access`, which sets the same cookie and redirects to `/` so the token does not sit in the address bar. Admins can cut a new one, retiring the old.
+  - Roles are `canView`, `canEdit`, `admin`, migrated from `viewer`/`editor` across a CHECK constraint SQLite cannot alter. **Adding a member now starts them at `canView`.**
+  - Verified end to end against production: anonymous `/api/tree` 401 `password_required`, the gate renders, a wrong password 401s, the right one issues the cookie and opens the archive, the private link 302s with a cookie, a wrong token issues none, and a member passes without being asked.
+  - **I broke the live site for about a minute doing that.** `clear_password` moved the archive to members-only if it believed it was behind the password, and it believed so from a per-isolate cache that had gone stale — so a clear issued *after* I had already restored public mode still moved it. V155: decisions that change who can see the archive read the stored visibility, not the cache, and clearing a password that is in use is refused rather than honoured by quietly picking another mode.
+- **Version 156** (`0a61058`): hovering a name in the **List** and a city on the **Map** now previews what a click would open, as the family board does. The map **zooms on a double-click** around the point clicked (1.85 → 2.96 measured). And a city's name is tried **above and below its pin** before it gives up, so cities close together can both be read — Tehran now renders `is-below` where it used to vanish.
+- **Versions 157–158** (`b3b58c8`, `6b39ee9`): **a member can say who they are in the tree**, and the archive opens there. A new account is an email address and nothing else, so everything the archive showed was about strangers. Suggestions carry the birth year **and the parents**, because names repeat down this family and most records have no birth year — the parents are what actually tell two Mohammads apart. One account per person, refused otherwise; only the account itself may claim, never an admin on someone's behalf. V158: the card had gone into the editor's chat column, so members who can only view — the ones most likely to be new — were never asked.
 
 ### Versions 145–153 (2026-08-27) — the views on a phone, and the hover retired
 
