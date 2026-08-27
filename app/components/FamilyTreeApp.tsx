@@ -351,7 +351,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
           // the hover preview IS the profile: the same panel a click opens,
           // rendered read-only and inert
           <div className="person-hover-preview" aria-hidden="true">
-            <PersonModalV2 key={hoverPreview.id} person={hoverPreview} tree={tree} canEdit={false} onClose={() => {}} onSelect={() => {}} onTreeChange={() => {}} />
+            <PersonModalV2 key={hoverPreview.id} person={hoverPreview} tree={tree} canEdit={false} preview onClose={() => {}} onSelect={() => {}} onTreeChange={() => {}} />
           </div>
         )}
         {!selectedPerson && placeFocus && viewMode === "map" && <PlacePanel place={placeFocus} onPick={(person) => openPerson(person, true, false)} onClose={() => setPlaceFocus(null)} />}
@@ -549,7 +549,7 @@ function PersonComments({ personId }: { personId: string }) {
   </div>;
 }
 
-function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
+function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange, preview }: { person: Person; tree: FamilyTree; canEdit: boolean; preview?: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
   const { t } = useLanguage();
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -700,7 +700,10 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
       </details>)}
     </div>}
     <div className="modal-relationships">{([['Parents', buckets.parents], ['Siblings', buckets.siblings], ['Spouse', buckets.spouses], ['Children', buckets.children]] as [string, Person[]][]).filter(([, people]) => canEdit || people.length > 0).map(([label, people]) => <div className="relationship-group" key={label}><div className="relationship-heading"><p className="eyebrow">{t(`person.${label.toLocaleLowerCase()}`)}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => { setRelationEditor(relationEditor === label ? null : label); setRelativeQuery(""); setRelativeChoice(""); }} aria-label={`Add ${label.toLocaleLowerCase()}`}>＋</button>}</div>{people.length > 0 && <div className="relationship-rows">{people.map((relative) => { const link = relation(relative, label); return <div className="relationship-row" key={relative.id}><button className="relationship-row-main" onClick={() => onSelect(relative)}><span className="rel-name">{relative.displayName}</span><span className="rel-meta">{[relative.birthDate?.slice(0, 4), label === "Spouse" ? link?.status ?? undefined : undefined].filter(Boolean).join(" · ")}</span></button>{label === "Spouse" && canEdit && link && <select className="marriage-status" value={link.status ?? ""} aria-label={`Marriage status with ${relative.displayName}`} onChange={async (event) => { try { await post({ action: "relationship_status", relationshipId: link.id, status: event.target.value || null }); setNotice("Marriage status saved"); } catch { setNotice("Could not save status"); } }}><option value="">married</option><option value="divorced">divorced</option><option value="widowed">widowed</option></select>}{canEdit && link && <button className="relationship-remove" onClick={() => removeRelationship(link.id)} aria-label={`Remove ${relative.displayName}`}>×</button>}</div>; })}</div>}{relationEditor === label && <div className="relative-picker"><input className="modal-input" value={relativeQuery} autoFocus placeholder={`Find or create a ${label.toLocaleLowerCase().replace(/s$/, "")}`} onChange={(event) => { setRelativeQuery(event.target.value); setRelativeChoice(""); }} />{relativeQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && candidate.displayName.toLocaleLowerCase().includes(relativeQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={() => { setRelativeChoice(candidate.id); setRelativeQuery(candidate.displayName); }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}{locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace) ? ` · ${locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace)}` : ""}</span></button>)}</div>}<button type="button" className="relative-add-button" disabled={!relativeQuery.trim() || saving} onClick={() => addRelative(label)}>{relativeChoice ? "Add selected person" : "Use this name"}</button></div>}</div>)}</div>
-    <PersonComments personId={person.id} />
+    {/* the hover card is a glance, not a visit: PersonComments fetches the
+        whole comment list on mount, and remounting it for every card the
+        pointer crosses is a request each time */}
+    {!preview && <PersonComments personId={person.id} />}
     {notice && <p className="modal-notice" role="status">{notice}</p>}
     {canEdit && <div className="person-delete-footer">{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>{t("person.removePortrait")}</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>{t("person.delete")}</button></div>}
   </section>;
