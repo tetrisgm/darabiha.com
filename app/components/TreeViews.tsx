@@ -135,6 +135,8 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     cursor.dataset.visible = "true";
     const target = event.target as Element;
     setCursorMode(dragRef.current ? "grabbing" : target.closest?.("button, summary") ? "pointer" : "grab");
+    // moving off the cards and onto open canvas gives the board back
+    if (previewId && !dragRef.current && !target.closest?.(".ped-card")) { cancelHover(); endPreview(); }
   };
   const hidePedCursor = () => {
     if (pedCursorRef.current && !dragRef.current) pedCursorRef.current.dataset.visible = "false";
