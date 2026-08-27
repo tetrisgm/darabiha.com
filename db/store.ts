@@ -65,6 +65,9 @@ export async function ensureSchema() {
   // Which person in the tree an account belongs to, so the archive can open
   // where that person stands rather than at the founders.
   try { await env.DB.prepare("ALTER TABLE members ADD COLUMN person_id TEXT").run(); } catch { /* existing deployment */ }
+  // claimMemberPerson checks this too, but a check followed by a write is not
+  // atomic: two claims arriving together would both pass it
+  try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_members_person ON members(person_id) WHERE person_id IS NOT NULL").run(); } catch { /* older SQLite */ }
   // Imported archive material is written in its own language; body holds the
   // English a reader sees first, original_body the words the family wrote.
   try { await env.DB.prepare("ALTER TABLE stories ADD COLUMN original_body TEXT").run(); } catch { /* existing deployment */ }
@@ -461,9 +464,16 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       .bind(person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate, person.deathDate,
         person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.residence, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "delete_person") {
+    // There are no foreign keys on these tables, so everything that points at
+    // a person has to be cleared here. Photographs and comments were added
+    // after this path was written and were being left behind; a member who
+    // had claimed the person would have been left pointing at a ghost.
     statements.push(
       env.DB.prepare("DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?").bind(proposal.personId, proposal.personId),
       env.DB.prepare("DELETE FROM story_people WHERE person_id = ?").bind(proposal.personId),
+      env.DB.prepare("DELETE FROM person_photos WHERE person_id = ?").bind(proposal.personId),
+      env.DB.prepare("DELETE FROM person_comments WHERE person_id = ?").bind(proposal.personId),
+      env.DB.prepare("UPDATE members SET person_id = NULL WHERE person_id = ?").bind(proposal.personId),
       env.DB.prepare("DELETE FROM people WHERE id = ?").bind(proposal.personId),
     );
   } else if (proposal.kind === "add_relationship") {

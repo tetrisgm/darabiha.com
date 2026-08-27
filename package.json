@@ -13,7 +13,8 @@
     "legacy:validate": "node scripts/validate_legacy_family_tree.mjs",
     "db:generate": "drizzle-kit generate",
     "test": "vitest run --config vitest.config.ts",
-    "test:browser": "playwright test --config playwright.config.ts"
+    "test:browser": "playwright test --config playwright.config.ts",
+    "check:data": "node scripts/check_data_model.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
