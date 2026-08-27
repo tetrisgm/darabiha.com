@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 114**, `BUILD_ID=9cbdaf6`.
+- The live release is **Version 116**, `BUILD_ID=37ce44d`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":114,"build":"9cbdaf6","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":116,"build":"37ce44d","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -29,7 +29,13 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–114 (2026-08-26)
+### Versions 54–116 (2026-08-26)
+
+- **Versions 115–116** (`6b0d4fa`, `37ce44d`): **map labels stop overlapping, at every zoom.**
+  - V115: the collision test ran once in board percentages, so it never re-ran as the map zoomed — two cities judged too close at 1× stayed judged that way at 4×, where they are plainly apart. `planLabels()` now works in **screen space against the current zoom**: the busier place keeps the right side, a crowded neighbour flips its label to the **left** rather than losing it, and only a label with nowhere to go steps back to its count until hovered. (Written as a module-level pure function — the React Compiler rejects a `useMemo` that returns a locally mutated Map, and refuses to optimise the component at all if one is present.)
+  - V116, the two real causes the measurements exposed: **the same city appeared twice** — "Ghazvin" beside "Qazvin, Iran", "Tehran" with and without its country — because `mapFamilyPlaces` grouped by label spelling. It now groups by **resolved coordinates**, keeping the fullest label, so Qazvin is one pin carrying all 6 people. And the row threshold was 24px against labels that measure **30**, so two labels 24px apart were judged clear and drew on top of each other; it is 34 now, measured from the rendered element.
+  - Verified by measuring real label rectangles at 1.85×, 4× and 8×: **zero overlaps at every zoom**, 4 pins instead of 6.
+
 
 - **Version 114** (`9cbdaf6`): **questions answer with buttons, and show the photograph they ask about** (owner: "if it's a yes or no, show me a button that says yes and a button that says no"). Each question carries its own `choices` — "Yes, the same person" / "No, someone else"; "Over a hundred" / "83, as recorded"; "Yes, one person" / "No, two people" — and the derived consistency checks generate theirs in `lib/record-checks.ts`. Free text stays only where the answer really is text (the second wife's name) and remains an optional note elsewhere. The 1920-photograph question renders the photograph, resolved to the image several people already share rather than uploading a second copy.
 - **Version 113** (`e9a31da`): four interaction fixes.
