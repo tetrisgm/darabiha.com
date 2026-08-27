@@ -751,7 +751,8 @@ main.chat-collapsed.has-person .site-action-bar { left:calc(30rem + 16px); }
 @media (max-width: 900px) { main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-bar { left:calc(var(--chat-width,390px) + 16px); } main.chat-collapsed.has-person .site-action-bar { left:16px; } }
 
 /* hover preview: slides over the profile slot */
-.person-hover-preview { position:fixed; top:0; bottom:0; left:var(--chat-width,390px); z-index:40; width:min(100%,30rem); overflow:hidden; background:white; border-right:1px solid var(--line); padding:2.5rem; box-shadow:12px 0 40px rgba(var(--shadow-tint),.12); animation:preview-in .25s var(--ease) both; pointer-events:none; }
+.person-hover-preview { position:fixed; top:0; bottom:0; left:var(--chat-width,390px); z-index:40; width:min(100%,30rem); overflow:hidden; background:white; border-right:1px solid var(--line); padding:6rem 2.5rem 2.5rem; box-shadow:12px 0 40px rgba(var(--shadow-tint),.12); animation:preview-in .25s var(--ease) both; pointer-events:none; }
+@media (max-width: 900px) { .person-hover-preview { left:0; z-index:65; padding-top:2.5rem; } }
 main.chat-collapsed .person-hover-preview { left:0; }
 @keyframes preview-in { from { opacity:0; transform:translateX(-14px); } to { opacity:1; transform:none; } }
 .person-hover-hero { display:flex; align-items:center; gap:1rem; margin-bottom:1.2rem; }
