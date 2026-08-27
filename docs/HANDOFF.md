@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 139**, `BUILD_ID=72f3f8c`.
+- The live release is **Version 144**, `BUILD_ID=ee64903`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":139,"build":"72f3f8c","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":144,"build":"ee64903","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -23,13 +23,24 @@ Last updated: 2026-08-27
 - The public D1 tree currently reports **412 people (see the story-facts entry above), 687 relationships, and 14 stories** (the Persian family histories and the family biography, Versions 82–84; a duplicate bare `Aydin` beside `Aydin Darabi` was removed 2026-08-26). Gender is recorded for 405 of 412 people, assigned by `scripts/enrich_gender.mjs` from a curated given-name lexicon plus heterosexual-marriage deduction (owner-authorized assumption), with zero same-gender-marriage conflicts as cross-validation. Eight stay NULL deliberately: ambiguous names (Heshmat Ghazvini Hosseinzadeh, Karen Kamali, Meesha Darabi, Sasha Darabi, Setia Darabi, Shervine Eftekhari Rad, the coded `xAsJ 17 Bemanian`) and Ramine Darabiha, whose gender the archive should hear from Ramine rather than guess — the corrected legacy archive merged with the previously hand-entered records (see “Main tree data” below).
 - A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
 - `npm test`: 34 unit tests passed (vitest — `node --test` is not this project's runner and fails on every file). `npx tsc --noEmit` is a mandatory release gate — `npm run build` does NOT typecheck, which is how Version 54 shipped a `ReferenceError` (see the Version 55 record below).
-- `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit — three consecutive serial passes and two at the default four workers, all green, under load averages of 9-15.
+- `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit — green at the default four workers in ~19-26s and serially in ~26-33s, twice each, under load averages of 9-16.
   **The suite was failing intermittently before Version 139, and it was not contention** — or not only contention. The page is server-rendered, so it is on screen and looks interactive before React attaches, and a click landing in that window is silently lost. Under load that window ran past the 5s assertion timeout, so tests that pass in ~2s alone failed in a suite. `main` now carries `data-hydrated`, and `openArchive()` waits for it before any interaction. With that in place the parallel default passes in ~19s under the same load that used to fail it. If this class returns, suspect the hydration window before blaming the machine.
   Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
+
+### Versions 140–144 (2026-08-27) — the archive on a phone
+
+Asked to check the record panel on a phone. The panel itself was drawing correctly the whole time; three things around and inside it were not.
+
+- **Version 140** (`e761c19`): **the page was forcing a 1174px layout viewport on a 390pt phone**, so the browser zoomed the whole archive down to about a third of its intended size — legible only by pinching. `.chat-sidebar` carried a hard `480px` from a later styling pass that clobbered the `min(430px, 100vw)` rule at line 222; the header bar starts where the sidebar ends, so its contents ran out to 1174. Below 720px the sidebar is capped to the viewport, the header spans it regardless, and the header's own row scrolls rather than widening the page. `document.scrollWidth` is 390 on a 390 viewport now.
+  **This is invisible from inside the page** — every element reports sensible coordinates, because it is the viewport that gave way. To catch it: open a mobile-emulated context and compare `window.innerWidth` against the viewport you asked for. On darabiha.com it read 1174; on example.com, 390.
+- **Version 141** (`024771f`): **the panel's close button could not be tapped.** `.family-shell` is `isolation: isolate`, so the panel's `z-index: 60` never competed with the header's 50 — it was confined inside the shell, and the header and the version stamp painted over a panel that fills the screen. `elementFromPoint` on the × returned one of the header's tabs. Below 720px the shell rises above them while a record is open, and the panel is opaque there (at 94% the tree showed through the biography).
+- **Versions 142–144** (`6a77baf`, `b3ea7e0`, `ee64903`): **the photograph's actions needed a hover a phone does not have.** Set as portrait / who else is in this / remove all live behind `:hover` on the tile. On a coarse pointer the tile is a column — picture, then its actions underneath — with the frame moved onto the image. V142's first attempt kept the overlay geometry and only turned the actions on, so they spilled onto the add-a-photograph tile below; V143 restructured it. Verified: all five action buttons 32px tall and `reachable: true`. The relationship ×, the marriage select, the death ×, and the delete buttons were 11-22px; they get a thumb's worth on touch.
+
+**Verifying a phone properly** needs `isMobile: true` in the Playwright context — a plain narrow viewport does not reproduce the zoom-out, because that is the mobile browser's response to a page it cannot fit.
 
 ### Versions 138–139 (2026-08-27)
 
