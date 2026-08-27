@@ -49,6 +49,33 @@ test("hovering a card shows the record and moves nothing", async ({ page }) => {
   expect(await board()).toBe(before);
 });
 
+test("clicking a card in the Family view leaves it exactly where it was", async ({ page }) => {
+  await ready(page);
+  await openView(page, "Family");
+  await page.locator(".ped-card").first().waitFor();
+  await page.waitForTimeout(1500);
+
+  // the board arrives centred on the person whose record is open
+  const centred = await page.evaluate(() => {
+    const card = document.querySelector(".ped-col-focal .ped-couple > .ped-card")!.getBoundingClientRect();
+    const stage = document.querySelector(".ped-stage")!.getBoundingClientRect();
+    return { dx: (card.x + card.width / 2) - (stage.x + stage.width / 2), dy: (card.y + card.height / 2) - (stage.y + stage.height / 2) };
+  });
+  expect(Math.abs(centred.dx)).toBeLessThan(2);
+  expect(Math.abs(centred.dy)).toBeLessThan(2);
+
+  // and choosing someone rebuilds the family around them without moving them
+  const card = page.locator(".ped-siblings .ped-card, .ped-col-parents .ped-card").first();
+  const name = await card.locator("strong").innerText();
+  const before = (await card.boundingBox())!;
+  await page.mouse.click(before.x + before.width / 2, before.y + before.height / 2);
+  await page.waitForTimeout(2000);
+  await expect(page.locator(".ped-col-focal .ped-couple > .ped-card strong")).toHaveText(name);
+  const after = (await page.locator(".ped-col-focal .ped-couple > .ped-card").boundingBox())!;
+  expect(Math.abs((after.x + after.width / 2) - (before.x + before.width / 2))).toBeLessThan(3);
+  expect(Math.abs((after.y + after.height / 2) - (before.y + before.height / 2))).toBeLessThan(3);
+});
+
 test("hovering a name in the List previews that person", async ({ page }) => {
   await ready(page);
   await openView(page, "List");

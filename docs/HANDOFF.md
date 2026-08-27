@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 174**, `BUILD_ID=bb5de5c`.
+- The live release is **Version 183**, `BUILD_ID=362f093`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":174,"build":"bb5de5c","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":183,"build":"362f093","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -24,13 +24,30 @@ Last updated: 2026-08-27
 - A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
 - `npm run check:data`: all twenty data-model properties hold against the live database.
 - `npm test`: 34 unit tests passed (vitest — `node --test` is not this project's runner and fails on every file). `npx tsc --noEmit` is a mandatory release gate — `npm run build` does NOT typecheck, which is how Version 54 shipped a `ReferenceError` (see the Version 55 record below).
-- `npm run test:browser`: **56 passed, 4 skipped**, twice consecutively at `--workers=2` in ~50s, across Chromium and Playwright WebKit — `public-tree.spec.ts` (the archive's long-standing behaviour) and `archive-behaviour.spec.ts` (this session's). The skips are the two members-only tests and the branch-expansion test at sizes where no folded branch is on camera.
+- `npm run test:browser`: **58 passed, 4 skipped**, twice consecutively at `--workers=2` in ~50s, across Chromium and Playwright WebKit — `public-tree.spec.ts` (the archive's long-standing behaviour) and `archive-behaviour.spec.ts` (this session's). The skips are the two members-only tests and the branch-expansion test at sizes where no folded branch is on camera.
   **The suite was failing intermittently before Version 139, and it was not contention** — or not only contention. The page is server-rendered, so it is on screen and looks interactive before React attaches, and a click landing in that window is silently lost. Under load that window ran past the 5s assertion timeout, so tests that pass in ~2s alone failed in a suite. `main` now carries `data-hydrated`, and `openArchive()` waits for it before any interaction. With that in place the parallel default passes in ~19s under the same load that used to fail it. If this class returns, suspect the hydration window before blaming the machine.
   Canvas tests open the Full tree tab through the `openFullTree` helper, and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
+
+### Versions 175–183 (2026-08-27) — the card you click does not move
+
+Owner: "I expect that card to remain where it is and for the data around it to change... we should not move the camera and keep the card where it was."
+
+Clicking a card flew it to the middle of the stage and built the family around it there, so the thing the reader had just pointed at moved out from under them. It now stays exactly where it was clicked and the family is rebuilt around that spot; arriving in the view still centres, because there is nothing on screen yet to keep still. This is the rule the Tree view has had since Version 135.
+
+**Getting to exactly zero took six versions, and five of them were wrong in the same way.** The card kept landing fourteen pixels out, and each attempt treated it as a timing problem:
+- anchor the card rather than the button inside it (V176) — 25px became 24;
+- suppress the board's ten-pixel rise animation while holding (V177–179) — 24 became 14, and clearing the flag mid-transition restarted the very animation it was suppressing;
+- remove the animation altogether (V180) — no change, which was the clue;
+- have the camera follow the board as portraits load (V181) — no change;
+- wait for two frames that agree on where the card is (V182) — no change.
+
+The measurement was the bug. **Every column stretches to the board's height, the focal column centres its card in that, and the board is centred in the stage — so at zero pan the card is already on the stage's centre line, by construction.** There was nothing to measure vertically, and measuring it caught a transient and baked a fourteen-pixel correction into every board. V183 takes the vertical from how the board is built and measures only the horizontal, which is genuinely unknown because the focal column is not the middle one. Measured: **0,0 on arrival and on every click**, from the siblings, the parents, the children, the grandparents.
+
+Two lint errors were committed past on the way (hooks declared after an early return, a ref used before its declaration), both caught by `npm run lint` and both from chaining the gates into one command where an error scrolls by. **Run lint on its own line.**
 
 ### Versions 162–174 (2026-08-27) — the sweep: desktop, the data model, then Apple's sizes
 
