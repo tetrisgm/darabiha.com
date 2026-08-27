@@ -4,6 +4,7 @@ import { LanguageProvider } from "./components/LanguageContext";
 import { LANG_COOKIE, parseLang } from "../lib/i18n";
 import { appleSignInPath, appleSignOutPath, getAppleUser } from "./apple-auth";
 import { getViewerRole, visitorGate, TEMPORARY_OPEN_EDITOR } from "./authz";
+import { getMemberPerson } from "../db/store";
 import PasswordGate from "./components/PasswordGate";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +51,7 @@ export default async function Home() {
     <LanguageProvider initial={lang}>
       <FamilyTreeApp
         initialTree={null}
-        viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "canEdit", role, displayName: user?.displayName ?? null }}
+        viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "canEdit", role, displayName: user?.displayName ?? null, personId: user && role ? await getMemberPerson(user.email) : null }}
         signOutPath={appleSignOutPath("/")}
         signInEnabled={!TEMPORARY_OPEN_EDITOR}
       />

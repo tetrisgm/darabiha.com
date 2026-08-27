@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { CalendarView, StatisticsView, TimelineView, WorldMapView } from "./ArchiveViews";
+import IdentifyMe from "./IdentifyMe";
 import type { MappedPlace } from "../../lib/archive-views";
 import { FocusFamilyView, MissingDataView, OutlineView, Silhouette, TreeSearch } from "./TreeViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
@@ -14,7 +15,7 @@ import { BUILD_ID, VERSION } from "../../lib/build";
 
 type Props = {
   initialTree: FamilyTree | null;
-  viewer: { signedIn: boolean; canEdit: boolean; role: "admin" | "canEdit" | "canView" | null; displayName: string | null };
+  viewer: { signedIn: boolean; canEdit: boolean; role: "admin" | "canEdit" | "canView" | null; personId?: string | null; displayName: string | null };
   signOutPath: string;
   signInEnabled: boolean;
 };
@@ -59,8 +60,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
-  const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
-  const [focalId, setFocalId] = useState<string | null>(null);
+  const [highlightedIds, setHighlightedIds] = useState<string[]>(viewer.personId ? [viewer.personId] : []);
+  // Where the archive opens: on the person this account says it is, if it
+  // has said, and otherwise on the family it has always opened on.
+  const [identity, setIdentity] = useState<string | null>(viewer.personId ?? null);
+  const [focalId, setFocalId] = useState<string | null>(viewer.personId ?? null);
   /* Everything on this page is server-rendered before React attaches, so a
      click landing in that window is silently lost - the button is there, the
      handler is not. The attribute says when the page can actually be used;
@@ -307,6 +311,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                   {!selectedPerson && <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
                     {t("chat.welcome", { name: viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : "" })}
                   </div>}
+                  {viewer.signedIn && viewer.role && !identity && treeLoaded && tree.people.length > 0 && (
+                    <IdentifyMe tree={tree} onClaimed={(person) => { setIdentity(person.id); openPerson(person); }} />
+                  )}
                   {!selectedPerson && greeting?.fact && messages.length === 0 && <button type="button" className="chat-fact" onClick={openGreetingPerson} disabled={!greeting.personId}>
                     <span className="chat-fact-label">{t("chat.fromArchive")}</span>
                     <span>{greeting.fact}</span>

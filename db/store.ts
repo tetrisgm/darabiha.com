@@ -45,7 +45,7 @@ const schemaStatements = [
   )`,
   `CREATE TABLE IF NOT EXISTS members (
     email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'canEdit', 'canView')),
-    added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    person_id TEXT, added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS member_links (
     email TEXT PRIMARY KEY, member_email TEXT NOT NULL, provider TEXT, created_at TEXT NOT NULL
@@ -62,6 +62,9 @@ export async function ensureSchema() {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
   try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
+  // Which person in the tree an account belongs to, so the archive can open
+  // where that person stands rather than at the founders.
+  try { await env.DB.prepare("ALTER TABLE members ADD COLUMN person_id TEXT").run(); } catch { /* existing deployment */ }
   // Imported archive material is written in its own language; body holds the
   // English a reader sees first, original_body the words the family wrote.
   try { await env.DB.prepare("ALTER TABLE stories ADD COLUMN original_body TEXT").run(); } catch { /* existing deployment */ }
@@ -243,6 +246,36 @@ export async function recordSignInProvider(email: string, provider: string) {
   const canonical = await resolveMemberEmail(normalized);
   await env.DB.prepare(`INSERT INTO member_links (email, member_email, provider, created_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(email) DO UPDATE SET provider = excluded.provider`).bind(normalized, canonical, provider, new Date().toISOString()).run();
+}
+
+/** Who a signed-in account is in the tree. Null until they say so. */
+export async function getMemberPerson(email: string): Promise<string | null> {
+  await ensureSchema();
+  const canonical = await resolveMemberEmail(email);
+  const row = await env.DB.prepare("SELECT person_id AS personId FROM members WHERE email = ?").bind(canonical).first<{ personId: string | null }>();
+  return row?.personId ?? null;
+}
+
+/** A person can be claimed by one account: two people sharing a record would
+ * make "where I stand in the tree" meaningless for both. */
+export async function claimMemberPerson(email: string, personId: string | null): Promise<"ok" | "taken" | "unknown_person"> {
+  await ensureSchema();
+  const canonical = await resolveMemberEmail(email);
+  const now = new Date().toISOString();
+  if (personId) {
+    const person = await env.DB.prepare("SELECT display_name AS name FROM people WHERE id = ?").bind(personId).first<{ name: string }>();
+    if (!person) return "unknown_person";
+    const held = await env.DB.prepare("SELECT email FROM members WHERE person_id = ? AND email <> ?").bind(personId, canonical).first<{ email: string }>();
+    if (held) return "taken";
+    await env.DB.batch([
+      env.DB.prepare("UPDATE members SET person_id = ?, updated_at = ? WHERE email = ?").bind(personId, now, canonical),
+      env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), canonical, "member_identity", `${canonical} is ${person.name} in the tree`, JSON.stringify({ personId }), now),
+    ]);
+    return "ok";
+  }
+  await env.DB.prepare("UPDATE members SET person_id = NULL, updated_at = ? WHERE email = ?").bind(now, canonical).run();
+  return "ok";
 }
 
 export async function getMemberRole(email: string): Promise<MemberRole | null> {
