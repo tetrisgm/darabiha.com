@@ -250,7 +250,10 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "openai_not_configured" }, { status: 503 });
 
-  const form = await request.formData();
+  // a request that is not multipart throws here, outside the try below, and
+  // used to surface as an empty 500 with nothing to read
+  const form = await request.formData().catch(() => null);
+  if (!form) return Response.json({ error: "expected_form_data" }, { status: 400 });
   const message = String(form.get("message") ?? "").trim().slice(0, MAX_MESSAGE_CHARS);
   const history = String(form.get("history") ?? "").slice(0, 16_000);
   const manifest = String(form.get("file_manifest") ?? "").slice(0, 20_000);
