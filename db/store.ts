@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
+import { runRecordChecks } from "../lib/record-checks";
 
 let initialized = false;
 const schemaStatements = [
@@ -520,19 +521,47 @@ type QuestionAction =
 
 export async function listOpenQuestions(): Promise<OpenQuestion[]> {
   await ensureSchema();
-  const result = await env.DB.prepare(`SELECT id, question, evidence, action_summary AS actionSummary, proposal_json AS proposalJson, status, created_at AS createdAt
-    FROM open_questions WHERE status = 'open' ORDER BY created_at`).all<{ id: string; question: string; evidence: string | null; actionSummary: string | null; proposalJson: string | null; status: "open"; createdAt: string }>();
-  return result.results.map((row) => ({
+  // Consistency problems are derived, not stored: the checker runs against the
+  // live tree each time, so a question disappears the moment the records stop
+  // disagreeing. Only the family's verdicts are persisted - a denied check
+  // stays denied by id even though the check itself is recomputed.
+  const [result, answered, tree] = await Promise.all([
+    env.DB.prepare(`SELECT id, question, evidence, action_summary AS actionSummary, proposal_json AS proposalJson, status, created_at AS createdAt
+      FROM open_questions WHERE status = 'open' ORDER BY created_at`).all<{ id: string; question: string; evidence: string | null; actionSummary: string | null; proposalJson: string | null; status: "open"; createdAt: string }>(),
+    env.DB.prepare("SELECT id FROM open_questions WHERE status != 'open'").all<{ id: string }>(),
+    readTree(),
+  ]);
+  const settled = new Set(answered.results.map((row) => row.id));
+  const derived: OpenQuestion[] = runRecordChecks(tree)
+    .filter((check) => !settled.has(check.id) && !result.results.some((row) => row.id === check.id))
+    .map((check) => ({
+      id: check.id, question: check.question, evidence: check.evidence,
+      actionSummary: check.kind === "duplicate"
+        ? "Confirming records that these are one person; an editor merges them."
+        : "Confirming records the answer for an editor to apply.",
+      needsAnswerText: false, status: "open" as const, createdAt: "",
+    }));
+  return [...result.results.map((row) => ({
     id: row.id, question: row.question, evidence: row.evidence, actionSummary: row.actionSummary,
     needsAnswerText: Boolean(row.proposalJson && JSON.parse(row.proposalJson).actions?.some((action: QuestionAction) => "nameFromAnswer" in action && action.nameFromAnswer)),
     status: row.status, createdAt: row.createdAt,
-  }));
+  })), ...derived];
 }
 
 export async function answerQuestion(id: string, verdict: "confirm" | "deny", note: string | null, actorEmail: string): Promise<FamilyTree> {
   await ensureSchema();
-  const row = await env.DB.prepare("SELECT question, proposal_json AS proposalJson, status FROM open_questions WHERE id = ?")
+  let row = await env.DB.prepare("SELECT question, proposal_json AS proposalJson, status FROM open_questions WHERE id = ?")
     .bind(id).first<{ question: string; proposalJson: string | null; status: string }>();
+  if (!row && id.startsWith("chk-")) {
+    // a derived consistency check: persist it at the moment it is answered so
+    // the verdict survives, then fall through to the normal path
+    const check = runRecordChecks(await readTree()).find((candidate) => candidate.id === id);
+    if (!check) throw new Error("question_not_found");
+    const created = new Date().toISOString();
+    await env.DB.prepare("INSERT OR IGNORE INTO open_questions (id, question, evidence, action_summary, proposal_json, status, created_at) VALUES (?, ?, ?, ?, NULL, 'open', ?)")
+      .bind(id, check.question, check.evidence, null, created).run();
+    row = { question: check.question, proposalJson: null, status: "open" };
+  }
   if (!row) throw new Error("question_not_found");
   if (row.status !== "open") throw new Error("question_already_answered");
   const now = new Date().toISOString();
