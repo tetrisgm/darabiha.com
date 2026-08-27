@@ -378,9 +378,7 @@ button:disabled, button:disabled * { cursor: default; }
 .fill-footnote { max-width:34rem; color:var(--muted); font-size:.76rem; text-align:center; }
 
 /* Ancestry-style pedigree (Family view) */
-/* the zoom stack is anchored to the stage, so the stage reaches the bottom:
-   3rem of padding here put the controls 58px off the corner instead of 10 */
-.ped-view { padding:5.6rem 1.5rem .6rem; }
+.ped-view { padding:5.6rem 1.5rem 3rem; }
 .ped-stage { position:relative; margin:0 auto; max-width:76rem; min-height:24rem; }
 .ped-lines { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
 .ped-lines path { fill:none; stroke:rgba(235,235,245,.24); stroke-width:1.5; }
@@ -733,6 +731,8 @@ main.chat-collapsed .site-action-bar { left:16px; }
 .ped-card.is-focal { transform:none; }
 @keyframes ped-swap { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
 .ped-columns { animation: ped-swap .45s var(--ease) both; }
+/* a child of .ped-view, not of the padded .ped-stage: an offset inside the
+   stage is measured from the padding, which pushed it off the corner */
 .ped-zoom { position:absolute; right:.6rem; bottom:.6rem; z-index:5; }
 
 /* the action bar yields to the profile panel instead of covering it */

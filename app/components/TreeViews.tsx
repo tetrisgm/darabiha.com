@@ -278,15 +278,15 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       </div>
       <p className="focus-hint" data-visible={hintVisible ? "true" : "false"} aria-hidden={!hintVisible}>{t("family.hint")}</p>
     </div>
+    <div className="canvas-controls ped-zoom" role="group" aria-label="Family zoom controls">
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.max(0.4, current * 0.9))} aria-label="Zoom out" title="Zoom out">−</button>
+      <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale(1)} aria-label="Reset zoom" title="Reset zoom">{Math.round(scale * 100)}%</button>
+      <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.min(2, current * 1.1))} aria-label="Zoom in" title="Zoom in">＋</button>
+    </div>
     <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
       onPointerEnter={positionPedCursor} onPointerLeave={hidePedCursor}>
       <PedCursor mode={cursorMode} cursorRef={pedCursorRef} />
-      <div className="canvas-controls ped-zoom" role="group" aria-label="Family zoom controls">
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.max(0.4, current * 0.9))} aria-label="Zoom out" title="Zoom out">−</button>
-        <button type="button" className="canvas-zoom-level" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale(1)} aria-label="Reset zoom" title="Reset zoom">{Math.round(scale * 100)}%</button>
-        <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.min(2, current * 1.1))} aria-label="Zoom in" title="Zoom in">＋</button>
-      </div>
       <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
         <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
         <div className="ped-columns" key={focal.id}>
