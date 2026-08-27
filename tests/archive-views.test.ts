@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTimeline, mapFamilyPlaces } from "../lib/archive-views";
 import type { FamilyTree, Person } from "../lib/types";
 
-const person: Person = { id: "p1", displayName: "Ramine Darabiha", givenName: "Ramine", maidenName: null, familyName: "Darabiha", birthDate: "1983-07-05", deathDate: null, birthPlace: null, deathPlace: null, birthCity: "Paris", birthCountry: "France", deathCity: null, deathCountry: null, biography: null, photoAttachmentId: null };
+const person: Person = { id: "p1", displayName: "Ramine Darabiha", givenName: "Ramine", maidenName: null, familyName: "Darabiha", birthDate: "1983-07-05", deathDate: null, birthPlace: null, deathPlace: null, birthCity: "Paris", birthCountry: "France", deathCity: null, deathCountry: null, burialPlace: null, biography: null, photoAttachmentId: null };
 const tree: FamilyTree = { people: [person], relationships: [], stories: [{ id: "s1", title: "A family day", body: "A memory", date: "2000", place: "Paris", personIds: [person.id] }] };
 
 describe("archive views", () => {

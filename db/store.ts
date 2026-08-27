@@ -48,7 +48,7 @@ const schemaStatements = [
 export async function ensureSchema() {
   if (initialized) return;
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
-  for (const column of ["birth_city", "birth_country", "death_city", "death_country", "gender", "maiden_name"]) {
+  for (const column of ["birth_city", "birth_country", "death_city", "death_country", "gender", "maiden_name", "burial_place"]) {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
   try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
@@ -264,7 +264,7 @@ export async function readTree(): Promise<FamilyTree> {
     env.DB.prepare(`SELECT id, display_name AS displayName, gender, given_name AS givenName,
       family_name AS familyName, maiden_name AS maidenName, birth_date AS birthDate, death_date AS deathDate,
       birth_place AS birthPlace, death_place AS deathPlace, birth_city AS birthCity, birth_country AS birthCountry,
-      death_city AS deathCity, death_country AS deathCountry, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
+      death_city AS deathCity, death_country AS deathCountry, burial_place AS burialPlace, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
     env.DB.prepare(`SELECT id, from_person_id AS fromPersonId, to_person_id AS toPersonId,
       type, status FROM relationships ORDER BY created_at`).all<Relationship>(),
     env.DB.prepare(`SELECT id, title, body, original_body AS originalBody, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
@@ -327,7 +327,7 @@ function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   return {
     displayName, gender: input.gender === "male" || input.gender === "female" ? input.gender : null, givenName: nullable(input.givenName), familyName: nullable(input.familyName), maidenName: nullable(input.maidenName),
     birthDate: nullable(input.birthDate), deathDate: nullable(input.deathDate),
-    birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), birthCity: nullable(input.birthCity), birthCountry: nullable(input.birthCountry), deathCity: nullable(input.deathCity), deathCountry: nullable(input.deathCountry), biography: nullable(input.biography), photoAttachmentId: nullable(input.photoAttachmentId),
+    birthPlace: nullable(input.birthPlace), deathPlace: nullable(input.deathPlace), birthCity: nullable(input.birthCity), birthCountry: nullable(input.birthCountry), deathCity: nullable(input.deathCity), deathCountry: nullable(input.deathCountry), burialPlace: nullable(input.burialPlace), biography: nullable(input.biography), photoAttachmentId: nullable(input.photoAttachmentId),
   };
 }
 
@@ -341,16 +341,16 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
     const personId = crypto.randomUUID(); addedPersonId = personId;
     statements.push(env.DB.prepare(`INSERT INTO people
-      (id, display_name, gender, given_name, family_name, maiden_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, biography, photo_attachment_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, display_name, gender, given_name, family_name, maiden_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, burial_place, biography, photo_attachment_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(personId, person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate,
-        person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, now));
+        person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.biography, person.photoAttachmentId, now, now));
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
     statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, maiden_name = ?, birth_date = ?,
-      death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
+      death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, burial_place = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
       .bind(person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate, person.deathDate,
-        person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.biography, person.photoAttachmentId, now, proposal.personId));
+        person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "delete_person") {
     statements.push(
       env.DB.prepare("DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?").bind(proposal.personId, proposal.personId),

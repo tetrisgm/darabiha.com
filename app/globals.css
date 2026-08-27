@@ -1022,3 +1022,4 @@ main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-ba
   main.chat-collapsed.has-person .site-action-bar { left:0; }
   .person-hover-preview { width:min(100%,26rem); }
 }
+.person-modal-v2 .person-facts > .person-fact-wide { grid-column:1/-1; border-left:0 !important; border-top:1px solid var(--line); }

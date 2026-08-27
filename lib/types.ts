@@ -13,6 +13,8 @@ export type Person = {
   birthCountry: string | null;
   deathCity: string | null;
   deathCountry: string | null;
+  /** where the person is buried - a cemetery or plot, not a city */
+  burialPlace: string | null;
   biography: string | null;
   photoAttachmentId: string | null;
 };

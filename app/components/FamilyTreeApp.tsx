@@ -498,6 +498,10 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add relative"); }
     finally { setSaving(false); }
   }
+  // born within a plausible lifetime and no death recorded -> presumed living;
+  // an ancestor born in 1856 with no death date is simply unrecorded
+  const birthYear = Number(person.birthDate?.slice(0, 4));
+  const presumedLiving = !person.deathDate && (!birthYear || new Date().getFullYear() - birthYear <= 110);
   const subtitleRest = [person.birthDate ? (person.deathDate ? `${person.birthDate.slice(0, 4)}–${person.deathDate.slice(0, 4)}` : `b. ${person.birthDate.slice(0, 4)}`) : person.deathDate ? `d. ${person.deathDate.slice(0, 4)}` : "", locationLine(person.birthCity, person.birthCountry, person.birthPlace) ?? ""].filter(Boolean).join(" · ");
   const relation = (other: Person, label: string) => tree.relationships.find((link) => (label === "Spouse" && link.type === "spouse" && ((link.fromPersonId === person.id && link.toPersonId === other.id) || (link.toPersonId === person.id && link.fromPersonId === other.id))) || (label === "Parents" && link.type === "parent" && link.fromPersonId === other.id && link.toPersonId === person.id) || (label === "Children" && link.type === "parent" && link.fromPersonId === person.id && link.toPersonId === other.id));
   return <section className="person-modal person-modal-v2 person-panel" role="dialog" aria-labelledby="person-modal-title">
@@ -524,7 +528,17 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
     </div>
     <div className="person-facts">
       <div><span className="eyebrow">Born</span><p className="fact-line"><InlineText value={person.birthDate} placeholder="add date" canEdit={canEdit} onSave={patchField("birthDate")} className="fact-date" />{(canEdit || person.birthCity || person.birthCountry) && <> in <InlineText value={person.birthCity} placeholder="city" canEdit={canEdit} onSave={patchField("birthCity")} />{(canEdit || (person.birthCity && person.birthCountry)) && ", "}<InlineText value={person.birthCountry} placeholder="country" canEdit={canEdit} onSave={patchField("birthCountry")} /></>}{!canEdit && !person.birthDate && "Birth date not recorded"}</p></div>
-      <div><span className="eyebrow">Died</span><p className="fact-line"><InlineText value={person.deathDate} placeholder="add date · empty means living" canEdit={canEdit} onSave={patchField("deathDate")} className="fact-date" />{(canEdit || person.deathCity || person.deathCountry) && <> in <InlineText value={person.deathCity} placeholder="city" canEdit={canEdit} onSave={patchField("deathCity")} />{(canEdit || (person.deathCity && person.deathCountry)) && ", "}<InlineText value={person.deathCountry} placeholder="country" canEdit={canEdit} onSave={patchField("deathCountry")} /></>}{!canEdit && !person.deathDate && "Still living / unknown"}</p></div>
+      {/* No death date does not mean "died, date unknown": someone born within a
+          lifetime is presumed living, and the record only asks for a death once
+          there is reason to think there was one. */}
+      <div><span className="eyebrow">{person.deathDate ? "Died" : presumedLiving ? "Living" : "Death"}</span><p className="fact-line">
+        {person.deathDate || !presumedLiving
+          ? <><InlineText value={person.deathDate} placeholder={canEdit ? "add date" : ""} canEdit={canEdit} onSave={patchField("deathDate")} className="fact-date" />{(canEdit || person.deathCity || person.deathCountry) && <> in <InlineText value={person.deathCity} placeholder="city" canEdit={canEdit} onSave={patchField("deathCity")} />{(canEdit || (person.deathCity && person.deathCountry)) && ", "}<InlineText value={person.deathCountry} placeholder="country" canEdit={canEdit} onSave={patchField("deathCountry")} /></>}{!canEdit && !person.deathDate && "Not recorded"}</>
+          : canEdit
+            ? <button type="button" className="inline-edit is-empty" onClick={() => patchField("deathDate")(new Date().toISOString().slice(0, 10))}>Still living · record a death</button>
+            : <>Still living</>}
+      </p></div>
+      {(person.burialPlace || (canEdit && person.deathDate)) && <div className="person-fact-wide"><span className="eyebrow">Buried</span><p className="fact-line"><InlineText value={person.burialPlace} placeholder="cemetery or resting place" canEdit={canEdit} onSave={patchField("burialPlace")} /></p></div>}
     </div>
     {(person.biography || canEdit) && <div className="person-biography-block">
       <div className="relationship-heading"><p className="eyebrow">Biography</p></div>
