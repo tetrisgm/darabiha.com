@@ -901,6 +901,10 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .composer-focus-clear:hover { background:rgba(255,255,255,.14); color:var(--ink); }
 .composer-focus-note { color:var(--muted); font-size:.72rem; line-height:1.4; }
 
+/* the composer textarea sits at z-index 1; the send button must clear it or
+   the absolutely-positioned arrow is unclickable */
+.public-chat-composer > button { position:absolute; z-index:2; }
+
 /* markdown in the archivist's replies */
 .md > :first-child { margin-top:0; }
 .md > :last-child { margin-bottom:0; }
