@@ -248,13 +248,13 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     if (element) slotRefs.current.set(key, element);
     else slotRefs.current.delete(key);
   };
-  const spouseIds = new Set(spouses.map((spouse) => spouse.id));
   const card = (person: Person, key: string, subtitle?: string) => {
     const meta = [years(person), subtitle].filter(Boolean).join(" · ");
-    // Clicking the focal person or their spouse keeps the layout exactly as
-    // it is (a married couple shares this neighborhood) - the camera pans,
-    // the selection highlight moves, and the profile follows.
-    const keepLayout = person.id === focal.id || spouseIds.has(person.id);
+    // Only the person already at the centre keeps the layout - the tree is
+    // already theirs, so a click just moves the selection. Everyone else,
+    // spouses included, becomes the new centre: clicking a wife should show
+    // HER parents and siblings, not her husband's.
+    const keepLayout = person.id === focal.id;
     return <div ref={setRef(key)} className={`ped-card ped-card-md ${person.id === (selectedId ?? focal.id) ? "is-selected" : ""}`} key={key}>
       <button type="button" onClick={() => (keepLayout ? onSelectOnly(person) : onPick(person))}
         onMouseEnter={() => onPreview(person)} onMouseLeave={() => onPreview(null)} onFocus={() => onPreview(person)} onBlur={() => onPreview(null)}>

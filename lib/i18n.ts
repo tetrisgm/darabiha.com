@@ -5,6 +5,9 @@
 export const LANGUAGES = ["en", "fa", "fr"] as const;
 export type Lang = (typeof LANGUAGES)[number];
 export const LANGUAGE_NAMES: Record<Lang, string> = { en: "English", fa: "فارسی", fr: "Français" };
+/** A flag stands for the language here, not a nationality - the family is
+ * spread across all three. */
+export const LANGUAGE_FLAGS: Record<Lang, string> = { en: "🇬🇧", fa: "🇮🇷", fr: "🇫🇷" };
 export const isRtl = (lang: Lang) => lang === "fa";
 export const LANG_COOKIE = "darabiha_lang";
 

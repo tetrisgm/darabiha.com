@@ -9,6 +9,7 @@ import { FocusFamilyView, MissingDataView, OutlineView, Silhouette, TreeSearch }
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { Markdown } from "./Markdown";
 import { useLanguage } from "./LanguageContext";
+import { LANGUAGES, LANGUAGE_FLAGS, LANGUAGE_NAMES } from "../../lib/i18n";
 import { BUILD_ID, VERSION } from "../../lib/build";
 
 type Props = {
@@ -39,7 +40,7 @@ type ViewMode = (typeof VIEW_MODES)[number];
 const VIEW_KEYS: Record<ViewMode, string> = { family: "view.family", tree: "view.tree", list: "view.list", timeline: "view.timeline", calendar: "view.calendar", map: "view.map", stats: "view.stats", fill: "view.fill" };
 
 export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signInEnabled }: Props) {
-  const { t } = useLanguage();
+  const { t, lang, setLang } = useLanguage();
   const [tree, setTree] = useState(initialTree ?? EMPTY_TREE);
   const [treeLoaded, setTreeLoaded] = useState(Boolean(initialTree));
   useEffect(() => {
@@ -252,6 +253,16 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         <button type="button" className="site-wordmark text-base font-semibold tracking-[-.01em]" onClick={() => setViewMode("family")} aria-label={t("nav.home")}>Darabiha</button>
         <nav className="archive-view-switcher" aria-label="Archive view">{VIEW_MODES.filter((mode) => mode !== "fill" || viewer.canEdit).map((mode) => <button type="button" className={viewMode === mode ? "is-active" : ""} aria-current={viewMode === mode ? "page" : undefined} onClick={() => setViewMode(mode)} key={mode}>{t(VIEW_KEYS[mode])}</button>)}</nav>
         <div className="relative flex items-center gap-4">
+          <div className="lang-switch" role="group" aria-label={t("settings.language")}>
+            <span className="lang-switch-label">{t("settings.language")}</span>
+            {LANGUAGES.map((code) => <button type="button" key={code} lang={code}
+              className={`lang-pick ${lang === code ? "is-active" : ""}`}
+              aria-pressed={lang === code} title={LANGUAGE_NAMES[code]}
+              onClick={() => setLang(code)}>
+              <span aria-hidden="true">{LANGUAGE_FLAGS[code]}</span>
+              <span className="lang-pick-name">{LANGUAGE_NAMES[code]}</span>
+            </button>)}
+          </div>
           <TreeSearch tree={tree} onPick={(person) => openPerson(person)} />
           {signInEnabled && !viewer.signedIn && <a className="rounded-full bg-[var(--accent-fill)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#3a604a]" href="/settings">{t("nav.signIn")}</a>}
           {viewer.signedIn && <><button className="account-menu-button" aria-label={t("nav.account")} onClick={() => setMenuOpen(!menuOpen)}>···</button>{menuOpen && <div className="absolute right-0 top-10 z-50 rounded-xl border border-[var(--line)] bg-[var(--card)] p-1 shadow-lg"><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href="/settings">{t("nav.settings")}</a><a className="block rounded-lg px-4 py-2 text-sm hover:bg-[var(--wash)]" href={signOutPath}>{t("nav.signOut")}</a></div>}</>}
