@@ -303,6 +303,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                 </button>
               </div>
             </div>
+            {viewer.signedIn && viewer.role && !identity && treeLoaded && tree.people.length > 0 && (
+              <IdentifyMe tree={tree} onClaimed={(person) => { setIdentity(person.id); openPerson(person); }} />
+            )}
             {!viewer.canEdit ? (
               <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} focusPerson={selectedPerson} onClearFocus={closePerson} onOpenPerson={(person) => openPerson(person)} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); setViewMode("tree"); }} />
             ) : (
@@ -311,9 +314,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                   {!selectedPerson && <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
                     {t("chat.welcome", { name: viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : "" })}
                   </div>}
-                  {viewer.signedIn && viewer.role && !identity && treeLoaded && tree.people.length > 0 && (
-                    <IdentifyMe tree={tree} onClaimed={(person) => { setIdentity(person.id); openPerson(person); }} />
-                  )}
                   {!selectedPerson && greeting?.fact && messages.length === 0 && <button type="button" className="chat-fact" onClick={openGreetingPerson} disabled={!greeting.personId}>
                     <span className="chat-fact-label">{t("chat.fromArchive")}</span>
                     <span>{greeting.fact}</span>
