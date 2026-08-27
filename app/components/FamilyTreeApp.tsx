@@ -35,9 +35,9 @@ function proposalRank(proposal: ChangeProposal) {
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
 
 const EMPTY_TREE: FamilyTree = { people: [], relationships: [], stories: [] };
-const VIEW_MODES = ["family", "tree", "list", "timeline", "calendar", "map", "stats", "fill"] as const;
+const VIEW_MODES = ["tree", "family", "list", "timeline", "calendar", "map", "stats", "fill"] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
-const VIEW_KEYS: Record<ViewMode, string> = { family: "view.family", tree: "view.tree", list: "view.list", timeline: "view.timeline", calendar: "view.calendar", map: "view.map", stats: "view.stats", fill: "view.fill" };
+const VIEW_KEYS: Record<ViewMode, string> = { tree: "view.tree", family: "view.family", list: "view.list", timeline: "view.timeline", calendar: "view.calendar", map: "view.map", stats: "view.stats", fill: "view.fill" };
 
 export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signInEnabled }: Props) {
   const { t, lang, setLang } = useLanguage();
@@ -146,7 +146,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
-  const [viewMode, setViewModeState] = useState<ViewMode>("family");
+  const [viewMode, setViewModeState] = useState<ViewMode>("tree");
   // The restore runs again once the viewer resolves, which is after the page
   // is interactive - so without this it could put the reader back on the view
   // they had last time, seconds after they clicked a different tab.
