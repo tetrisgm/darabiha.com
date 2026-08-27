@@ -178,15 +178,24 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       }
       setPanMode("idle");
       setPan({ x: 0, y: 0 });
-      // After the zero-pan layout paints, put the focal card where it belongs:
-      // the middle of the stage on arrival, or exactly where the reader
-      // clicked when they chose this person from the board they were reading.
-      frame = requestAnimationFrame(() => {
+      // Put the focal card where it belongs: the middle of the stage on
+      // arrival, or exactly where the reader clicked when they chose this
+      // person from the board they were reading.
+      //
+      // The measurement waits for a card that has stopped moving. Taken one
+      // frame after the pan is zeroed it caught a board still settling - the
+      // focal column was five pixels low, the correction was baked in, and
+      // the card ended up fourteen pixels above where it was supposed to be
+      // and stayed there.
+      let lastTop = Number.NaN;
+      const place = () => {
         const stage = containerRef.current;
         const focalCard = slotRefs.current.get("focal");
         if (!stage || !focalCard) return;
+        const settling = focalCard.getBoundingClientRect();
+        if (settling.top !== lastTop) { lastTop = settling.top; frame = requestAnimationFrame(place); return; }
         const stageRect = stage.getBoundingClientRect();
-        const cardRect = focalCard.getBoundingClientRect();
+        const cardRect = settling;
         // the anchor belongs to the board it was taken on, and survives the
         // re-runs that a loading portrait causes
         const anchor = holdInPlace.current;
@@ -198,7 +207,8 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
           x: target.x - (cardRect.left + cardRect.width / 2),
           y: target.y - (cardRect.top + cardRect.height / 2),
         });
-      });
+      };
+      frame = requestAnimationFrame(place);
     };
     settle();
     return () => cancelAnimationFrame(frame);
