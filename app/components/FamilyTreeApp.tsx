@@ -343,7 +343,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
             <PersonModalV2 key={hoverPreview.id} person={hoverPreview} tree={tree} canEdit={false} onClose={() => {}} onSelect={() => {}} onTreeChange={() => {}} />
           </div>
         )}
-        {!selectedPerson && placeFocus && viewMode === "map" && <PlacePanel place={placeFocus} tree={tree} onPick={(person) => openPerson(person, true, false)} onClose={() => setPlaceFocus(null)} />}
+        {!selectedPerson && placeFocus && viewMode === "map" && <PlacePanel place={placeFocus} onPick={(person) => openPerson(person, true, false)} onClose={() => setPlaceFocus(null)} />}
         {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
         <section className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
@@ -458,7 +458,7 @@ function AttachMenu({ onFiles, onFolder }: { onFiles: () => void; onFolder: () =
 /** The Map panel: everyone the records place in a city, as preview cards.
  * Clicking a card opens the profile in the same slot; closing the profile
  * lands back on this list because the place focus survives it. */
-function PlacePanel({ place, tree, onPick, onClose }: { place: MappedPlace; tree: FamilyTree; onPick: (person: Person) => void; onClose: () => void }) {
+function PlacePanel({ place, onPick, onClose }: { place: MappedPlace; onPick: (person: Person) => void; onClose: () => void }) {
   const { t } = useLanguage();
   const roleIn = (person: Person) => {
     const norm = (value: string | null) => value?.toLocaleLowerCase() ?? "";

@@ -17,11 +17,6 @@ const year = (value: string | null | undefined) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 const monthDay = (value: string | null | undefined) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) ? String(value).slice(5) : null;
-const ordinal = (count: number) => {
-  const rest = count % 100;
-  if (rest >= 11 && rest <= 13) return `${count}th`;
-  return `${count}${["th", "st", "nd", "rd"][count % 10] ?? "th"}`;
-};
 const presumedLiving = (person: Person, today: Date) => {
   const born = year(person.birthDate);
   return !person.deathDate && (!born || today.getFullYear() - born <= 110);

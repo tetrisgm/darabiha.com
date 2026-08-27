@@ -45,7 +45,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   // Hovering a card shows the board that clicking it would give. It holds
   // until the pointer leaves the stage - clearing it when the hovered card
   // moves out from under the pointer, which the new layout does, would flicker.
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ id: string; forFocus: string } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Where the pointer was when the current preview began. Swapping the board
   // slides a different card under a pointer that never moved, and mouseenter
@@ -66,8 +66,10 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     const anchor = previewAt.current;
     return !anchor || Math.hypot(pointerAt.current.x - anchor.x, pointerAt.current.y - anchor.y) > 6;
   };
-  const activeId = previewId && maps.byId.has(previewId) ? previewId : focusId;
-  useEffect(() => { previewAt.current = null; setPreviewId(null); }, [focusId]);
+  // A preview belongs to the board it was opened on, so a real navigation
+  // retires it by definition - no effect has to chase focusId and reset it.
+  const previewId = preview && preview.forFocus === focusId && maps.byId.has(preview.id) ? preview.id : null;
+  const activeId = previewId ?? focusId;
   const model = useMemo(() => {
     const focal = maps.byId.get(activeId) ?? tree.people[0];
     if (!focal) return null;
@@ -310,7 +312,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       if (!rect) return;
       previewAt.current = { ...pointerAt.current };
       previewAnchor.current = { rect, pan: { ...panValue.current } };
-      setPreviewId(person.id);
+      setPreview({ id: person.id, forFocus: focusId });
     }, 340);
   };
   const cancelHover = () => {
@@ -322,7 +324,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     const anchor = previewAnchor.current;
     previewAnchor.current = null;
     previewAt.current = null;
-    setPreviewId(null);
+    setPreview(null);
     if (anchor) setPan(anchor.pan);
   };
   /* Swapping the board removes the card under the pointer, and React reports
@@ -655,21 +657,53 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const seedForm = (person: Person) => setForm({
+  // deathCity, deathCountry and burialPlace have no input of their own: they
+  // ride along so they round-trip unchanged, and so the clear-death button can
+  // empty every death fact at once, the way the record panel's x does.
+  const formOf = (person: Person): Record<string, string> => ({
     displayName: person.displayName,
     gender: person.gender ?? "",
     birthDate: person.birthDate ?? "",
     deathDate: person.deathDate ?? "",
+    deathCity: person.deathCity ?? "",
+    deathCountry: person.deathCountry ?? "",
+    burialPlace: person.burialPlace ?? "",
     birthCity: person.birthCity ?? "",
     birthCountry: person.birthCountry ?? "",
+    residence: person.residence ?? "",
   });
+  const seedForm = (person: Person) => setForm(formOf(person));
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  /* Opening a row closes whichever was open before it. When that one sat
+     higher up the list, everything below it rises by the height of the editor
+     that just disappeared - and the row you clicked slides out from under the
+     pointer. Its position is held instead: the scroll moves by exactly what
+     the row moved. */
+  const viewRef = useRef<HTMLElement>(null);
+  const holdRow = useRef<{ id: string; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const hold = holdRow.current;
+    if (!hold) return;
+    holdRow.current = null;
+    const scroller = viewRef.current;
+    const row = scroller?.querySelector(`[data-fill-row="${hold.id}"]`);
+    if (!scroller || !row) return;
+    const moved = row.getBoundingClientRect().top - hold.top;
+    if (Math.abs(moved) > 0.5) scroller.scrollTop += moved;
+  }, [expandedId]);
+  const deathRecorded = (person: Person) => Boolean(person.deathDate || person.deathCity || person.deathCountry || person.burialPlace);
+  const presumedLiving = (person: Person) => {
+    const born = Number(person.birthDate?.slice(0, 4));
+    return !deathRecorded(person) && (!born || new Date().getFullYear() - born <= 110);
+  };
   const missingOf = (person: Person) => {
     const missing: string[] = [];
     if (!person.gender) missing.push("gender");
     if (!person.birthDate) missing.push("birth date");
     if (!person.birthCity && !person.birthCountry && !person.birthPlace) missing.push("birth place");
+    // where they live is a fact about the living; the dead have where they died
+    if (presumedLiving(person) && !person.residence) missing.push("where they live");
     if (!person.photoAttachmentId) missing.push("photo");
     return missing;
   };
@@ -707,14 +741,7 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
     return parts.join(" · ") || "no recorded relatives";
   };
   const save = async (person: Person) => {
-    const current: Record<string, string> = {
-      displayName: person.displayName,
-      gender: person.gender ?? "",
-      birthDate: person.birthDate ?? "",
-      deathDate: person.deathDate ?? "",
-      birthCity: person.birthCity ?? "",
-      birthCountry: person.birthCountry ?? "",
-    };
+    const current = formOf(person);
     const patch: Record<string, string> = {};
     for (const key of Object.keys(current)) {
       const next = (form[key] ?? "").trim();
@@ -739,7 +766,7 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
   };
   const field = (key: string, placeholder: string) =>
     <input className="fill-input" value={form[key] ?? ""} placeholder={placeholder} onChange={(event) => setForm({ ...form, [key]: event.target.value })} />;
-  return <section className="fill-view" aria-label="Fill in missing details">
+  return <section className="fill-view" aria-label="Fill in missing details" ref={viewRef}>
     <OpenQuestionsCard onTreeChange={onSaved} />
     <div className="fill-progress">
       <strong>{complete}</strong> of {tree.people.length} records are complete · <strong>{incomplete.length}</strong> with gaps
@@ -769,8 +796,11 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
         const name = fillNameParts(person);
         return <Fragment key={person.id}>
         {sortKey === "generation" && generation !== previous && <p className="fill-gen-head">Generation {generation + 1}{generation === 0 ? " · eldest" : ""}</p>}
-        <div className={`fill-row ${open ? "is-open" : ""}`}>
-          <button type="button" className="fill-row-head" onClick={() => { setExpandedId(open ? null : person.id); if (!open) seedForm(person); setNotice(""); }}>
+        <div className={`fill-row ${open ? "is-open" : ""}`} data-fill-row={person.id}>
+          <button type="button" className="fill-row-head" onClick={(event) => {
+            holdRow.current = { id: person.id, top: event.currentTarget.getBoundingClientRect().top };
+            setExpandedId(open ? null : person.id); if (!open) seedForm(person); setNotice("");
+          }}>
             {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
             <span className="fill-cell">{name.first || "—"}</span>
             <span className="fill-cell fill-cell-last">{name.last || "—"}</span>
@@ -785,9 +815,14 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
               {(["female", "male"] as const).map((option) => <button key={option} type="button" className={form.gender === option ? "is-active" : ""} onClick={() => setForm({ ...form, gender: form.gender === option ? "" : option })}>{option === "female" ? "♀ Female" : "♂ Male"}</button>)}
             </div></div>
             <div className="fill-field"><label>Born{person.birthDate ? "" : " · missing"}</label>{field("birthDate", "1962 or 1962-04-17")}</div>
-            <div className="fill-field"><label>Died <em>(leave empty if living)</em></label>{field("deathDate", "1990 or 1990-11-02")}</div>
+            <div className="fill-field"><label>Died <em>(leave empty if living)</em></label><div className="fill-with-clear">
+              {field("deathDate", "1990 or 1990-11-02")}
+              {deathRecorded(person) && <button type="button" className="fact-clear" title={t("person.clearDeath")} aria-label={t("person.clearDeath")}
+                onClick={() => setForm({ ...form, deathDate: "", deathCity: "", deathCountry: "", burialPlace: "" })}>×</button>}
+            </div></div>
             <div className="fill-field"><label>Birth city{person.birthCity || person.birthPlace ? "" : " · missing"}</label>{field("birthCity", "Qazvin")}</div>
             <div className="fill-field"><label>Birth country{person.birthCountry || person.birthPlace ? "" : " · missing"}</label>{field("birthCountry", "Iran")}</div>
+            {presumedLiving(person) && <div className="fill-field"><label>{t("person.lives")}{person.residence ? "" : " · missing"}</label>{field("residence", "Paris, France")}</div>}
             {person.biography && <p className="fill-bio">{person.biography}</p>}
             <div className="fill-actions">
               <button type="button" className="fill-save" disabled={busy} onClick={() => save(person)}>{busy ? "Saving…" : "Save"}</button>
