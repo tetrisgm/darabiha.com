@@ -171,6 +171,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
         const cardRect = focalCard.getBoundingClientRect();
         const held = holdInPlace.current;
         holdInPlace.current = null;
+        setHolding(false);
         const target = held
           ? { x: held.left + held.width / 2, y: held.top + held.height / 2 }
           : { x: stageRect.left + stageRect.width / 2, y: stageRect.top + stageRect.height / 2 };
@@ -298,12 +299,18 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
      around that person, and they should stay exactly where the reader put
      their pointer - it is the family around them that changes, not them. */
   const holdInPlace = useRef<DOMRect | null>(null);
+  // The board fades and rises 10px when it changes, which is the right
+  // flourish for arriving somewhere new and the wrong one for a card that is
+  // supposed to sit still - it also puts the measurement 10px out, because it
+  // is taken one frame into a 450ms animation.
+  const [holding, setHolding] = useState(false);
   const commit = (person: Person, keepLayout: boolean, element: HTMLElement | null) => {
     onPreview(null);
     if (keepLayout) { onSelectOnly(person); return; }
     // the card, not the button inside it: the focal card is measured the
     // same way, and a button sits differently within a taller focal card
     holdInPlace.current = element?.closest(".ped-card")?.getBoundingClientRect() ?? null;
+    setHolding(true);
     onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
@@ -330,7 +337,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     <div ref={setRef(key)} className="ped-card ped-card-sm ped-ghost" key={key}>
       <button type="button" onClick={() => onOpen(target)} title="Open the record to add this relative">＋ {label}</button>
     </div>;
-  return <section className="focus-view ped-view" aria-label="Family around one person">
+  return <section className="focus-view ped-view" aria-label="Family around one person" data-hold={holding ? "true" : "false"}>
     <div className="focus-toolbar">
       <div className="focus-nav">
         <button type="button" className="focus-back" onClick={onBack} disabled={!canBack} aria-label={t("family.back")}>←</button>

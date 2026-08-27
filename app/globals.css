@@ -1532,3 +1532,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
 @media (max-width: 1500px) {
   .site-action-bar .tree-search { display:none; }
 }
+
+/* A board rebuilt around a card that must not move does not get the arrival
+   flourish: the rise is what would make the card look like it moved. */
+.ped-view[data-hold="true"] .ped-columns { animation:none; }
