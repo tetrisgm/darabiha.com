@@ -462,6 +462,7 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add relative"); }
     finally { setSaving(false); }
   }
+  const subtitleRest = [person.birthDate ? (person.deathDate ? `${person.birthDate.slice(0, 4)}–${person.deathDate.slice(0, 4)}` : `b. ${person.birthDate.slice(0, 4)}`) : person.deathDate ? `d. ${person.deathDate.slice(0, 4)}` : "", locationLine(person.birthCity, person.birthCountry, person.birthPlace) ?? ""].filter(Boolean).join(" · ");
   const relation = (other: Person, label: string) => tree.relationships.find((link) => (label === "Spouse" && link.type === "spouse" && ((link.fromPersonId === person.id && link.toPersonId === other.id) || (link.toPersonId === person.id && link.fromPersonId === other.id))) || (label === "Parents" && link.type === "parent" && link.fromPersonId === other.id && link.toPersonId === person.id) || (label === "Children" && link.type === "parent" && link.fromPersonId === person.id && link.toPersonId === other.id));
   return <section className="person-modal person-modal-v2 person-panel" role="dialog" aria-labelledby="person-modal-title">
     <div className="person-nav">
@@ -474,8 +475,8 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
       <div className="person-hero-copy">
         <h2 id="person-modal-title" className="font-serif text-4xl"><InlineText value={person.displayName} placeholder="Name" canEdit={canEdit} onSave={patchField("displayName")} /></h2>
         <p className="person-subtitle">
-          {person.gender === "female" && (person.maidenName || canEdit) && <span className="person-maiden">{person.maidenName ? "née " : ""}<InlineText value={person.maidenName} placeholder="add maiden name" canEdit={canEdit} onSave={patchField("maidenName")} />{" · "}</span>}
-          {[[person.birthDate?.slice(0, 4), person.deathDate?.slice(0, 4)].filter(Boolean).join("–") && (person.deathDate ? `${person.birthDate?.slice(0, 4) ?? "?"}–${person.deathDate.slice(0, 4)}` : `b. ${person.birthDate?.slice(0, 4)}`), locationLine(person.birthCity, person.birthCountry, person.birthPlace)].filter(Boolean).join(" · ")}
+          {person.gender === "female" && (person.maidenName || canEdit) && <span className="person-maiden">{person.maidenName ? "née " : ""}<InlineText value={person.maidenName} placeholder="add maiden name" canEdit={canEdit} onSave={patchField("maidenName")} />{subtitleRest ? " · " : ""}</span>}
+          {subtitleRest}
         </p>
         <div className="person-gender-row">{(["female", "male"] as const).map((option) => <button key={option} type="button" className={`gender-pick ${person.gender === option ? "is-active" : ""}`} disabled={!canEdit} onClick={() => canEdit && patchField("gender")(person.gender === option ? "" : option)}>{option === "female" ? "♀ Female" : "♂ Male"}</button>)}</div>
       </div>
