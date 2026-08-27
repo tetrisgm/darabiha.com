@@ -113,8 +113,15 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   /* The board fits itself to the stage, but the stage changes width when the
      chat collapses beside it - so the fit follows, right up until the reader
      zooms themselves, after which the view is theirs. */
+  /* The board is centred in the stage, so when a portrait finishes loading in
+     some other column and that column grows, everything shifts by half the
+     growth - which is how a card the camera had placed exactly ended up
+     fourteen pixels out a second later. The camera follows the board's size
+     until the reader takes hold of it themselves. */
+  const [boardHeight, setBoardHeight] = useState(0);
+  const readerMovedCamera = useRef(false);
   const userZoomed = useRef(false);
-  const zoom = (next: React.SetStateAction<number>) => { userZoomed.current = true; setScale(next); };
+  const zoom = (next: React.SetStateAction<number>) => { userZoomed.current = true; readerMovedCamera.current = true; setScale(next); };
   const [panMode, setPanMode] = useState<"idle" | "drag" | "glide">("idle");
   const dragRef = useRef<{ id: number; x: number; y: number; panX: number; panY: number } | null>(null);
   const pedCursorRef = useRef<HTMLSpanElement>(null);
@@ -134,16 +141,21 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   /* Where the clicked card sat on screen. The board is about to be rebuilt
      around that person, and they should stay exactly where the reader put
      their pointer - it is the family around them that changes, not them. */
-  const holdInPlace = useRef<DOMRect | null>(null);
+  const holdInPlace = useRef<{ rect: DOMRect; forFocus: string } | null>(null);
   const fitted = useRef(0);
   // the stage changes width when the chat collapses beside it, and the board
   // should follow rather than keep a fit made for the narrower stage
   const [stageWidth, setStageWidth] = useState(0);
   useEffect(() => {
     const stage = containerRef.current;
+    const board = panRef.current;
     if (!stage) return;
-    const observer = new ResizeObserver(() => setStageWidth(stage.getBoundingClientRect().width));
+    const observer = new ResizeObserver(() => {
+      setStageWidth(stage.getBoundingClientRect().width);
+      if (board) setBoardHeight(Math.round(board.getBoundingClientRect().height));
+    });
     observer.observe(stage);
+    if (board) observer.observe(board);
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
@@ -155,6 +167,8 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
       // fit waits for two frames that agree on the width, or it would size
       // the board to a stage still on its way out.
       if (!width || width !== lastWidth) { lastWidth = width; frame = requestAnimationFrame(settle); return; }
+      // once the reader has panned or zoomed, the view is theirs
+      if (readerMovedCamera.current) return;
       // three 13rem columns with 3.2rem between them is what makes the board
       // read as a family; a narrow stage gets the whole arrangement, scaled
       // down, instead of the middle column and two ghosts
@@ -173,8 +187,10 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
         if (!stage || !focalCard) return;
         const stageRect = stage.getBoundingClientRect();
         const cardRect = focalCard.getBoundingClientRect();
-        const held = holdInPlace.current;
-        holdInPlace.current = null;
+        // the anchor belongs to the board it was taken on, and survives the
+        // re-runs that a loading portrait causes
+        const anchor = holdInPlace.current;
+        const held = anchor && anchor.forFocus === focusId ? anchor.rect : null;
         const target = held
           ? { x: held.left + held.width / 2, y: held.top + held.height / 2 }
           : { x: stageRect.left + stageRect.width / 2, y: stageRect.top + stageRect.height / 2 };
@@ -186,9 +202,10 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     };
     settle();
     return () => cancelAnimationFrame(frame);
-  }, [focusId, stageWidth]);
+  }, [focusId, stageWidth, boardHeight]);
   const beginPan = (event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button, summary, select, input, a")) return;
+    readerMovedCamera.current = true;
     dragRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y };
     event.currentTarget.setPointerCapture?.(event.pointerId);
     setPanMode("drag");
@@ -303,7 +320,9 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     if (keepLayout) { onSelectOnly(person); return; }
     // the card, not the button inside it: the focal card is measured the
     // same way, and a button sits differently within a taller focal card
-    holdInPlace.current = element?.closest(".ped-card")?.getBoundingClientRect() ?? null;
+    const rect = element?.closest(".ped-card")?.getBoundingClientRect();
+    holdInPlace.current = rect ? { rect, forFocus: person.id } : null;
+    readerMovedCamera.current = false;
     onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
