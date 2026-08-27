@@ -98,11 +98,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
       window.history.replaceState({ personId: person.id }, "", `?p=${person.id}`);
     }
   }, [treeLoaded]);
-  const [addingPerson, setAddingPerson] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
   const [hoverPreview, setHoverPreview] = useState<Person | null>(null);
-  const [chatWidth, setChatWidth] = useState(390);
+  const [chatWidth, setChatWidth] = useState(330);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       try {
@@ -270,7 +269,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                   {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs leading-5 text-red-800">{error}</p>}
                 </div>
                 <div className="pt-5">
-                  <button className="mb-4 rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#365844]" onClick={() => setAddingPerson(true)}>＋ Add a person</button>
                   {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
                   <div className="editor-composer rounded-[1.5rem] border border-[var(--line)] bg-white p-4 shadow-[0_12px_40px_rgba(62,45,28,0.08)]">
                     {selectedPerson && <PersonContextCard person={selectedPerson} tree={tree} note={viewer.canEdit ? "Details you share are applied to this person." : "Questions are answered about this person."} onClear={closePerson} />}
@@ -308,27 +306,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         </section>
 
       </div>
-      {addingPerson && <AddPersonModal tree={tree} onClose={() => setAddingPerson(false)} onAdded={(next) => { setTree(next); setAddingPerson(false); }} />}
       <span className="build-version" aria-label={`Darabiha version ${VERSION}`}>Version {VERSION}</span>
     </main>
   );
-}
-
-function AddPersonModal({ tree, onClose, onAdded }: { tree: FamilyTree; onClose: () => void; onAdded: (tree: FamilyTree) => void }) {
-  const [form, setForm] = useState({ displayName: "", gender: "" as "" | "male" | "female", birthDate: "", birthCity: "", birthCountry: "", deathDate: "", deathCity: "", deathCountry: "", biography: "" });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [duplicate, setDuplicate] = useState<Person | null>(null);
-  const normalized = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-  const candidate = () => tree.people.find((person) => normalized(person.displayName) === normalized(form.displayName));
-  async function save(action: "add" | "update", personId?: string) { setBusy(true); setError(""); try { const body = action === "add" ? { action, ...form } : { action, personId, patch: form }; const response = await fetch("/api/people", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (!response.ok || !data.tree) throw new Error(data.error || "Could not save person"); onAdded(data.tree); } catch (caught) { setError(caught instanceof Error ? caught.message : "Could not save person"); } finally { setBusy(false); } }
-  async function add() { if (!form.displayName.trim() || busy) return; const match = candidate(); if (match) { const sameDate = !form.birthDate || !match.birthDate || form.birthDate === match.birthDate; if (sameDate) { await save("update", match.id); return; } setDuplicate(match); return; } await save("add"); }
-  const input = (label: string, field: keyof typeof form, type = "text") => <label className="person-editor-field"><span>{label}</span><input className="modal-input" type={type} value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></label>;
-  return <div className="person-modal-backdrop" role="presentation" onClick={onClose}><section className="person-modal" role="dialog" aria-modal="true" aria-labelledby="add-person-title" onClick={(event) => event.stopPropagation()}>
-    <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button><p className="eyebrow">New record</p><h2 id="add-person-title" className="font-serif text-3xl">Add a person</h2><p className="mt-2 text-sm text-[var(--muted)]">Enter what you know now. We’ll check the family tree before creating a new record.</p>
-    {duplicate && <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6"><strong>{duplicate.displayName}</strong> is already in the tree, born {duplicate.birthDate || "with no recorded birth date"}. Is this the same person?<div className="mt-3 flex flex-wrap gap-2"><button className="rounded-full bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-white" onClick={() => save("update", duplicate.id)}>Use existing person</button><button className="rounded-full border border-[var(--line)] bg-white px-4 py-2 text-xs font-semibold" onClick={() => { setDuplicate(null); save("add"); }}>Create new person</button></div></div>}
-    <div className="modal-editor person-editor-grid">{input("Full name", "displayName")}<label className="person-editor-field"><span>Sex</span><select className="modal-input" value={form.gender} onChange={(event) => setForm({ ...form, gender: event.target.value as typeof form.gender })}><option value="">Not recorded</option><option value="female">Female</option><option value="male">Male</option></select></label>{input("Birth date", "birthDate", "date")}{input("Birth city", "birthCity")}{input("Birth country", "birthCountry")}{input("Death date", "deathDate", "date")}{input("Death city", "deathCity")}{input("Death country", "deathCountry")}<label className="person-editor-field person-editor-wide"><span>Biography, memories, or notes</span><textarea className="modal-input min-h-24" value={form.biography} onChange={(event) => setForm({ ...form, biography: event.target.value })} /></label>{error && <p className="text-sm text-red-700">{error}</p>}<button className="rounded-full bg-[var(--accent)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy || !form.displayName.trim()} onClick={add}>{busy ? "Checking…" : "Add person"}</button></div>
-  </section></div>;
 }
 
 function InlineText({ value, placeholder, canEdit, multiline, className, inputType, onSave }: { value: string | null; placeholder: string; canEdit: boolean; multiline?: boolean; className?: string; inputType?: string; onSave: (next: string) => void }) {
