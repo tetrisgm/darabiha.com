@@ -11,7 +11,7 @@
     "APPLE_KEY_ID": "J6958HV8HB",
     "GOOGLE_CLIENT_ID": "50198009288-qfpf5kc7e0n51pvv8addlif4co5dnflu.apps.googleusercontent.com"
   },
-  "assets": { "directory": "dist/client", "binding": "ASSETS", "run_worker_first": ["/legacy-family-tree*", "/legacy-photos/*"] },
+  "assets": { "directory": "dist/client" },
   "routes": [
     { "pattern": "darabiha.com/*", "zone_name": "darabiha.com" }
   ],

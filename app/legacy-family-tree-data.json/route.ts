@@ -1,13 +1,10 @@
 import { env } from "cloudflare:workers";
 import { requireVisitor } from "../authz";
 
-const assets = () => (env as unknown as { ASSETS: { fetch(input: Request): Promise<Response> } }).ASSETS;
-
-export async function GET(request: Request) {
+export async function GET() {
   const access = await requireVisitor();
   if (!access.ok) return access.response;
-  const response = await assets().fetch(new Request(new URL("/legacy-family-tree-data.json", request.url)));
-  const headers = new Headers(response.headers);
-  headers.set("cache-control", "private, max-age=300");
-  return new Response(response.body, { status: response.status, headers });
+  const object = await env.FILES.get("legacy/legacy-family-tree-data.json");
+  if (!object) return new Response("Not found", { status: 404 });
+  return new Response(object.body, { headers: { "content-type": "application/json", "cache-control": "private, max-age=300" } });
 }

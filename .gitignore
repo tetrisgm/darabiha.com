@@ -40,3 +40,6 @@ next-env.d.ts
 scripts/import_legacy_tree_to_d1.generated.sql
 scripts/enrich_gender.generated.sql
 tsconfig.tsbuildinfo
+public/legacy-family-tree.html
+public/legacy-family-tree-data.json
+public/legacy-photos/

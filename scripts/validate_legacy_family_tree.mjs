@@ -4,7 +4,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { stat } from "node:fs/promises";
 
-const data = JSON.parse(await readFile("public/legacy-family-tree-data.json", "utf8"));
+// Since 2026-08-26 the served copies live in R2 (legacy/ prefix) behind the
+// members gate; the extractor still writes to public/ locally, and this
+// validator checks those local, uncommitted files.
+const data = JSON.parse(await readFile("public/legacy-family-tree-data.json", "utf8").catch(() => {
+  console.error("public/legacy-family-tree-data.json is absent - run scripts/extract_legacy_family_tree.py first (the served copies live in R2, not git).");
+  process.exit(1);
+}));
 const html = await readFile("public/legacy-family-tree.html", "utf8");
 const people = new Map(data.people.map((person) => [person.id, person]));
 const parents = new Map();
