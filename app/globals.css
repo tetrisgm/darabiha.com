@@ -827,3 +827,40 @@ main.chat-collapsed .person-hover-preview { left:0; }
 .person-panel { animation: panel-in .22s ease-out both; }
 .person-hover-preview { animation-name: preview-in-x; }
 @keyframes preview-in-x { from { transform: translateX(-14px); } to { transform: none; } }
+
+/* ============ Maps parity: docked bar, dense panel, rowed lists ============ */
+
+/* the action bar docks flush like Maps chrome - no island */
+.site-action-bar { top:0; height:3.6rem; right:0; border-radius:0; border:0; border-bottom:1px solid rgba(0,0,0,.07); box-shadow:none; left:var(--chat-width,390px); background:rgba(252,250,245,.8); }
+main.chat-collapsed .site-action-bar { left:0; }
+main.has-person .site-action-bar { left:calc(var(--chat-width,390px) + 30rem); }
+main.chat-collapsed.has-person .site-action-bar { left:30rem; }
+@media (max-width: 900px) { main.has-person .site-action-bar { left:var(--chat-width,390px); } main.chat-collapsed.has-person .site-action-bar { left:0; } }
+
+/* hero: name + one subtitle line, Maps-style */
+.person-subtitle { margin:.3rem 0 0; color:var(--muted); font-size:.92rem; }
+.person-subtitle .person-maiden { margin:0; font-size:inherit; }
+.person-modal-hero.is-stacked { gap:.7rem; }
+.person-gender-row { margin-top:.5rem; }
+
+/* stat strip tightened */
+.person-modal-v2 .person-facts { margin:1.1rem 0 1.2rem; }
+.person-modal-v2 .person-facts > div { padding:.65rem .9rem; }
+.person-modal-v2 .person-facts .fact-line { font-size:.9rem; }
+
+/* relationships as full-width rowed cards */
+.modal-relationships { display:block; margin-top:1.4rem; border-top:0; padding-top:0; }
+.relationship-group { margin-top:1.1rem; padding:0; border-radius:0; }
+.relationship-rows { border:1px solid var(--line); border-radius:.9rem; background:rgba(255,255,255,.72); overflow:hidden; }
+.relationship-row { display:flex; align-items:center; gap:.5rem; padding-right:.6rem; }
+.relationship-row + .relationship-row { border-top:1px solid var(--line); }
+.relationship-row-main { display:flex; flex:1; min-width:0; align-items:center; justify-content:space-between; gap:.8rem; padding:.65rem .9rem; text-align:left; }
+.relationship-row-main:hover { background:var(--wash); }
+.relationship-row-main .rel-name { font-size:.9rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.relationship-row-main .rel-meta { color:var(--muted); font-size:.78rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+/* chat suggestions as a rowed card, not floating pills */
+.chat-suggestions { display:block; border:1px solid var(--line); border-radius:.9rem; background:rgba(255,255,255,.7); overflow:hidden; padding:0; margin-top:1rem; }
+.chat-suggestion { display:block; width:100%; border:0; border-radius:0; background:transparent; text-align:left; padding:.7rem .95rem; font-size:.85rem; }
+.chat-suggestion + .chat-suggestion { border-top:1px solid var(--line); }
+.chat-suggestion:hover { background:var(--wash); border-color:transparent; color:var(--ink); }
