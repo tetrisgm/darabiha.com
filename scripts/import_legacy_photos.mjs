@@ -32,16 +32,18 @@ const MAX_EDGE = 1400; // the archive keeps the originals; cards get a web-sized
 const q = (value) => (value === null || value === undefined ? "NULL" : `'${String(value).replace(/'/g, "''")}'`);
 
 // archive person id -> the live person it must match before anything is written.
-// portrait:false marks an image the archive files under a person's name that is
-// really a family group photograph - a card crops to a square, so a group shot
-// would show a fragment of three people rather than a face. Those stay off the
-// cards until the owner picks a crop or a home for them.
+// group:true marks an image the archive files under a person's name that is
+// really a family group photograph. The owner asked for them on the cards
+// anyway (2026-08-27) - they are the only pictures the archive has of those
+// three people. A card crops to a square, and a centred crop of a tall holiday
+// photo lands on sky, so each group photo carries a hand-picked square around
+// the people: crop = [offsetY, offsetX, size] in the original's pixels.
 const EXPECTED = new Map([
-  ["p7", { name: "Abbas Darabi", parents: ["Mohammad Zehtab Darabi", "Salmeh"], portrait: true }],
-  ["p11", { name: "Hossein Zehtab Darabi", parents: ["Mohammad Zehtab Darabi", "Salmeh"], portrait: true }],
-  ["p29", { name: "Kazem Darabiha", parents: ["Ghassem Darabi", "Robabeh Masoudi"], portrait: false }],
-  ["p39", { name: "Nasser Darabiha", parents: ["Ghassem Darabi", "Robabeh Masoudi"], portrait: false }],
-  ["p211", { name: "Niloufar Hashemzad Forouzan", parents: ["Nasrin (Kobra) Darabiha", "Saeed (Asghar) Hashemzad Forouzan"], portrait: false }],
+  ["p7", { name: "Abbas Darabi", parents: ["Mohammad Zehtab Darabi", "Salmeh"] }],
+  ["p11", { name: "Hossein Zehtab Darabi", parents: ["Mohammad Zehtab Darabi", "Salmeh"] }],
+  ["p29", { name: "Kazem Darabiha", parents: ["Ghassem Darabi", "Robabeh Masoudi"], group: true, crop: [0, 52, 920] }],
+  ["p39", { name: "Nasser Darabiha", parents: ["Ghassem Darabi", "Robabeh Masoudi"], group: true, crop: [1950, 469, 2082] }],
+  ["p211", { name: "Niloufar Hashemzad Forouzan", parents: ["Nasrin (Kobra) Darabiha", "Saeed (Asghar) Hashemzad Forouzan"], group: true, crop: [600, 431, 2020] }],
 ]);
 
 const arg = (flag) => { const index = process.argv.indexOf(flag); return index === -1 ? null : process.argv[index + 1]; };
@@ -60,14 +62,13 @@ for (const link of tree.relationships) {
 const resolve = (archiveId) => {
   const expected = EXPECTED.get(archiveId);
   if (!expected) return { skip: `no curated mapping for ${archiveId}` };
-  if (!expected.portrait) return { skip: `${expected.name}: family group photograph, not a portrait` };
   const matches = tree.people.filter((person) => {
     if (person.displayName !== expected.name) return false;
     const parents = (parentsOf.get(person.id) ?? []).map((id) => byId.get(id)?.displayName).filter(Boolean).sort();
     return JSON.stringify(parents) === JSON.stringify([...expected.parents].sort());
   });
   if (matches.length !== 1) return { skip: `${expected.name} matched ${matches.length} live records` };
-  if (matches[0].photoAttachmentId) return { skip: `${expected.name} already has a portrait` };
+  if (matches[0].photoAttachmentId && !(process.argv.includes("--replace") && expected.crop)) return { skip: `${expected.name} already has a portrait` };
   return { person: matches[0] };
 };
 
@@ -80,12 +81,12 @@ for (const image of archive.images) {
     if (!person) { skipped.push(`${image.title}: ${skip}`); continue; }
     const source = join(photoDir, basename(image.file));
     const size = (await stat(source)).size;
-    work.push({ image, person, source, size, attachmentId: randomUUID() });
+    work.push({ image, person, source, size, archiveId, attachmentId: randomUUID() });
   }
 }
 
 console.log(`Portraits to attach: ${work.length}`);
-for (const item of work) console.log(`  ${item.person.displayName.padEnd(30)} <- ${item.image.title} (${Math.round(item.size / 1024)} KB)`);
+for (const item of work) console.log(`  ${item.person.displayName.padEnd(30)} <- ${item.image.title} (${Math.round(item.size / 1024)} KB)${EXPECTED.get(item.archiveId)?.group ? " [group photograph]" : ""}`);
 if (skipped.length) { console.log("\nLeft off the cards:"); for (const line of skipped) console.log("  " + line); }
 if (!work.length) process.exit(0);
 
@@ -93,16 +94,28 @@ const scratch = await mkdtemp(join(tmpdir(), "darabiha-photos-"));
 const statements = [];
 const now = new Date().toISOString();
 for (const item of work) {
-  // sips ships with macOS; the resized copy is what the cards load
+  // sips ships with macOS; the cropped, resized copy is what the cards load
   const resized = join(scratch, `${item.attachmentId}.jpg`);
-  execFileSync("sips", ["-Z", String(MAX_EDGE), "-s", "format", "jpeg", "-s", "formatOptions", "80", item.source, "--out", resized], { stdio: "ignore" });
+  const crop = EXPECTED.get(item.archiveId)?.crop;
+  let source = item.source;
+  if (crop) {
+    const cropped = join(scratch, `${item.attachmentId}-crop.jpg`);
+    execFileSync("sips", ["-c", String(crop[2]), String(crop[2]), "--cropOffset", String(crop[0]), String(crop[1]), source, "--out", cropped], { stdio: "ignore" });
+    source = cropped;
+  }
+  // -Z upscales a smaller image, which only wastes bytes: never exceed the source
+  const sourceEdge = Math.max(...execFileSync("sips", ["-g", "pixelWidth", "-g", "pixelHeight", source]).toString().match(/\d+/g).slice(-2).map(Number));
+  execFileSync("sips", ["-Z", String(Math.min(MAX_EDGE, sourceEdge)), "-s", "format", "jpeg", "-s", "formatOptions", "80", source, "--out", resized], { stdio: "ignore" });
   item.resized = resized;
   item.resizedSize = (await stat(resized)).size;
-  if (item.resizedSize >= item.size) { item.resized = item.source; item.resizedSize = item.size; }
+  if (!crop && item.resizedSize >= item.size) { item.resized = item.source; item.resizedSize = item.size; }
   item.filename = `${basename(item.image.source)}`;
-  console.log(`  resized ${item.filename}: ${Math.round(item.size / 1024)} KB -> ${Math.round(item.resizedSize / 1024)} KB`);
+  const dims = execFileSync("sips", ["-g", "pixelWidth", "-g", "pixelHeight", item.resized]).toString().match(/\d+/g)?.slice(-2).join("x");
+  console.log(`  ${crop ? "cropped+resized" : "resized"} ${item.filename}: ${Math.round(item.size / 1024)} KB -> ${Math.round(item.resizedSize / 1024)} KB (${dims})`);
+  if (process.env.PREVIEW_DIR) execFileSync("cp", [item.resized, join(process.env.PREVIEW_DIR, `${item.person.displayName.replace(/\s+/g, "-")}.jpg`)]);
   statements.push(`INSERT INTO attachments (id, object_key, filename, content_type, size, created_by, created_at) VALUES (${q(item.attachmentId)}, ${q(`evidence/${item.attachmentId}`)}, ${q(item.filename)}, 'image/jpeg', ${item.resizedSize}, ${q(ACTOR)}, ${q(now)});`);
-  statements.push(`UPDATE people SET photo_attachment_id = ${q(item.attachmentId)}, updated_at = ${q(now)} WHERE id = ${q(item.person.id)} AND photo_attachment_id IS NULL;`);
+  statements.push(`UPDATE people SET photo_attachment_id = ${q(item.attachmentId)}, updated_at = ${q(now)} WHERE id = ${q(item.person.id)}${item.person.photoAttachmentId ? "" : " AND photo_attachment_id IS NULL"};`);
+  if (item.person.photoAttachmentId) statements.push(`DELETE FROM attachments WHERE id = ${q(item.person.photoAttachmentId)};`);
 }
 const summary = `Attached ${work.length} photographs from the legacy archive to the people it names.`;
 statements.push(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (${q(randomUUID())}, ${q(ACTOR)}, 'import_legacy_photos', ${q(summary)}, ${q(JSON.stringify({ entries: work.map((item) => ({ person: item.person.displayName, personId: item.person.id, image: item.image.title, source: item.image.source, attachmentId: item.attachmentId })) }))}, ${q(now)});`);
@@ -114,3 +127,8 @@ for (const item of work) {
   execFileSync("npx", ["wrangler", "r2", "object", "put", `${BUCKET}/evidence/${item.attachmentId}`, "--file", item.resized, "--content-type", "image/jpeg", "--remote"], { stdio: "inherit" });
 }
 execFileSync("npx", ["wrangler", "d1", "execute", "darabiha-family", "--remote", "--yes", `--file=${OUT_SQL}`], { stdio: "inherit" });
+for (const item of work) {
+  // the replaced object is unreferenced now; portraits are served immutable, so
+  // a new id (not new bytes under the old key) is what makes the swap visible
+  if (item.person.photoAttachmentId) execFileSync("npx", ["wrangler", "r2", "object", "delete", `${BUCKET}/evidence/${item.person.photoAttachmentId}`, "--remote"], { stdio: "inherit" });
+}
