@@ -115,7 +115,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("87");
+  expect(version).toBe("88");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
@@ -128,6 +128,16 @@ test("timeline and map are generated from the same public family records", async
   await expect(page.getByRole("region", { name: "Family timeline" })).toBeVisible();
   await page.getByRole("button", { name: "Map" }).click();
   await expect(page.getByRole("region", { name: "Family places" })).toBeVisible();
+  // the map pans and zooms like the other canvases
+  const mapScale = () => page.locator(".world-map-layer").evaluate((element) => Number((element as HTMLElement).style.transform.match(/scale\(([\d.]+)\)/)?.[1] ?? 1));
+  await page.getByRole("group", { name: "Map zoom controls" }).getByRole("button", { name: "Zoom in" }).click();
+  await expect.poll(mapScale).toBeGreaterThan(1.05);
+  const mapBox = await page.locator(".world-map").boundingBox();
+  await page.mouse.move(mapBox!.x + mapBox!.width / 2, mapBox!.y + mapBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(mapBox!.x + mapBox!.width / 2 + 80, mapBox!.y + mapBox!.height / 2 + 40, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(() => page.locator(".world-map-layer").evaluate((element) => (element as HTMLElement).style.transform)).toContain("translate(80px, 40px)");
   await page.getByRole("button", { name: "Tree" }).click();
   await expect(page.locator(".family-canvas")).toBeVisible();
 });
