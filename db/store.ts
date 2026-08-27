@@ -25,6 +25,11 @@ const schemaStatements = [
   )`,
   `CREATE TABLE IF NOT EXISTS story_attachments (story_id TEXT NOT NULL, attachment_id TEXT NOT NULL)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_story_attachments_unique ON story_attachments(story_id, attachment_id)`,
+  `CREATE TABLE IF NOT EXISTS person_comments (
+    id TEXT PRIMARY KEY, person_id TEXT NOT NULL, author_email TEXT NOT NULL, author_name TEXT,
+    body TEXT NOT NULL, created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_person_comments_person ON person_comments(person_id, created_at)`,
   `CREATE TABLE IF NOT EXISTS person_photos (
     person_id TEXT NOT NULL, attachment_id TEXT NOT NULL, created_at TEXT NOT NULL
   )`,
@@ -648,4 +653,60 @@ export async function unlinkPersonPhoto(personId: string, attachmentId: string, 
   ]);
   treeJsonCache = null;
   return readTree();
+}
+
+
+// ---------- the record of who changed what ----------
+export type ChangeEntry = { id: string; actorEmail: string; kind: string; summary: string; createdAt: string };
+
+/** Newest first, a page at a time. Every mutation in the archive writes here,
+ * so this is the full account of who did what. */
+export async function listChangeLog(before?: string | null, limit = 60): Promise<{ entries: ChangeEntry[]; nextBefore: string | null }> {
+  await ensureSchema();
+  const rows = before
+    ? await env.DB.prepare(`SELECT id, actor_email AS actorEmail, kind, summary, created_at AS createdAt FROM change_log
+        WHERE created_at < ? ORDER BY created_at DESC LIMIT ?`).bind(before, limit + 1).all<ChangeEntry>()
+    : await env.DB.prepare(`SELECT id, actor_email AS actorEmail, kind, summary, created_at AS createdAt FROM change_log
+        ORDER BY created_at DESC LIMIT ?`).bind(limit + 1).all<ChangeEntry>();
+  const entries = rows.results.slice(0, limit);
+  return { entries, nextBefore: rows.results.length > limit ? entries[entries.length - 1]?.createdAt ?? null : null };
+}
+
+// ---------- comments ----------
+export type PersonComment = { id: string; personId: string; authorName: string; body: string; createdAt: string; mine?: boolean };
+
+export async function listComments(): Promise<PersonComment[]> {
+  await ensureSchema();
+  const rows = await env.DB.prepare(`SELECT id, person_id AS personId, author_email AS authorEmail, author_name AS authorName, body, created_at AS createdAt
+    FROM person_comments ORDER BY created_at`).all<PersonComment & { authorEmail: string }>();
+  return rows.results.map(({ authorEmail, ...comment }) => ({ ...comment, authorName: comment.authorName || authorEmail.split("@")[0] }));
+}
+
+export async function addComment(personId: string, body: string, actorEmail: string, authorName: string | null): Promise<PersonComment[]> {
+  await ensureSchema();
+  const text = body.trim().slice(0, 4000);
+  if (!personId || !text) throw new Error("comment_required");
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO person_comments (id, person_id, author_email, author_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), personId, actorEmail, authorName, text, now),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "add_comment", "Left a comment on a record", JSON.stringify({ personId }), now),
+  ]);
+  return listComments();
+}
+
+/** Anyone may delete their own; an admin may delete any. */
+export async function removeComment(commentId: string, actorEmail: string, isAdmin: boolean): Promise<PersonComment[]> {
+  await ensureSchema();
+  const owner = await env.DB.prepare("SELECT author_email AS authorEmail FROM person_comments WHERE id = ?").bind(commentId).first<{ authorEmail: string }>();
+  if (!owner) throw new Error("comment_not_found");
+  if (!isAdmin && owner.authorEmail.toLocaleLowerCase() !== actorEmail.toLocaleLowerCase()) throw new Error("not_your_comment");
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM person_comments WHERE id = ?").bind(commentId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "remove_comment", "Removed a comment", JSON.stringify({ commentId }), now),
+  ]);
+  return listComments();
 }

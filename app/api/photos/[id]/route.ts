@@ -1,5 +1,5 @@
 import { getSiteVisibility, readAttachment } from "../../../../db/store";
-import { requireVisitor } from "../../../authz";
+import { requireEditor, requireVisitor } from "../../../authz";
 
 export const runtime = "edge";
 
@@ -8,7 +8,12 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   if (!access.ok) return access.response;
   const { id } = await context.params;
   const attachment = await readAttachment(id);
-  if (!attachment || !attachment.metadata.contentType.startsWith("image/")) return new Response("Not found", { status: 404 });
+  if (!attachment) return new Response("Not found", { status: 404 });
+  // photographs are part of the archive anyone may see; source documents are
+  // private evidence and need an editor
+  if (!attachment.metadata.contentType.startsWith("image/") && !(await requireEditor()).ok) {
+    return new Response("Not found", { status: 404 });
+  }
   return new Response(attachment.object.body, {
     headers: {
       "content-type": attachment.metadata.contentType,

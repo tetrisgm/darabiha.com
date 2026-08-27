@@ -19,6 +19,7 @@ type Props = {
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type PendingProposal = { id: string; proposal: ChangeProposal; state: "pending" | "applying" | "applied" | "error"; appliedPersonId?: string };
+type FamilyNote = { id: string; personId: string; authorName: string; body: string; createdAt: string };
 
 function proposalRank(proposal: ChangeProposal) {
   if (proposal.kind === "add_person") return 0;
@@ -468,6 +469,46 @@ function PlacePanel({ place, tree, onPick, onClose }: { place: MappedPlace; tree
   </section>;
 }
 
+/** The family talking to each other about a record. Any signed-in member may
+ * leave one; you can delete your own, and an admin can delete any. */
+function PersonComments({ personId }: { personId: string }) {
+  const [comments, setComments] = useState<FamilyNote[] | null>(null);
+  const [me, setMe] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/comments").then((response) => response.ok ? response.json() as Promise<{ comments: FamilyNote[]; me: string }> : null)
+      .then((data) => { if (!cancelled && data) { setComments(data.comments); setMe(data.me); } })
+      .catch(() => { /* signed-out visitors simply see no thread */ });
+    return () => { cancelled = true; };
+  }, []);
+  if (comments === null) return null;
+  const mine = comments.filter((comment) => comment.personId === personId);
+  const send = async (payload: Record<string, unknown>) => {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/comments", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await response.json() as { comments?: FamilyNote[]; me?: string };
+      if (data.comments) { setComments(data.comments); setMe(data.me ?? me); }
+    } finally { setBusy(false); }
+  };
+  return <div className="person-comments">
+    <div className="relationship-heading"><p className="eyebrow">Notes from the family</p></div>
+    {mine.length > 0 && <div className="comment-list">{mine.map((comment) => <div className="comment" key={comment.id}>
+      <p className="comment-body">{comment.body}</p>
+      <p className="comment-meta">{comment.authorName} · {new Date(comment.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+        {me && <button type="button" className="comment-remove" onClick={() => send({ action: "remove", commentId: comment.id })} aria-label="Delete this note">×</button>}
+      </p>
+    </div>)}</div>}
+    <div className="comment-compose">
+      <textarea className="modal-input" value={draft} placeholder="Add what you remember, or a correction…" rows={2}
+        onChange={(event) => setDraft(event.target.value)} aria-label="Add a note about this person" />
+      <button type="button" className="fill-save" disabled={busy || !draft.trim()} onClick={async () => { await send({ personId, body: draft }); setDraft(""); }}>Post note</button>
+    </div>
+  </div>;
+}
+
 function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -605,6 +646,7 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
       </details>)}
     </div>}
     <div className="modal-relationships">{([['Parents', buckets.parents], ['Spouse', buckets.spouses], ['Children', buckets.children], ['Siblings', buckets.siblings]] as [string, Person[]][]).filter(([, people]) => canEdit || people.length > 0).map(([label, people]) => <div className="relationship-group" key={label}><div className="relationship-heading"><p className="eyebrow">{label}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => { setRelationEditor(relationEditor === label ? null : label); setRelativeQuery(""); setRelativeChoice(""); }} aria-label={`Add ${label.toLocaleLowerCase()}`}>＋</button>}</div>{people.length > 0 && <div className="relationship-rows">{people.map((relative) => { const link = relation(relative, label); return <div className="relationship-row" key={relative.id}><button className="relationship-row-main" onClick={() => onSelect(relative)}><span className="rel-name">{relative.displayName}</span><span className="rel-meta">{[relative.birthDate?.slice(0, 4), label === "Spouse" ? link?.status ?? undefined : undefined].filter(Boolean).join(" · ")}</span></button>{label === "Spouse" && canEdit && link && <select className="marriage-status" value={link.status ?? ""} aria-label={`Marriage status with ${relative.displayName}`} onChange={async (event) => { try { await post({ action: "relationship_status", relationshipId: link.id, status: event.target.value || null }); setNotice("Marriage status saved"); } catch { setNotice("Could not save status"); } }}><option value="">married</option><option value="divorced">divorced</option><option value="widowed">widowed</option></select>}{canEdit && link && <button className="relationship-remove" onClick={() => removeRelationship(link.id)} aria-label={`Remove ${relative.displayName}`}>×</button>}</div>; })}</div>}{relationEditor === label && <div className="relative-picker"><input className="modal-input" value={relativeQuery} autoFocus placeholder={`Find or create a ${label.toLocaleLowerCase().replace(/s$/, "")}`} onChange={(event) => { setRelativeQuery(event.target.value); setRelativeChoice(""); }} />{relativeQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && candidate.displayName.toLocaleLowerCase().includes(relativeQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={() => { setRelativeChoice(candidate.id); setRelativeQuery(candidate.displayName); }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}{locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace) ? ` · ${locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace)}` : ""}</span></button>)}</div>}<button type="button" className="relative-add-button" disabled={!relativeQuery.trim() || saving} onClick={() => addRelative(label)}>{relativeChoice ? "Add selected person" : "Use this name"}</button></div>}</div>)}</div>
+    <PersonComments personId={person.id} />
     {notice && <p className="modal-notice" role="status">{notice}</p>}
     {canEdit && <div className="person-delete-footer">{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>Remove portrait</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>Delete person</button></div>}
   </section>;

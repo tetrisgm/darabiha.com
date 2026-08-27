@@ -127,6 +127,15 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         <p>You can edit the archive — add people, correct records, and attach photos. Managing who has access is reserved for admins.</p>
       </div>}
 
+      {(viewer.role === "admin" || viewer.role === "editor") && <div className="settings-card">
+        <h2>The archive behind the archive</h2>
+        <p className="settings-hint">Where the records came from, and what has been done to them.</p>
+        <div className="settings-links">
+          <a className="settings-link-card" href="/documents"><strong>Documents</strong><span>The family biography, the histories, and the source archive the records were read out of.</span></a>
+          <a className="settings-link-card" href="/history"><strong>History</strong><span>Every change anyone has made, newest first.</span></a>
+        </div>
+      </div>}
+
       {viewer.role === "admin" && <div className="settings-card">
         <h2>Members &amp; access</h2>
         {visibility && <div className="settings-visibility">

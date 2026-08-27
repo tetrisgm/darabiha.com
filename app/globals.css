@@ -1071,3 +1071,35 @@ main.has-person .site-action-bar, main.chat-collapsed.has-person .site-action-ba
 .stat-people button { font-size:.86rem; font-weight:600; text-align:left; }
 .stat-people button:not(:disabled):hover { color:var(--accent); }
 .stat-people span { color:var(--muted); font-size:.78rem; font-variant-numeric:tabular-nums; }
+
+/* notes the family leaves on a record */
+.person-comments { margin-top:1.9rem; }
+.comment-list { display:flex; flex-direction:column; gap:.5rem; }
+.comment { border:1px solid var(--line); border-radius:.9rem; background:rgba(44,44,46,.72); padding:.7rem .9rem; }
+.comment-body { margin:0; font-size:.88rem; line-height:1.55; white-space:pre-wrap; }
+.comment-meta { display:flex; align-items:center; gap:.4rem; margin:.4rem 0 0; color:var(--muted); font-size:.74rem; }
+.comment-remove { margin-left:auto; color:var(--muted); font-size:.9rem; line-height:1; padding:0 .25rem; border-radius:.35rem; }
+.comment-remove:hover { color:var(--danger); background:rgba(255,107,97,.14); }
+.comment-compose { display:flex; flex-direction:column; align-items:flex-start; gap:.5rem; margin-top:.6rem; }
+.comment-compose textarea { min-height:3.4rem; resize:vertical; }
+
+/* the documents room and the change history */
+.settings-links { display:grid; grid-template-columns:repeat(auto-fit, minmax(14rem,1fr)); gap:.6rem; margin-top:.9rem; }
+.settings-link-card { display:block; border:1px solid var(--line); border-radius:.9rem; background:var(--card); padding:.85rem 1rem; text-decoration:none; color:var(--ink); }
+.settings-link-card:hover { border-color:var(--accent); }
+.settings-link-card strong { display:block; font-size:.92rem; }
+.settings-link-card span { display:block; margin-top:.2rem; color:var(--muted); font-size:.78rem; line-height:1.45; }
+.document-list { list-style:none; margin:1rem 0 0; padding:0; display:flex; flex-direction:column; gap:.4rem; }
+.document-list li { display:flex; align-items:baseline; gap:.7rem; border:1px solid var(--line); border-radius:.8rem; background:var(--card); padding:.55rem .8rem; }
+.document-kind { flex:none; border-radius:999px; background:var(--wash); color:var(--muted); padding:.15rem .55rem; font-size:.62rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.document-name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.88rem; color:var(--ink); text-decoration:none; }
+.document-name:hover { color:var(--accent); }
+.document-size { color:var(--muted); font-size:.76rem; font-variant-numeric:tabular-nums; }
+.document-heading { margin:1.6rem 0 .7rem !important; font-size:1.05rem !important; }
+.history-list { list-style:none; margin:1rem 0 0; padding:0; display:flex; flex-direction:column; gap:.5rem; }
+.history-list li { border:1px solid var(--line); border-radius:.9rem; background:var(--card); padding:.6rem .85rem; }
+.history-line { display:flex; align-items:baseline; justify-content:space-between; gap:.75rem; }
+.history-kind { color:var(--accent); font-size:.66rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+.history-line time { color:var(--muted); font-size:.72rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.history-summary { margin:.3rem 0 0; font-size:.86rem; line-height:1.5; }
+.history-actor { margin:.2rem 0 0; color:var(--muted); font-size:.72rem; }
