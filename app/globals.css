@@ -1234,3 +1234,30 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .person-modal-v2 .person-facts > div { grid-template-columns:1fr; gap:.15rem; }
   .person-modal-v2 .person-facts .fact-correction { grid-column:1; }
 }
+
+/* The focal card is the anchor: the spouse and the siblings hang beneath it
+   without adding to the column's height, so the column centres on the card
+   and the children sit directly across from the person, not below them. */
+.ped-couple { position:relative; }
+.ped-focal-below { position:absolute; top:calc(100% + .45rem); left:0; right:0;
+  display:flex; flex-direction:column; gap:.45rem; }
+.ped-siblings { margin-top:.55rem; }
+
+/* How many relatives a card would bring that are not on the board. Without it
+   a sibling with seven children reads as a leaf. */
+.ped-more { position:absolute; top:.35rem; right:.4rem; min-width:1.45rem; padding:0 .32rem;
+  border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,.06);
+  color:var(--muted); font-size:.66rem; font-weight:700; line-height:1.35rem; text-align:center;
+  font-variant-numeric:tabular-nums; cursor:inherit; }
+.ped-card button { position:relative; }
+.ped-card button:hover .ped-more { border-color:color-mix(in srgb,var(--accent) 45%,transparent);
+  background:color-mix(in srgb,var(--accent) 18%,transparent); color:var(--accent); }
+[dir="rtl"] .ped-more { right:auto; left:.4rem; }
+
+/* Hovering a card shows the board a click would give; the note says so, and
+   the tint keeps a preview from being mistaken for where you actually are. */
+.focus-preview-note { margin:0; color:var(--accent); font-size:.76rem; font-weight:600; letter-spacing:.01em; }
+.ped-view[data-preview="true"] .ped-columns { opacity:.9; }
+.ped-view[data-preview="true"] .ped-col-focal .ped-card.is-selected,
+.ped-view[data-preview="true"] .ped-col-focal > .ped-couple > .ped-card {
+  outline:1px dashed color-mix(in srgb,var(--accent) 55%,transparent); outline-offset:3px; }

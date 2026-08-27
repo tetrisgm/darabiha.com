@@ -293,3 +293,19 @@ export function buildRelationMaps(tree: FamilyTree): RelationMaps {
   }
   return { parentsOf, childrenOf, spousesOf, spouseStatus, byId: new Map(tree.people.map((person) => [person.id, person])) };
 }
+
+/** Everyone this person would bring into view who is not already on the board.
+ *  A sibling with a family of their own otherwise looks like a leaf: the count
+ *  is the card's answer to "am I seeing the whole picture?". */
+export function hiddenRelativeCount(personId: string, maps: RelationMaps, visible: Set<string>): number {
+  const behind = new Set<string>();
+  const consider = (id: string) => { if (id !== personId && !visible.has(id)) behind.add(id); };
+  for (const id of maps.parentsOf.get(personId) ?? []) consider(id);
+  for (const id of maps.childrenOf.get(personId) ?? []) consider(id);
+  for (const id of maps.spousesOf.get(personId) ?? []) consider(id);
+  // siblings arrive through the parents, and are the usual surprise
+  for (const parentId of maps.parentsOf.get(personId) ?? []) {
+    for (const id of maps.childrenOf.get(parentId) ?? []) consider(id);
+  }
+  return behind.size;
+}
