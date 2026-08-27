@@ -290,7 +290,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         </aside>
         <button className={`chat-edge-reveal ${chatCollapsed ? "is-visible" : ""}`} onClick={() => setChatCollapsed(false)} aria-label="Show family chat" title="Show family chat">›</button>
         {hoverPreview && viewMode === "family" && hoverPreview.id !== selectedPerson?.id && <PersonHoverPreview person={hoverPreview} tree={tree} standalone={!selectedPerson} />}
-        {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onShowInTree={(person) => { setViewMode("tree"); setHighlightedIds([person.id]); setFocalId(person.id); }} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+        {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
         <section className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
           <div className="relative h-full min-h-0">
@@ -413,14 +413,13 @@ function PersonContextCard({ person, tree, note, onClear }: { person: Person; tr
   </div>;
 }
 
-function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange, onShowInTree }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void; onShowInTree: (person: Person) => void }) {
+function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange }: { person: Person; tree: FamilyTree; canEdit: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [relationEditor, setRelationEditor] = useState<string | null>(null);
   const [relativeQuery, setRelativeQuery] = useState("");
   const [relativeChoice, setRelativeChoice] = useState("");
   const [editingBio, setEditingBio] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -468,8 +467,8 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange,
     <div className="person-nav">
       <button type="button" onClick={() => window.history.back()} aria-label="Previous person" title="Back">‹</button>
       <button type="button" onClick={() => window.history.forward()} aria-label="Next person" title="Forward">›</button>
+      <button type="button" className="person-nav-close" onClick={onClose} aria-label="Close">×</button>
     </div>
-    <button className="person-modal-close" onClick={onClose} aria-label="Close">×</button>
     <input ref={photoRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; const body = new FormData(); body.set("personId", person.id); body.set("photo", file); const response = await fetch("/api/people", { method: "POST", body }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (response.ok && data.tree) { onTreeChange(data.tree); setNotice("Photo updated"); } else setNotice(data.error || "Could not upload photo"); event.target.value = ""; }} />
     <div className="person-modal-hero is-stacked">
       <div className="person-hero-copy">
@@ -480,30 +479,6 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange,
       {person.photoAttachmentId
         ? <button type="button" className="person-modal-photo-button" onClick={() => canEdit && photoRef.current?.click()} aria-label={canEdit ? "Change portrait" : "Portrait"} title={canEdit ? "Click to change the portrait" : undefined}><img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /></button>
         : canEdit && <button type="button" className="person-add-photo" onClick={() => photoRef.current?.click()}>＋ Add photo</button>}
-    </div>
-    <div className="person-actions">
-      <button type="button" className="person-action is-primary" onClick={() => onShowInTree(person)}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.4" /><circle cx="5.5" cy="18" r="2.4" /><circle cx="18.5" cy="18" r="2.4" /><path d="M12 7.5v4M12 11.5l-5 4.2M12 11.5l5 4.2" /></svg>
-        <span>Tree</span>
-      </button>
-      <button type="button" className="person-action" onClick={() => (document.querySelector(".editor-composer textarea, .public-chat-composer textarea") as HTMLTextAreaElement | null)?.focus()}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.4 3.4A.6.6 0 0 1 4.6 19V16" /></svg>
-        <span>Ask AI</span>
-      </button>
-      {canEdit && <button type="button" className="person-action" onClick={() => photoRef.current?.click()}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6" width="17" height="13" rx="2.5" /><circle cx="12" cy="12.5" r="3.4" /><path d="M9 6l1.2-2h3.6L15 6" /></svg>
-        <span>Photo</span>
-      </button>}
-      {canEdit && <div className="person-action-wrap">
-        <button type="button" className={`person-action ${moreOpen ? "is-open" : ""}`} onClick={() => setMoreOpen((value) => !value)} aria-expanded={moreOpen}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.4" /><circle cx="12" cy="12" r="1.4" /><circle cx="18" cy="12" r="1.4" /></svg>
-          <span>More</span>
-        </button>
-        {moreOpen && <div className="person-more-menu">
-          {person.photoAttachmentId && <button type="button" onClick={async () => { setMoreOpen(false); try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>Remove portrait</button>}
-          <button type="button" className="is-danger" disabled={saving} onClick={() => { setMoreOpen(false); deletePerson(); }}>Delete person</button>
-        </div>}
-      </div>}
     </div>
     <div className="person-facts">
       <div><span className="eyebrow">Born</span><p className="fact-line"><InlineText value={person.birthDate} placeholder="add date" canEdit={canEdit} onSave={patchField("birthDate")} className="fact-date" />{(canEdit || person.birthCity || person.birthCountry) && <> in <InlineText value={person.birthCity} placeholder="city" canEdit={canEdit} onSave={patchField("birthCity")} />{(canEdit || (person.birthCity && person.birthCountry)) && ", "}<InlineText value={person.birthCountry} placeholder="country" canEdit={canEdit} onSave={patchField("birthCountry")} /></>}{!canEdit && !person.birthDate && "Birth date not recorded"}</p></div>
@@ -519,6 +494,7 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange,
     </div>
     <div className="modal-relationships">{([['Parents', buckets.parents], ['Spouse', buckets.spouses], ['Children', buckets.children], ['Siblings', buckets.siblings]] as [string, Person[]][]).map(([label, people]) => <div className="relationship-group" key={label}><div className="relationship-heading"><p className="eyebrow">{label}</p>{canEdit && <button type="button" className="relationship-add" onClick={() => { setRelationEditor(relationEditor === label ? null : label); setRelativeQuery(""); setRelativeChoice(""); }} aria-label={`Add ${label.toLocaleLowerCase()}`}>＋</button>}</div><div className="relationship-chips">{people.map((relative) => { const link = relation(relative, label); return <span className="relationship-chip-wrap" key={relative.id}><button className="relationship-chip" onClick={() => onSelect(relative)}>{relative.displayName}{relative.birthDate ? ` · ${relative.birthDate.slice(0, 4)}` : ""}{label === "Spouse" && link?.status ? ` · ${link.status}` : ""}</button>{label === "Spouse" && canEdit && link && <select className="marriage-status" value={link.status ?? ""} aria-label={`Marriage status with ${relative.displayName}`} onChange={async (event) => { try { await post({ action: "relationship_status", relationshipId: link.id, status: event.target.value || null }); setNotice("Marriage status saved"); } catch { setNotice("Could not save status"); } }}><option value="">married</option><option value="divorced">divorced</option><option value="widowed">widowed</option></select>}{canEdit && link && <button className="relationship-remove" onClick={() => removeRelationship(link.id)} aria-label={`Remove ${relative.displayName}`}>×</button>}</span>; })}</div>{relationEditor === label && <div className="relative-picker"><input className="modal-input" value={relativeQuery} autoFocus placeholder={`Find or create a ${label.toLocaleLowerCase().replace(/s$/, "")}`} onChange={(event) => { setRelativeQuery(event.target.value); setRelativeChoice(""); }} />{relativeQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && candidate.displayName.toLocaleLowerCase().includes(relativeQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={() => { setRelativeChoice(candidate.id); setRelativeQuery(candidate.displayName); }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}{locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace) ? ` · ${locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace)}` : ""}</span></button>)}</div>}<button type="button" className="relative-add-button" disabled={!relativeQuery.trim() || saving} onClick={() => addRelative(label)}>{relativeChoice ? "Add selected person" : "Use this name"}</button></div>}</div>)}</div>
     {notice && <p className="modal-notice" role="status">{notice}</p>}
+    {canEdit && <div className="person-delete-footer">{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>Remove portrait</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>Delete person</button></div>}
   </section>;
 }
 

@@ -792,3 +792,24 @@ main.chat-collapsed .person-hover-preview { left:0; }
 .settings-signin:hover { background:#365844; }
 .settings-add button, .fill-save, .relative-add-button { background:var(--accent) !important; color:white; }
 .settings-add button:hover:not(:disabled), .fill-save:hover:not(:disabled), .relative-add-button:hover:not(:disabled) { background:#365844 !important; }
+
+/* ============ Maps-material pass: frosted panels, circular controls ============ */
+
+/* frosted glass for the two left panels and the hover preview */
+.chat-sidebar { background: color-mix(in srgb, var(--sidebar) 68%, transparent); backdrop-filter: blur(28px) saturate(1.35); -webkit-backdrop-filter: blur(28px) saturate(1.35); }
+.person-panel { background: rgba(253, 251, 246, .72); backdrop-filter: blur(28px) saturate(1.35); -webkit-backdrop-filter: blur(28px) saturate(1.35); }
+.person-hover-preview { background: rgba(253, 251, 246, .8); backdrop-filter: blur(28px) saturate(1.35); -webkit-backdrop-filter: blur(28px) saturate(1.35); }
+
+/* one circular control cluster top-right: ‹ › × */
+.person-nav { right:1rem; top:1rem; gap:.4rem; }
+.person-nav button { height:2.2rem; width:2.2rem; border:0; border-radius:999px; background:rgba(36,33,27,.07); color:var(--ink); font-size:1.1rem; line-height:1; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.person-nav button:hover { background:rgba(36,33,27,.14); color:var(--ink); border:0; }
+.person-nav .person-nav-close { font-size:1.3rem; }
+
+/* Maps-style zoom: a vertical frosted +/− stack, no label */
+.canvas-controls { flex-direction:column-reverse; gap:0; padding:.2rem; border-radius:.9rem; background:rgba(253,251,246,.75); border:1px solid rgba(0,0,0,.06); backdrop-filter:blur(18px) saturate(1.3); -webkit-backdrop-filter:blur(18px) saturate(1.3); }
+.canvas-controls button { height:2.2rem; width:2.2rem; min-width:2.2rem; font-size:1.25rem; color:var(--ink); }
+.canvas-controls button:hover { background:rgba(36,33,27,.08); }
+.canvas-controls .canvas-zoom-level { display:none; }
+.canvas-controls button:first-child { border-top:1px solid rgba(0,0,0,.06); border-radius:0 0 .7rem .7rem; }
+.canvas-controls button:last-child { border-radius:.7rem .7rem 0 0; }
