@@ -247,14 +247,16 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-                  <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
-                    Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Ask about the family, add what you know, or attach documents and photos — I’ll keep the tree up to date.
-                  </div>
+                  {selectedPerson
+                    ? <PersonFocusBanner person={selectedPerson} tree={tree} canEdit onClear={closePerson} />
+                    : <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
+                        Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Ask about the family, add what you know, or attach documents and photos — I’ll keep the tree up to date.
+                      </div>}
                   {messages.length === 0 && <div className="chat-suggestions">
                     {(selectedPerson ? [
-                      `What do we know about ${selectedPerson.displayName}?`,
-                      `When was ${selectedPerson.displayName} born?`,
-                      `${selectedPerson.displayName} had a sibling named …`,
+                      `What do we know about ${selectedPerson.displayName.split(" ")[0]}?`,
+                      `${selectedPerson.displayName.split(" ")[0]} was born in …`,
+                      `${selectedPerson.displayName.split(" ")[0]} had a sibling named …`,
                     ] : [
                       "Who has the most descendants?",
                       "What do we know about Ramazan Darabi?",
@@ -271,12 +273,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                 <div className="pt-5">
                   {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
                   <div className="editor-composer rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
-                    {selectedPerson && <PersonContextCard person={selectedPerson} tree={tree} note={viewer.canEdit ? "Details you share are applied to this person." : "Questions are answered about this person."} onClear={closePerson} />}
-                    <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Ask a question, add what you know, or just chat…" aria-label="Message the family archivist" />
+                    <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder={selectedPerson ? `Ask about ${selectedPerson.displayName.split(" ")[0]}, or add what you know…` : "Ask a question, add what you know, or just chat…"} aria-label="Message the family archivist" />
                     <div className="mt-2 flex items-center justify-between">
                       <input ref={fileRef} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
                       <input ref={(node) => { folderRef.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
-                      <div className="flex items-center gap-2"><button className="composer-file-button" onClick={() => fileRef.current?.click()} aria-label="Add files">＋ Add files</button><button className="composer-folder-button" onClick={() => folderRef.current?.click()} aria-label="Add a folder">Add folder</button></div>
+                      <AttachMenu onFiles={() => fileRef.current?.click()} onFolder={() => folderRef.current?.click()} />
                       <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent-fill)] text-white transition hover:bg-[#3a604a] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label="Send message">↑</button>
                     </div>
                   </div>
@@ -369,7 +370,10 @@ function PersonHoverPreview({ person, tree, standalone }: { person: Person; tree
   </aside>;
 }
 
-function PersonContextCard({ person, tree, note, onClear }: { person: Person; tree: FamilyTree; note: string; onClear: () => void }) {
+/** When a person is selected the chat is about them and nothing else: the
+ * generic welcome and family-wide prompts give way to this banner, which
+ * names the person and says plainly what typing here will do. */
+function PersonFocusBanner({ person, tree, canEdit, onClear }: { person: Person; tree: FamilyTree; canEdit: boolean; onClear: () => void }) {
   const buckets = relatedPeople(tree, person.id);
   const born = person.birthDate?.slice(0, 4), died = person.deathDate?.slice(0, 4);
   const life = born && died ? `${born}–${died}` : born ? `b. ${born}` : died ? `d. ${died}` : "";
@@ -380,16 +384,47 @@ function PersonContextCard({ person, tree, note, onClear }: { person: Person; tr
     buckets.children.length ? `${buckets.children.length} ${buckets.children.length > 1 ? "children" : "child"}` : "",
     buckets.siblings.length ? `${buckets.siblings.length} sibling${buckets.siblings.length > 1 ? "s" : ""}` : "",
   ].filter(Boolean).join(" · ");
-  return <div className="chat-context-card">
-    {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
-    <div className="chat-context-copy">
-      <strong>{person.displayName}</strong>
-      <span>{[life, origin].filter(Boolean).join(" · ") || "no dates recorded"}</span>
-      {counts && <span>{counts}</span>}
-      {person.biography && <span className="chat-context-bio">{person.biography.length > 140 ? `${person.biography.slice(0, 140)}…` : person.biography}</span>}
-      <em>{note}</em>
+  const first = person.displayName.split(" ")[0];
+  return <section className="chat-focus-banner" aria-label={`Talking about ${person.displayName}`}>
+    <div className="chat-focus-head">
+      {person.photoAttachmentId ? <img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}
+      <div className="chat-focus-copy">
+        <strong>{person.displayName}</strong>
+        <span>{[life, origin].filter(Boolean).join(" · ") || "no dates recorded"}</span>
+        {counts && <span>{counts}</span>}
+      </div>
+      <button type="button" className="chat-focus-clear" onClick={onClear} aria-label="Ask about the whole family instead" title="Ask about the whole family instead">×</button>
     </div>
-    <button type="button" aria-label="Stop discussing this person" onClick={onClear}>×</button>
+    <p className="chat-focus-note">{canEdit
+      ? <>Everything you type here belongs to <strong>{first}</strong>. Ask a question about {first}, or write down dates, places, and stories — I&rsquo;ll add them to this record.</>
+      : <>Everything you ask here is answered about <strong>{first}</strong>. Close this to search the whole family again.</>}</p>
+  </section>;
+}
+
+/** One ＋ that offers the two kinds of attachment, Apple-menu style. */
+function AttachMenu({ onFiles, onFolder }: { onFiles: () => void; onFolder: () => void }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: PointerEvent) => { if (!wrapRef.current?.contains(event.target as Node)) setOpen(false); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("pointerdown", onDown); window.removeEventListener("keydown", onKey); };
+  }, [open]);
+  return <div className="attach-menu" ref={wrapRef}>
+    <button type="button" className="composer-attach" aria-label="Add files or a folder" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>＋</button>
+    {open && <div className="attach-popover" role="menu">
+      <button type="button" role="menuitem" onClick={() => { setOpen(false); onFiles(); }}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 2.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V6.5Z" /><path d="M12 2.5v4h3.5" /></svg>
+        Add files
+      </button>
+      <button type="button" role="menuitem" onClick={() => { setOpen(false); onFolder(); }}>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.75 6.25V5a1.5 1.5 0 0 1 1.5-1.5h3l1.75 2h6.25a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H4.25a1.5 1.5 0 0 1-1.5-1.5Z" /></svg>
+        Add a folder
+      </button>
+    </div>}
   </div>;
 }
 
@@ -445,11 +480,13 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange 
   const subtitleRest = [person.birthDate ? (person.deathDate ? `${person.birthDate.slice(0, 4)}–${person.deathDate.slice(0, 4)}` : `b. ${person.birthDate.slice(0, 4)}`) : person.deathDate ? `d. ${person.deathDate.slice(0, 4)}` : "", locationLine(person.birthCity, person.birthCountry, person.birthPlace) ?? ""].filter(Boolean).join(" · ");
   const relation = (other: Person, label: string) => tree.relationships.find((link) => (label === "Spouse" && link.type === "spouse" && ((link.fromPersonId === person.id && link.toPersonId === other.id) || (link.toPersonId === person.id && link.fromPersonId === other.id))) || (label === "Parents" && link.type === "parent" && link.fromPersonId === other.id && link.toPersonId === person.id) || (label === "Children" && link.type === "parent" && link.fromPersonId === person.id && link.toPersonId === other.id));
   return <section className="person-modal person-modal-v2 person-panel" role="dialog" aria-labelledby="person-modal-title">
-    <div className="person-nav">
-      <button type="button" onClick={() => window.history.back()} aria-label="Previous person" title="Back">‹</button>
-      <button type="button" onClick={() => window.history.forward()} aria-label="Next person" title="Forward">›</button>
+    <header className="person-panel-bar">
+      <div className="person-nav">
+        <button type="button" onClick={() => window.history.back()} aria-label="Previous person" title="Back">‹</button>
+        <button type="button" onClick={() => window.history.forward()} aria-label="Next person" title="Forward">›</button>
+      </div>
       <button type="button" className="person-nav-close" onClick={onClose} aria-label="Close">×</button>
-    </div>
+    </header>
     <input ref={photoRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={async (event) => { const file = event.target.files?.[0]; if (!file) return; const body = new FormData(); body.set("personId", person.id); body.set("photo", file); const response = await fetch("/api/people", { method: "POST", body }); const data = await response.json() as { tree?: FamilyTree; error?: string }; if (response.ok && data.tree) { onTreeChange(data.tree); setNotice("Photo updated"); } else setNotice(data.error || "Could not upload photo"); event.target.value = ""; }} />
     <div className="person-modal-hero is-stacked">
       <div className="person-hero-copy">
@@ -516,13 +553,13 @@ function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeople
   }
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
-      <div className={`flex flex-1 flex-col items-center overflow-y-auto pb-5 text-center ${asked.length ? "justify-start" : "justify-center"}`}>
-        {!asked.length ? <><h3 className="mt-0 font-serif text-2xl">The Darabiha family tree</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Explore our family history, ask about the people and relationships in the tree, and discover the stories recorded here.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
+      <div className={`flex flex-1 flex-col items-center overflow-y-auto pb-5 text-center ${asked.length || focusPerson ? "justify-start" : "justify-center"}`}>
+        {focusPerson && <PersonFocusBanner person={focusPerson} tree={tree} canEdit={false} onClear={onClearFocus} />}
+        {!asked.length && !focusPerson ? <><h3 className="mt-0 font-serif text-2xl">The Darabiha family tree</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Explore our family history, ask about the people and relationships in the tree, and discover the stories recorded here.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
       </div>
       <div>
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
-          {focusPerson && <PersonContextCard person={focusPerson} tree={tree} note="Questions are answered about this person." onClear={onClearFocus} />}
-          <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(); } }} className="min-h-24 w-full resize-none bg-transparent px-2 py-1 pr-12 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder="Who are the children of…?" aria-label="Search the family archive" />
+          <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(); } }} className="min-h-24 w-full resize-none bg-transparent px-2 py-1 pr-12 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder={focusPerson ? `Ask about ${focusPerson.displayName.split(" ")[0]}…` : "Who are the children of…?"} aria-label="Search the family archive" />
           <button onClick={ask} disabled={busy || !question.trim()} className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent-fill)] text-white transition hover:bg-[#3a604a] disabled:opacity-40" aria-label="Search the family archive">↑</button>
         </div>
       </div>

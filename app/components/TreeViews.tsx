@@ -96,6 +96,15 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     }
     return { focal, father, mother, spouses, children, siblings, childGroups, grandSlots, greatSlots, grandkidGroups, links };
   }, [maps, tree, focusId]);
+  // The instruction is for the first few seconds only: it retires on its own,
+  // and immediately once a person has been picked.
+  const [hintVisible, setHintVisible] = useState(!selectedId);
+  useEffect(() => {
+    if (!hintVisible) return;
+    const timer = setTimeout(() => setHintVisible(false), 5000);
+    return () => clearTimeout(timer);
+  }, [hintVisible]);
+  useEffect(() => { if (selectedId) setHintVisible(false); }, [selectedId]);
   const panRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef(new Map<string, HTMLDivElement>());
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -266,7 +275,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
         <button type="button" className="focus-back" onClick={onBack} disabled={!canBack} aria-label="Back">←</button>
         <button type="button" className="focus-back" onClick={onForward} disabled={!canForward} aria-label="Forward">→</button>
       </div>
-      <p className="focus-hint">Click a person to center the tree on them and open their record.</p>
+      <p className="focus-hint" data-visible={hintVisible ? "true" : "false"} aria-hidden={!hintVisible}>Click a person to center the tree on them and open their record.</p>
     </div>
     <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
