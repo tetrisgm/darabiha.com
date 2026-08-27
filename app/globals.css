@@ -1354,6 +1354,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .gender-pick { padding:.4rem .95rem; }
   .person-modal-v2 .inline-edit { padding:.25rem .4rem; }
   .relationship-remove { min-width:2rem; min-height:2rem; }
+  .fact-clear { width:2rem; height:2rem; }
   .marriage-status { min-height:2rem; }
   .photo-remove-button, .person-delete-button { min-height:2rem; padding:.3rem .6rem; }
 }
