@@ -961,7 +961,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .story-original .story-body { padding-top:0; }
 
 /* the Fill-in review queue: questions the family confirms or denies */
-.fill-questions { width:min(52rem,100%); border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line)); border-radius:1.1rem;
+.fill-questions { flex:none; /* overflow:hidden zeroes min-height, and the fill view's flex column would crush the card to a hairline */
+  width:min(52rem,100%); border:1px solid color-mix(in srgb,var(--accent) 25%,var(--line)); border-radius:1.1rem;
   background:rgba(44,44,46,.8); overflow:hidden; }
 .fill-questions-head { padding:1.1rem 1.3rem .9rem; border-bottom:1px solid var(--line); }
 .fill-questions-head h3 { margin:0; font-family:var(--font-serif),Georgia,serif; font-size:1.2rem; font-weight:600; letter-spacing:-.01em; }
