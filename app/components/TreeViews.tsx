@@ -98,13 +98,12 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
   }, [maps, tree, focusId]);
   // The instruction is for the first few seconds only: it retires on its own,
   // and immediately once a person has been picked.
-  const [hintVisible, setHintVisible] = useState(!selectedId);
+  const [hintExpired, setHintExpired] = useState(false);
   useEffect(() => {
-    if (!hintVisible) return;
-    const timer = setTimeout(() => setHintVisible(false), 5000);
+    const timer = setTimeout(() => setHintExpired(true), 5000);
     return () => clearTimeout(timer);
-  }, [hintVisible]);
-  useEffect(() => { if (selectedId) setHintVisible(false); }, [selectedId]);
+  }, []);
+  const hintVisible = !hintExpired && !selectedId;
   const panRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef(new Map<string, HTMLDivElement>());
   const [pan, setPan] = useState({ x: 0, y: 0 });
