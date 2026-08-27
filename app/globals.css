@@ -1502,3 +1502,13 @@ html[lang="fa"] { font-variant-numeric: normal; }
   .settings-signin, .site-action-bar a[href] { min-height:2.75rem; display:inline-flex; align-items:center; }
   .tree-search input { min-height:2.75rem; }
 }
+
+/* All eight views must be reachable without discovering a hidden scroll:
+   Apple's line on a segmented control is that its segments are visible. On a
+   bar narrower than about 1200px the search gives way first - the chat finds
+   people, and the List view is a list of them - and the tab strip keeps its
+   room rather than clipping four views out of sight. */
+@media (max-width: 1200px) {
+  .site-action-bar .tree-search { display:none; }
+}
+.site-action-bar .archive-view-switcher { flex:0 1 auto; }
