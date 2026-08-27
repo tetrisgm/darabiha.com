@@ -61,6 +61,13 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [focalId, setFocalId] = useState<string | null>(null);
+  /* Everything on this page is server-rendered before React attaches, so a
+     click landing in that window is silently lost - the button is there, the
+     handler is not. The attribute says when the page can actually be used;
+     written straight to the node, because a state flag would re-render the
+     whole app for nothing. */
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => { if (mainRef.current) mainRef.current.dataset.hydrated = "true"; }, []);
   const treeRef = useRef(initialTree ?? EMPTY_TREE);
   useEffect(() => { treeRef.current = tree; }, [tree]);
   const openPerson = (person: Person, push = true, refocus = true) => {
@@ -254,7 +261,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   }, [tree, focalId]);
 
   return (
-    <main className={`min-h-screen bg-[var(--paper)] text-[var(--ink)] ${chatCollapsed ? "chat-collapsed" : ""} ${selectedPerson || (placeFocus && viewMode === "map") ? "has-person" : ""}`} style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties} data-build-id={BUILD_ID} data-version={VERSION}>
+    <main ref={mainRef} className={`min-h-screen bg-[var(--paper)] text-[var(--ink)] ${chatCollapsed ? "chat-collapsed" : ""} ${selectedPerson || (placeFocus && viewMode === "map") ? "has-person" : ""}`} style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties} data-build-id={BUILD_ID} data-version={VERSION} data-hydrated="false">
       {authError && <div className="border-b border-[rgba(226,140,115,.35)] bg-[rgba(226,140,115,.12)] px-5 py-3 text-center text-sm text-[#e8a289]">{authError === "not_invited" ? "Apple sign-in worked, but this Apple account is not on the family editor list." : authError === "apple_token_exchange_failed" ? "Apple returned an authentication error. Please try again, and contact the site owner if it continues." : "We could not complete Apple sign-in. Please try again."}</div>}
 
       <header className={`site-action-bar absolute top-0 z-50 flex h-16 items-center justify-between border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] px-6 backdrop-blur-xl sm:px-8 ${chatCollapsed ? "is-chat-collapsed" : ""}`}>

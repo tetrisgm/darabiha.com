@@ -17,8 +17,16 @@ test.beforeEach(async ({ context, baseURL }) => {
   await context.addCookies([{ name: "darabiha_session", value: viewerSessionCookie(), url: baseURL ?? "https://darabiha.com" }]);
 });
 
+/** The page is server-rendered, so it is on screen before React attaches to
+ *  it and a click in that window does nothing at all. Every test that
+ *  interacts waits for the app to say it is ready. */
+async function openArchive(page: Page, path = "/") {
+  await page.goto(path);
+  await expect(page.locator('main[data-hydrated="true"]')).toBeAttached();
+}
+
 async function openFullTree(page: Page) {
-  await page.goto("/");
+  await openArchive(page);
   await page.getByRole("button", { name: "Tree", exact: true }).click();
   await page.locator(".tree-card").first().waitFor();
 }
@@ -56,7 +64,7 @@ test("public tree renders as an interactive canvas beside the archive chat", asy
 });
 
 test("chat sidebar collapses and returns from the left edge", async ({ page }) => {
-  await page.goto("/");
+  await openArchive(page);
   const sidebar = page.locator(".chat-sidebar");
   await sidebar.getByRole("button", { name: "Collapse family chat" }).click();
   await expect(sidebar).toHaveClass(/is-collapsed/);
@@ -111,11 +119,11 @@ test("canvas and cards expose distinct cursor affordances", async ({ page }) => 
 });
 
 test("live page exposes an uncached deployment identity", async ({ page }) => {
-  await page.goto("/");
+  await openArchive(page);
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("137");
+  expect(version).toBe("138");
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
@@ -123,7 +131,7 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
 });
 
 test("timeline and map are generated from the same public family records", async ({ page }) => {
-  await page.goto("/");
+  await openArchive(page);
   await page.getByRole("button", { name: "Timeline" }).click();
   await expect(page.getByRole("region", { name: "Family timeline" })).toBeVisible();
   await page.getByRole("button", { name: "Map" }).click();
