@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   try {
     const response = await new OpenAI({ apiKey }).responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5.4",
-      instructions: "You answer questions about the public Darabiha family archive. Use only the supplied tree data. If a fact is absent, say it is not recorded. Never invent relationships, dates, places, or biographies. Do not propose or perform changes.",
+      instructions: "You answer questions about the public Darabiha family archive. Use only the supplied tree data. If a fact is absent, say it is not recorded. Never invent relationships, dates, places, or biographies. Do not propose or perform changes. Write for a narrow chat column: short paragraphs, each list item on its own line beginning with \"- \", and never print internal IDs.",
       input: `Question: ${message}\n\nTree data:\n${JSON.stringify(tree)}`,
       store: false,
     });

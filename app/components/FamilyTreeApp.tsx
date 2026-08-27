@@ -6,6 +6,7 @@ import { relatedPeople } from "../../lib/relationships";
 import { TimelineView, WorldMapView } from "./ArchiveViews";
 import { FocusFamilyView, MissingDataView, OutlineView, Silhouette, TreeSearch } from "./TreeViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
+import { Markdown } from "./Markdown";
 import { BUILD_ID, VERSION } from "../../lib/build";
 
 type Props = {
@@ -247,11 +248,9 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-                  {selectedPerson
-                    ? <PersonFocusBanner person={selectedPerson} tree={tree} canEdit onClear={closePerson} />
-                    : <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
-                        Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Ask about the family, add what you know, or attach documents and photos — I’ll keep the tree up to date.
-                      </div>}
+                  {!selectedPerson && <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
+                    Welcome{viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : ""}. Ask about the family, add what you know, or attach documents and photos — I’ll keep the tree up to date.
+                  </div>}
                   {messages.length === 0 && <div className="chat-suggestions">
                     {(selectedPerson ? [
                       `What do we know about ${selectedPerson.displayName.split(" ")[0]}?`,
@@ -265,7 +264,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                     ]).map((prompt) => <button type="button" className="chat-suggestion" key={prompt} onClick={() => { setInput(prompt); inputRef.current?.focus(); }}>{prompt}</button>)}
                   </div>}
                   {messages.map((message, index) => (
-                    <div className={`chat-bubble ${message.role === "user" ? "is-user" : ""}`} key={`${message.role}-${index}`}>{message.text}</div>
+                    <div className={`chat-bubble ${message.role === "user" ? "is-user" : ""}`} key={`${message.role}-${index}`}>{message.role === "user" ? message.text : <Markdown text={message.text} />}</div>
                   ))}
                   {busy && <div className="chat-bubble"><span className="agent-pulse" /> Thinking…</div>}
                   {error && <p className="rounded-xl bg-[rgba(226,140,115,.12)] px-3 py-2 text-xs leading-5 text-[#e8a289]">{error}</p>}
@@ -273,6 +272,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                 <div className="pt-5">
                   {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
                   <div className="editor-composer rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
+                    {selectedPerson && <ComposerFocus person={selectedPerson} canEdit onClear={closePerson} />}
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder={selectedPerson ? `Ask about ${selectedPerson.displayName.split(" ")[0]}, or add what you know…` : "Ask a question, add what you know, or just chat…"} aria-label="Message the family archivist" />
                     <div className="mt-2 flex items-center justify-between">
                       <input ref={fileRef} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
@@ -370,35 +370,21 @@ function PersonHoverPreview({ person, tree, standalone }: { person: Person; tree
   </aside>;
 }
 
-/** When a person is selected the chat is about them and nothing else: the
- * generic welcome and family-wide prompts give way to this banner, which
- * names the person and says plainly what typing here will do. */
-function PersonFocusBanner({ person, tree, canEdit, onClear }: { person: Person; tree: FamilyTree; canEdit: boolean; onClear: () => void }) {
-  const buckets = relatedPeople(tree, person.id);
-  const born = person.birthDate?.slice(0, 4), died = person.deathDate?.slice(0, 4);
-  const life = born && died ? `${born}–${died}` : born ? `b. ${born}` : died ? `d. ${died}` : "";
-  const origin = locationLine(person.birthCity, person.birthCountry, person.birthPlace);
-  const counts = [
-    buckets.parents.length ? `${buckets.parents.length} parent${buckets.parents.length > 1 ? "s" : ""}` : "",
-    buckets.spouses.length ? `${buckets.spouses.length} spouse${buckets.spouses.length > 1 ? "s" : ""}` : "",
-    buckets.children.length ? `${buckets.children.length} ${buckets.children.length > 1 ? "children" : "child"}` : "",
-    buckets.siblings.length ? `${buckets.siblings.length} sibling${buckets.siblings.length > 1 ? "s" : ""}` : "",
-  ].filter(Boolean).join(" · ");
+/** The selection belongs to the input, not to the thread: a chip attached to
+ * the top of the composer says whose record the next message goes to, and
+ * clears in one click. */
+function ComposerFocus({ person, canEdit, onClear }: { person: Person; canEdit: boolean; onClear: () => void }) {
   const first = person.displayName.split(" ")[0];
-  return <section className="chat-focus-banner" aria-label={`Talking about ${person.displayName}`}>
-    <div className="chat-focus-head">
-      {person.photoAttachmentId ? <img className="person-modal-photo" src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}
-      <div className="chat-focus-copy">
-        <strong>{person.displayName}</strong>
-        <span>{[life, origin].filter(Boolean).join(" · ") || "no dates recorded"}</span>
-        {counts && <span>{counts}</span>}
-      </div>
-      <button type="button" className="chat-focus-clear" onClick={onClear} aria-label="Ask about the whole family instead" title="Ask about the whole family instead">×</button>
-    </div>
-    <p className="chat-focus-note">{canEdit
-      ? <>Everything you type here belongs to <strong>{first}</strong>. Ask a question about {first}, or write down dates, places, and stories — I&rsquo;ll add them to this record.</>
-      : <>Everything you ask here is answered about <strong>{first}</strong>. Close this to search the whole family again.</>}</p>
-  </section>;
+  return <div className="composer-focus">
+    <span className="composer-focus-chip">
+      {person.photoAttachmentId ? <span className="ped-portrait ped-photo"><img src={`/api/photos/${person.photoAttachmentId}`} alt="" /></span> : <Silhouette gender={person.gender} />}
+      <strong>{person.displayName}</strong>
+      <button type="button" className="composer-focus-clear" onClick={onClear} aria-label={`Stop writing to ${person.displayName}'s record`} title="Clear the selected person">×</button>
+    </span>
+    <span className="composer-focus-note">{canEdit
+      ? `Questions and details you type go to ${first}’s record.`
+      : `Answers here are about ${first}.`}</span>
+  </div>;
 }
 
 /** One ＋ that offers the two kinds of attachment, Apple-menu style. */
@@ -554,11 +540,11 @@ function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeople
   return (
     <div className="public-chat flex h-full min-h-0 w-full flex-col">
       <div className={`flex flex-1 flex-col items-center overflow-y-auto pb-5 text-center ${asked.length || focusPerson ? "justify-start" : "justify-center"}`}>
-        {focusPerson && <PersonFocusBanner person={focusPerson} tree={tree} canEdit={false} onClear={onClearFocus} />}
-        {!asked.length && !focusPerson ? <><h3 className="mt-0 font-serif text-2xl">The Darabiha family tree</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Explore our family history, ask about the people and relationships in the tree, and discover the stories recorded here.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <p className="public-chat-answer">{reply}</p>}</div>}
+        {!asked.length && !focusPerson ? <><h3 className="mt-0 font-serif text-2xl">The Darabiha family tree</h3><p className="mt-2 text-sm leading-6 text-[var(--muted)]">Explore our family history, ask about the people and relationships in the tree, and discover the stories recorded here.</p>{signedIn && <p className="public-chat-note mt-5 text-xs leading-5 text-[var(--muted)]">You&apos;re signed in, but this Apple account isn&apos;t authorized to edit this family tree.</p>}</> : <div className="public-chat-thread w-full pt-4 text-left">{asked.map((message, index) => <div className="public-chat-user-bubble" key={`${message}-${index}`}>{message}</div>)}{busy && <p className="public-chat-syncing"><span className="agent-pulse" /> Thinking…</p>}{!busy && reply && <div className="public-chat-answer"><Markdown text={reply} /></div>}</div>}
       </div>
       <div>
         <div className="public-chat-composer editor-composer relative w-full rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
+          {focusPerson && <ComposerFocus person={focusPerson} canEdit={false} onClear={onClearFocus} />}
           <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); ask(); } }} className="min-h-24 w-full resize-none bg-transparent px-2 py-1 pr-12 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder={focusPerson ? `Ask about ${focusPerson.displayName.split(" ")[0]}…` : "Who are the children of…?"} aria-label="Search the family archive" />
           <button onClick={ask} disabled={busy || !question.trim()} className="absolute bottom-4 right-4 flex h-9 w-9 items-center justify-center rounded-full bg-[var(--accent-fill)] text-white transition hover:bg-[#3a604a] disabled:opacity-40" aria-label="Search the family archive">↑</button>
         </div>
