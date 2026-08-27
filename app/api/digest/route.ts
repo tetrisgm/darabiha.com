@@ -1,6 +1,7 @@
-import { listChangeLog, readTree } from "../../../db/store";
-import { requireEditor } from "../../authz";
+import { listChangeLog, listMembers, readTree } from "../../../db/store";
+import { requireAdmin, requireEditor } from "../../authz";
 import { buildDigest, digestHtml, digestText } from "../../../lib/digest";
+import { sendMail } from "../../../lib/smtp";
 
 export const runtime = "edge";
 
@@ -22,4 +23,38 @@ export async function GET(request: Request) {
     return new Response(digestText(digest), { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
   }
   return Response.json(digest, { headers: { "cache-control": "no-store" } });
+}
+
+/** Send the digest. Admin only, and never automatic: a weekly schedule is the
+ * owner's call, not something a deploy should quietly install. */
+export async function POST(request: Request) {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.response;
+  const smtpUrl = process.env.SMTP_URL;
+  const from = process.env.MAIL_FROM;
+  if (!smtpUrl || !from) return Response.json({ error: "mail_not_configured" }, { status: 503 });
+
+  const body = await request.json().catch(() => ({})) as { to?: string; days?: number };
+  const days = Math.min(90, Math.max(1, Number(body.days ?? 7)));
+  const since = new Date(Date.now() - days * 86_400_000);
+  const [tree, log, members] = await Promise.all([readTree(), listChangeLog(null, 300), listMembers()]);
+  const digest = buildDigest(tree, log.entries, since);
+  if (digest.empty && !body.to) return Response.json({ sent: 0, reason: "nothing_to_report" });
+
+  // a single address for a test send; otherwise everyone on the member list
+  const recipients = body.to ? [body.to] : members.map((member) => member.email);
+  if (!recipients.length) return Response.json({ sent: 0, reason: "no_members" });
+  try {
+    await sendMail(smtpUrl, {
+      to: recipients, from,
+      replyTo: process.env.MAIL_REPLY_TO || undefined,
+      subject: `Darabiha · ${digest.headline}`,
+      text: digestText(digest),
+      html: digestHtml(digest),
+    });
+    return Response.json({ sent: recipients.length, headline: digest.headline });
+  } catch (error) {
+    console.warn("Digest send failed", error instanceof Error ? error.message : "unknown error");
+    return Response.json({ error: "send_failed" }, { status: 502 });
+  }
 }
