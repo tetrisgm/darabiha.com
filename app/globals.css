@@ -1512,7 +1512,7 @@ html[lang="fa"] { font-variant-numeric: normal; }
    which the chat and the List view both cover. */
 .site-action-bar .archive-view-switcher { flex:none; max-width:none; overflow:visible; }
 .archive-view-picker { display:none; }
-@media (max-width: 1100px) {
+@media (max-width: 1249px) {
   .site-action-bar .archive-view-switcher { display:none; }
   .archive-view-picker { display:inline-flex; align-items:center; flex:none; }
   .archive-view-picker select { appearance:none; border:1px solid var(--line); border-radius:.7rem;
