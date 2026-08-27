@@ -30,6 +30,8 @@ export type Story = {
   id: string;
   title: string;
   body: string;
+  /** the archive's own words, when the body above is a translation of them */
+  originalBody?: string | null;
   date: string | null;
   place: string | null;
   personIds: string[];

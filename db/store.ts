@@ -47,6 +47,9 @@ export async function ensureSchema() {
     try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
   }
   try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
+  // Imported archive material is written in its own language; body holds the
+  // English a reader sees first, original_body the words the family wrote.
+  try { await env.DB.prepare("ALTER TABLE stories ADD COLUMN original_body TEXT").run(); } catch { /* existing deployment */ }
   // Databases created before the viewer role carry a two-role CHECK
   // constraint; SQLite cannot alter it, so the table is rebuilt once.
   const membersSchema = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='members'").first<{ sql: string }>();
@@ -259,7 +262,7 @@ export async function readTree(): Promise<FamilyTree> {
       death_city AS deathCity, death_country AS deathCountry, biography, photo_attachment_id AS photoAttachmentId FROM people ORDER BY display_name`).all<Person>(),
     env.DB.prepare(`SELECT id, from_person_id AS fromPersonId, to_person_id AS toPersonId,
       type, status FROM relationships ORDER BY created_at`).all<Relationship>(),
-    env.DB.prepare(`SELECT id, title, body, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
+    env.DB.prepare(`SELECT id, title, body, original_body AS originalBody, date, place FROM stories ORDER BY created_at DESC`).all<Omit<Story, "personIds">>(),
     env.DB.prepare(`SELECT story_id AS storyId, person_id AS personId FROM story_people`).all<{ storyId: string; personId: string }>(),
     env.DB.prepare(`SELECT story_id AS storyId, attachment_id AS attachmentId FROM story_attachments`).all<{ storyId: string; attachmentId: string }>(),
   ]);
