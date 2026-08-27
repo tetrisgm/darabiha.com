@@ -5,7 +5,7 @@ Last updated: 2026-08-26
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 109**, `BUILD_ID=53a364b`.
+- The live release is **Version 112**, `BUILD_ID=83f4a9e`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-26
 
 ## Live state verified on 2026-08-26
 
-- `/api/version` returns `{"version":109,"build":"53a364b","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":112,"build":"83f4a9e","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -29,7 +29,13 @@ Last updated: 2026-08-26
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
 
-### Versions 54–109 (2026-08-26)
+### Versions 54–112 (2026-08-26)
+
+- **Version 112** (`83f4a9e`): language names collapse to flags below 1700px so the top bar never crowds the search.
+- **Version 111** (`b77895b`): **clicking a spouse re-centres the tree on her.** Spouses were exempted from re-centring along with the focal person, so clicking Nikoo panned the camera and opened her profile while the canvas still showed her husband's parents and siblings. Only the person already at the centre keeps the layout now. Also: **language moved into the top bar** — "Language:" with a flag per language (the flag stands for the language, not a nationality), names collapsing before flags, the group hiding before the search.
+- **Version 110** (`04ad0c5`): **the digest sends through the family's own mail provider.** The owner's service is MXroute SMTP — the same transport TextText uses, configured there as `AUTH_EMAIL_SERVER`. Nodemailer cannot run in a Worker (it wants Node's net/tls), so `lib/smtp.ts` speaks SMTP directly over `cloudflare:sockets`: implicit TLS on 465 or STARTTLS on 587, AUTH LOGIN, one multipart message, QUIT — no dependency, nothing logged. `POST /api/digest` sends to the member list, or to a single `to` for a test; **admin only and deliberately manual**, since a weekly schedule means installing a recurring job, which is the owner's call. Worker secrets `SMTP_URL`, `MAIL_FROM`, `MAIL_REPLY_TO` are set (the SMTP URL was piped from TextText's `.env.local` straight into `wrangler secret put` without ever being printed). **Verified live: one test send to ramine@ramine.net returned `{"sent":1}`.**
+  - **Deliverability, and why the sender is not @darabiha.com**: MXroute is authorised for **texttext.app** (`v=spf1 include:mxroute.com -all`), while **darabiha.com and ramine.net receive on iCloud** (`include:icloud.com ~all`, MX `mx0*.mail.icloud.com`). Sending as `@darabiha.com` through MXroute would fail SPF with no DKIM and land in spam. So `MAIL_FROM` is `Darabiha Family Archive <noreply@texttext.app>` with `Reply-To: ramine@ramine.net`. To send as `@darabiha.com`: add the domain to the MXroute account, then add `include:mxroute.com` to darabiha.com's SPF and MXroute's DKIM record — **both are owner decisions** (a provider account change and a DNS change to a zone that currently routes family mail to iCloud); nothing here touched that DNS.
+
 
 - **Versions 99–109 (2026-08-27): the owner's feature list, built.** After a survey of what genealogy services do, the owner picked what mattered. Each of these landed as its own release:
   - **V99 — living by default, and burial places.** Every card used to ask for a death date as though absence meant "died, date unknown". Someone born within a lifetime with no death now reads **Living** (editors get "record a death"); only people born too long ago to be alive show an unrecorded Death. New `burial_place` column runs the full stack including the archivist's tool schema, and shows as a Buried row once there is a death.
@@ -40,7 +46,7 @@ Last updated: 2026-08-26
   - **V104 — notes, documents, history.** Any signed-in member (not just editors) can leave a note on a person; `/documents` is the evidence room (non-image attachments now serve to editors only); `/history` is every change anyone has made. Both linked from settings.
   - **V105 — calendar and GEDCOM.** The Calendar view lays out birthdays of the living, remembrances, and story anniversaries, saying plainly that only full dates can appear (three, so far). `/api/export` emits GEDCOM 5.5.1 — verified live at 412 individuals and 144 families — the archive's insurance policy.
   - **V106–V108 — three languages.** `lib/i18n.ts` carries the chrome in English, Persian and French, chosen in settings and stored in a cookie both server and client read. Persian gets `dir=rtl`, Vazirmatn, and a mirrored chrome: chat column and docked panels swap sides, arrows flip. **The canvases deliberately keep left-to-right** — a family tree is a spatial diagram and Persian genealogy software draws it the same way. Only chrome is translated; names, biographies and stories stay in the language they were written in.
-  - **V109 — the week's news.** `/api/digest` (JSON, text or HTML, linked from settings as "This week") gathers what changed and the anniversaries in the coming week. **Email sending is deliberately not wired**: it needs a provider account, an API key and DNS records on darabiha.com, which are the owner's to create. The content is ready the moment a key exists.
+  - **V109 — the week's news.** `/api/digest` (JSON, text or HTML, linked from settings as "This week") gathers what changed and the anniversaries in the coming week. Sending landed in V110 once the owner pointed at their existing provider.
   - **Deliberately not built** (owner's calls): the printed book, photo restoration/colorisation, face tagging, and a Telegram/WhatsApp bridge. Voice recording was liked in principle but judged tough to execute and limited to willing living relatives — not attempted.
 
 
