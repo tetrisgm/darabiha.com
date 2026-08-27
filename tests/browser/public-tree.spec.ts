@@ -1,4 +1,21 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { createHmac } from "node:crypto";
+
+// The live site is members-only, so every UI test carries a minted session
+// for the dedicated browser-suite viewer member. The session secret's
+// durable copy lives in the Mac login Keychain (fleet rule).
+function viewerSessionCookie(): string {
+  const secret = execFileSync("security", ["find-generic-password", "-s", "darabiha-session-secret", "-w"]).toString().trim();
+  const b64url = (input: Buffer | string) => Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  const payload = b64url(JSON.stringify({ subject: "browser-suite", email: "browser-suite@darabiha.com", displayName: "Browser suite", exp: Math.floor(Date.now() / 1000) + 3600 }));
+  const signature = b64url(createHmac("sha256", secret).update(payload).digest());
+  return `${payload}.${signature}`;
+}
+
+test.beforeEach(async ({ context, baseURL }) => {
+  await context.addCookies([{ name: "darabiha_session", value: viewerSessionCookie(), url: baseURL ?? "https://darabiha.com" }]);
+});
 
 async function openFullTree(page: Page) {
   await page.goto("/");
@@ -158,10 +175,29 @@ test("dragging the dedicated surface pans while a card remains clickable", async
   await expect(page.getByRole("dialog")).toBeVisible();
 });
 
-test("the settings page offers sign-in and explains member roles", async ({ page }) => {
+test("the settings page offers sign-in and explains member roles", async ({ browser, baseURL }) => {
+  const anonymous = await browser.newContext({ baseURL: baseURL ?? "https://darabiha.com" });
+  const page = await anonymous.newPage();
   await page.goto("/settings");
   await expect(page.locator("h1")).toHaveText("Settings");
   await expect(page.getByText("Sign in with Apple")).toBeVisible();
+  await anonymous.close();
+});
+
+test("the members-only gate covers the tree, the APIs, and the legacy pages", async ({ request }) => {
+  expect((await request.get("/api/tree")).status()).toBe(401);
+  expect((await request.get("/legacy-family-tree-data.json")).status()).toBe(401);
+  expect((await request.get("/legacy-photos/gate.jpg")).status()).toBe(401);
+  const legacyPage = await request.get("/legacy-family-tree", { maxRedirects: 0 });
+  expect(legacyPage.status()).toBe(302);
+});
+
+test("a signed-in viewer can read the gated legacy archive", async ({ page }) => {
+  const data = await page.request.get("/legacy-family-tree-data.json");
+  expect(data.status()).toBe(200);
+  expect((await data.json()).people.length).toBeGreaterThan(400);
+  const photo = await page.request.get("/legacy-photos/gate.jpg");
+  expect(photo.status()).toBe(200);
 });
 
 test("member management refuses anonymous requests", async ({ request }) => {
