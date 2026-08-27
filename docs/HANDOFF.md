@@ -5,7 +5,7 @@ Last updated: 2026-08-27
 ## Read this first
 
 - Production is `https://darabiha.com`, deployed directly to Cloudflare Worker `darabiha-family` from `main` in `~/dev/darabiha.com`.
-- The live release is **Version 129**, `BUILD_ID=a70dd86`.
+- The live release is **Version 133**, `BUILD_ID=1e9eeb5`.
 - The release spans commits `6543b81..0e1e56c` (2026-08-26): the corrected legacy archive was imported into the live D1 tree, the canvas got a real family-tree layout, the root page was fitted into the Worker CPU budget, the archive gained Family/Fan/List/Fill-in views with search, branch folding, and couple adjacency, gender was assigned across the tree, and the Family view became an Ancestry-style pedigree.
 - **Editing is enforced** (owner-directed, Version 64): `TEMPORARY_OPEN_EDITOR = false` in `app/authz.ts`. Only signed-in members with the editor or admin role can mutate the archive; every mutation route runs through `requireEditor`. Flipping the constant back to true reopens the old everyone-can-edit test mode.
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
@@ -14,7 +14,7 @@ Last updated: 2026-08-27
 
 ## Live state verified on 2026-08-27
 
-- `/api/version` returns `{"version":129,"build":"a70dd86","deployedAt":"2026-08-26"}`.
+- `/api/version` returns `{"version":133,"build":"1e9eeb5","deployedAt":"2026-08-26"}`.
 - `/` returns 200 with `cache-control: no-store, must-revalidate` and held 200 across 60 consecutive requests.
 - **Site visibility is owner-toggled on /settings** (currently "public" — the owner's own session re-opened it 2026-08-27 05:27 UTC after an earlier members-only stretch; the change log records every flip): anonymous visitors get the sign-in gate on `/` and 401 from `/api/tree`, `/api/photos/*`, and `/api/ask`; only the accounts on the member list can view, and sign-ins do NOT auto-register while this mode is on. Admins flip it back on `/settings` → Members & access. The legacy pages are covered too (Version 67).
 - The legacy reconstruction pages are deleted (Version 68); all `/legacy-*` URLs 404. Regenerable from the source ZIP via `scripts/extract_legacy_family_tree.py` if ever wanted again.
@@ -23,12 +23,25 @@ Last updated: 2026-08-27
 - The public D1 tree currently reports **412 people (see the story-facts entry above), 687 relationships, and 14 stories** (the Persian family histories and the family biography, Versions 82–84; a duplicate bare `Aydin` beside `Aydin Darabi` was removed 2026-08-26). Gender is recorded for 405 of 412 people, assigned by `scripts/enrich_gender.mjs` from a curated given-name lexicon plus heterosexual-marriage deduction (owner-authorized assumption), with zero same-gender-marriage conflicts as cross-validation. Eight stay NULL deliberately: ambiguous names (Heshmat Ghazvini Hosseinzadeh, Karen Kamali, Meesha Darabi, Sasha Darabi, Setia Darabi, Shervine Eftekhari Rad, the coded `xAsJ 17 Bemanian`) and Ramine Darabiha, whose gender the archive should hear from Ramine rather than guess — the corrected legacy archive merged with the previously hand-entered records (see “Main tree data” below).
 - A case-insensitive exact-name scan reports one duplicate display name: the two genuinely distinct Abbas Darabi (generations 5 and 7). Agent operations that resolve people by exact name fail closed and ask for clarification on that name.
 - `npm test`: 34 unit tests passed (vitest — `node --test` is not this project's runner and fails on every file). `npx tsc --noEmit` is a mandatory release gate — `npm run build` does NOT typecheck, which is how Version 54 shipped a `ReferenceError` (see the Version 55 record below).
-- `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit, twice consecutively at `--workers=2`.
-  **The default 4 workers are more than this Mac can carry when something else is on it**: with load averages near 5–8 from unrelated processes, the two `openFullTree` tests time out at 20s waiting for `.tree-card` while the same tests pass in ~1s alone. That is contention, not a regression — check `uptime` before believing a timeout. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
+- `npm run test:browser`: 28 passed, 2 skipped (those run only in members visibility) across Chromium and Playwright WebKit, twice consecutively at `--workers=1`.
+  **The default 4 workers are more than this Mac can carry when something else is on it**: with load averages of 5–11 from unrelated processes, the `openFullTree` tests time out at 20s waiting for `.tree-card` while the same tests pass in ~0.9s alone. That is contention, not a regression — check `uptime` before believing a timeout, and run `--workers=1` (about 23s for the whole suite) when the machine is busy. Canvas tests open the Full tree tab through the `openFullTree` helper (the default view is Family), and card inspections wait for the client-side tree fetch.
 - `npm run legacy:validate`: 407 people, 680 relationships, 14 documents, and nine photographs passed graph, connectivity, and audited-family-fact validation.
 - `npm run build` passes.
 - `npm run lint` exits successfully with six known warnings: one unused legacy `PersonModal`, four raw `<img>` warnings plus one more from the chat context card, and one exhaustive-dependencies warning in the canvas focus effect.
 - The git checkout was clean when this handoff was written.
+
+### Versions 130–133 (2026-08-27)
+
+- **Version 130** (`fe5ab49`): **hovering holds the board still** (owner: "it causes this really shitty recursive behavior that everything moves around and it hovers a new thing and then it moves the camera again … things need to probably stay in place when I hover and then I see the rest of the things. But if I click then of course I center that"). The preview was recentring the camera on the previewed person, which slid a different card under the pointer, which previewed *that* one, which recentred again. A preview now moves nothing: `previewAnchor` records where the hovered card sat and what the camera was doing, and a `useLayoutEffect` shifts the pan by exactly the distance the card would otherwise have travelled — so it stays under the pointer, only the family around it changes, and leaving restores the camera. Recentring belongs to `focusId` again, which is what a click changes. The swap animation is off during a preview.
+  Same release, four corrections to the record panel and the chat:
+  - **Clearing a death is a small ×** beside it, not a sentence and a confirm dialog (owner: "just have a little X to delete the thing so I can just change it").
+  - **Residence is only asked of the living.** Where a person died is already recorded; the interview stops asking after the dead as well.
+  - **The portrait is the first photograph**, not a separate thing in the header: one wrapping row directly under the name, carrying the section's own heading and its ＋ (owner: "we don't need to have a separate place for the photos").
+  - **The chat's opening prompts are factoids** drawn from the archive's own numbers, each tapping through to the question it opens — the busiest recorded decade, the median completed life, the two family names, the most repeated given name, the count of women and men. They were hand-written chores before ("Which records are missing birth dates?").
+- **Versions 131–133**: the factoids, corrected twice by reading what they actually said.
+  - V131 (`8e65c49`): the day-rotation was surfacing the three blandest first (the story count, the people count) because the numeric facts sat at the end of the pool. They lead now.
+  - V132 (`b272580`): "More of the family was born in the 1940s than in any other decade — **4 births**" claimed something about 412 people from four dated records. Most of the archive carries no birth year, so it says "of the N birth years the archive records" and stays quiet unless the leading decade is clearly ahead of the next.
+  - V133 (`1e9eeb5`): "The family name is written two ways: 54 carry Darabi and 38 carry **Jaberian**" — which is two families who married, not a spelling. It only claims a variant when one name spells the other (Darabi, Darabiha); otherwise it says there are two names and asks how they came together.
 
 ### Versions 117–129 (2026-08-27)
 
