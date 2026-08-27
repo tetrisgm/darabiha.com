@@ -46,8 +46,9 @@ export function WorldMapView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
     if (event.ctrlKey || event.metaKey) setScale((current) => Math.max(1, Math.min(4, current * (event.deltaY > 0 ? 0.94 : 1.06))));
     else setPan((current) => ({ x: current.x - event.deltaX, y: current.y - event.deltaY }));
   };
+  // Full-bleed like the other canvases: the stage is the whole tab, and the
+  // 2:1 board (which the marker percentages are calibrated to) covers it.
   return <section className="archive-view family-map-view" aria-label="Family places">
-    <div className="archive-view-heading"><p className="eyebrow">Places</p><h2>Where the family has lived</h2><p>Locations come directly from the city and country fields in each record. Drag to move around; zoom with the buttons or ctrl and scroll.</p></div>
     <div className="world-map" role="img" aria-label="World map with recorded family locations" data-panning={panning ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}>
       <div className="canvas-controls map-zoom" role="group" aria-label="Map zoom controls">
@@ -56,6 +57,7 @@ export function WorldMapView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
         <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => setScale((current) => Math.min(4, current * 1.1))} aria-label="Zoom in" title="Zoom in">＋</button>
       </div>
       <div className="world-map-layer" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
+      <div className="world-map-board">
       <svg viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         <path d="M62 120 118 72l100 6 53 43-20 63-50 26-22 83-56-19-23-76-51-29Z" />
         <path d="m248 310 65 23 45 61-24 85-45-18-31-69Z" />
@@ -66,6 +68,7 @@ export function WorldMapView({ tree, onSelect }: { tree: FamilyTree; onSelect: (
       </svg>
       {mapped.map((location) => <button type="button" className="map-marker" style={{ left: `${location.x}%`, top: `${location.y}%` }} key={location.key} onClick={() => onSelect(location.people[0])} aria-label={`${location.label}: ${location.people.map((person) => person.displayName).join(", ")}`}><span>{location.people.length}</span><strong>{location.label}</strong></button>)}
       {!mapped.length && <p className="map-empty">Add a birth or death city and country to place someone on the map.</p>}
+      </div>
       </div>
     </div>
     {unmapped.length > 0 && <p className="unmapped-places">Recorded locations awaiting map coordinates: {unmapped.join(" · ")}</p>}

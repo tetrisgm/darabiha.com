@@ -981,3 +981,14 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .world-map-layer svg { position:absolute; inset:3%; width:94%; height:94%; }
 .world-map .map-zoom { position:absolute; right:1rem; bottom:1rem; z-index:6; }
 .world-map .map-marker { cursor:pointer; }
+
+/* the map fills its tab edge-to-edge, like every other canvas */
+.family-map-view { padding:0; overflow:hidden; }
+.world-map { position:absolute; inset:0; max-width:none; aspect-ratio:auto; margin:0; border:0; border-radius:0;
+  box-shadow:none; background:#10130f; overflow:hidden; }
+.world-map-board { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); aspect-ratio:2/1;
+  min-width:100%; min-height:100%; background:radial-gradient(circle at 60% 28%,rgba(40,46,42,.92),rgba(24,28,25,.92)); }
+.world-map-board svg { position:absolute; inset:3%; width:94%; height:94%; }
+.family-map-view .unmapped-places { position:absolute; left:1rem; bottom:1rem; z-index:6; margin:0; max-width:min(70%, 46rem);
+  border:1px solid rgba(255,255,255,.08); border-radius:.8rem; background:rgba(28,28,30,.66); padding:.45rem .75rem;
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); }
