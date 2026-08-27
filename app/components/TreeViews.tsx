@@ -285,6 +285,17 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     hoverTimer.current = null;
   };
   const endPreview = () => { previewAt.current = null; setPreviewId(null); };
+  /* Swapping the board removes the card under the pointer, and React reports
+     that as the pointer leaving the whole stage - four milliseconds after the
+     preview opened, which closed it again. Only a pointer that is really
+     outside the stage has left it. */
+  const leaveStage = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (event.clientX > rect.left && event.clientX < rect.right && event.clientY > rect.top && event.clientY < rect.bottom) return;
+    hidePedCursor();
+    cancelHover();
+    endPreview();
+  };
   const commit = (person: Person, keepLayout: boolean) => {
     cancelHover();
     endPreview();
@@ -330,7 +341,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     </div>
     <div className="ped-stage" ref={containerRef} data-custom-cursor="true" data-panning={panMode === "drag" ? "true" : "false"}
       onPointerDown={beginPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} onWheel={wheelPan}
-      onPointerEnter={positionPedCursor} onPointerLeave={() => { hidePedCursor(); cancelHover(); endPreview(); }}>
+      onPointerEnter={positionPedCursor} onPointerLeave={leaveStage}>
       <PedCursor mode={cursorMode} cursorRef={pedCursorRef} />
       <div className={`ped-pan ${panMode === "glide" ? "is-glide" : ""}`} ref={panRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}>
         <svg className="ped-lines" aria-hidden="true">{paths.map((d, index) => <path key={index} d={d} />)}</svg>
