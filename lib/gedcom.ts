@@ -1,4 +1,4 @@
-import type { FamilyTree, Person } from "./types";
+import type { FamilyTree } from "./types";
 
 /** GEDCOM 5.5.1 - the interchange format every genealogy program reads.
  * Exporting it is the archive's insurance policy: whatever happens to this

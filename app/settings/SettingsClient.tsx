@@ -30,12 +30,12 @@ const ERROR_COPY: Record<string, string> = {
 };
 
 export default function SettingsClient({ viewer, siteVisibility, appleSignInPath, googleSignInPath, signOutPath }: Props) {
-  // read once on mount: the cookie is the single source, shared with the server
-  const [currentLang, setCurrentLang] = useState<Lang>("en");
-  useEffect(() => {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`));
-    setCurrentLang(parseLang(match?.[1]));
-  }, []);
+  // the cookie is the single source, shared with the server; read it lazily so
+  // the first client render already knows which language is chosen
+  const [currentLang] = useState<Lang>(() => {
+    if (typeof document === "undefined") return "en";
+    return parseLang(document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]+)`))?.[1]);
+  });
   const [visibility, setVisibility] = useState(siteVisibility);
   const [members, setMembers] = useState<Member[] | null>(null);
   const [newEmail, setNewEmail] = useState("");
