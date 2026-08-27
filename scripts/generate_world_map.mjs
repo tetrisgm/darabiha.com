@@ -40,16 +40,27 @@ const project = ([lon, lat]) => [
   Math.round(((lon + 180) / 360) * WIDTH * 10) / 10,
   Math.round(((90 - lat) / 180) * HEIGHT * 10) / 10,
 ];
+// A ring that crosses the antimeridian (Russia, Fiji) would draw a horizontal
+// line across the whole map; split it at the jump and close each part at the
+// map edge instead.
 const ringPath = (points) => {
   const projected = points.map(project);
-  let d = `M${projected[0][0]} ${projected[0][1]}`;
+  const parts = [[projected[0]]];
   let [lastX, lastY] = projected[0];
   for (const [x, y] of projected.slice(1)) {
     if (Math.abs(x - lastX) < 0.15 && Math.abs(y - lastY) < 0.15) continue;
-    d += `L${x} ${y}`;
+    if (Math.abs(x - lastX) > WIDTH / 2) {
+      const midY = Math.round(((y + lastY) / 2) * 10) / 10;
+      parts[parts.length - 1].push([lastX < WIDTH / 2 ? 0 : WIDTH, midY]);
+      parts.push([[x < WIDTH / 2 ? 0 : WIDTH, midY]]);
+    }
+    parts[parts.length - 1].push([x, y]);
     lastX = x; lastY = y;
   }
-  return d + "Z";
+  return parts
+    .filter((part) => part.length > 2)
+    .map((part) => "M" + part.map(([x, y]) => `${x} ${y}`).join("L") + "Z")
+    .join("");
 };
 
 const paths = [];
