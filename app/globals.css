@@ -1199,3 +1199,17 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .fill-question-photo img { display:block; width:100%; height:auto; }
 .fill-question-photo:hover { border-color:var(--accent); }
 .fill-question-choices { display:flex; gap:.5rem; flex-wrap:wrap; }
+
+/* ============ one canvas-chrome language ============
+   The back/forward pair top-left and the zoom stack bottom-right are the same
+   kind of control, so they are built from the same parts: a frosted container
+   holding square glass buttons, hairline-divided, exactly like Maps. */
+.focus-nav { display:flex; gap:0; width:max-content; padding:.2rem; border-radius:.9rem;
+  background:rgba(28,28,30,.66); border:1px solid rgba(255,255,255,.08);
+  backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); box-shadow:0 10px 30px rgba(0,0,0,.45); }
+.focus-back { display:flex; height:2.2rem; width:2.2rem; min-width:2.2rem; align-items:center; justify-content:center;
+  border:0; border-radius:.7rem; background:transparent; padding:0; color:var(--ink); font-size:1.05rem; line-height:1; }
+.focus-back:not(:disabled):hover { background:rgba(255,255,255,.1); color:var(--ink); border:0; }
+.focus-back:disabled { opacity:.32; }
+.focus-nav .focus-back:first-child { border-radius:.7rem 0 0 .7rem; }
+.focus-nav .focus-back:last-child { border-radius:0 .7rem .7rem 0; border-left:1px solid rgba(255,255,255,.08); }
