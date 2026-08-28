@@ -5,6 +5,7 @@ import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../li
 import { relatedPeople } from "../../lib/relationships";
 import { CalendarView, StatisticsView, TimelineView, WorldMapView } from "./ArchiveViews";
 import IdentifyMe from "./IdentifyMe";
+import { familyGenerations, lifeStatus } from "../../lib/life-status";
 import type { MappedPlace } from "../../lib/archive-views";
 import { FocusFamilyView, MissingDataView, OutlineView, Silhouette, TreeSearch } from "./TreeViews";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
@@ -692,8 +693,14 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange,
   // born within a plausible lifetime and no death recorded -> presumed living;
   // an ancestor born in 1856 with no death date is simply unrecorded
   const birthYear = Number(person.birthDate?.slice(0, 4));
-  const deathRecorded = Boolean(person.deathDate || person.deathCity || person.deathCountry || person.burialPlace);
-  const presumedLiving = !deathRecorded && (!birthYear || new Date().getFullYear() - birthYear <= 110);
+  /* Three answers, not two: the archive records a death, or has reason to
+     think someone is living, or does not know. It used to read a missing
+     death date as a life, which had it calling Haj Chorok - born 1720 -
+     living, along with 400 others. */
+  const generations = useMemo(() => familyGenerations(tree), [tree]);
+  const status = lifeStatus(person, generations);
+  const deathRecorded = status === "died";
+  const presumedLiving = status === "living";
   const subtitleRest = [person.birthDate ? (person.deathDate ? `${person.birthDate.slice(0, 4)}–${person.deathDate.slice(0, 4)}` : `b. ${person.birthDate.slice(0, 4)}`) : person.deathDate ? `d. ${person.deathDate.slice(0, 4)}` : "", locationLine(person.birthCity, person.birthCountry, person.birthPlace) ?? ""].filter(Boolean).join(" · ");
   const relation = (other: Person, label: string) => tree.relationships.find((link) => (label === "Spouse" && link.type === "spouse" && ((link.fromPersonId === person.id && link.toPersonId === other.id) || (link.toPersonId === person.id && link.fromPersonId === other.id))) || (label === "Parents" && link.type === "parent" && link.fromPersonId === other.id && link.toPersonId === person.id) || (label === "Children" && link.type === "parent" && link.fromPersonId === person.id && link.toPersonId === other.id));
   return <section className="person-modal person-modal-v2 person-panel" role="dialog" aria-labelledby="person-modal-title">

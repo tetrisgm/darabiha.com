@@ -1,4 +1,5 @@
 import type { FamilyTree, Person } from "./types";
+import { familyGenerations, lifeStatus } from "./life-status";
 
 /** Gaps worth asking a living relative about. The archive is filled in by
  * people who knew these families, so the questions have to stay close to who
@@ -32,15 +33,19 @@ export function interviewLeads(tree: FamilyTree, focusIds: string[], limit = 6):
   }
   const candidates = near.size ? [...near.keys()] : tree.people.map((person) => person.id);
 
+  const generations = familyGenerations(tree);
   const gapsOf = (person: Person) => {
     const missing: string[] = [];
     if (!has(person.birthDate)) missing.push("birth year");
     if (!has(person.birthCity) && !has(person.birthPlace)) missing.push("where they were born");
     if (!has(person.gender)) missing.push("whether they are a man or a woman");
-    const isDead = has(person.deathDate);
-    if (isDead && !has(person.deathCity)) missing.push("where they died");
-    if (isDead && !has(person.burialPlace)) missing.push("where they are buried");
-    if (!isDead && !has(person.residence)) missing.push("where they live now");
+    const status = lifeStatus(person, generations);
+    if (status === "died" && !has(person.deathCity)) missing.push("where they died");
+    if (status === "died" && !has(person.burialPlace)) missing.push("where they are buried");
+    // only of the living, and only where the archive has reason to think so:
+    // asking where a great-great-grandfather lives is not a question
+    if (status === "living" && !has(person.residence)) missing.push("where they live now");
+    if (status === "unknown") missing.push("whether they are still living");
     if (!has(person.biography)) missing.push("anything about their life");
     return missing;
   };

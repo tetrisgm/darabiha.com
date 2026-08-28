@@ -1,4 +1,5 @@
 import type { FamilyTree, Person } from "./types";
+import { familyGenerations, lifeStatus, type Generations } from "./life-status";
 
 /** Something the archive can say without being asked: an anniversary falling
  * today, or a fact drawn from the shape of the tree. Used to greet a reader
@@ -17,15 +18,16 @@ const year = (value: string | null | undefined) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 const monthDay = (value: string | null | undefined) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) ? String(value).slice(5) : null;
-const presumedLiving = (person: Person, today: Date) => {
-  const born = year(person.birthDate);
-  return !person.deathDate && (!born || today.getFullYear() - born <= 110);
-};
+/* Whether to wish someone a happy birthday. The archive used to say yes for
+ * anyone without a death date, which included every ancestor it holds. */
+const presumedLiving = (person: Person, today: Date, generations: Generations | null = null) =>
+  lifeStatus(person, generations, today) === "living";
 
 /** Anniversaries falling on the given day: births and deaths of the recorded
  * family, and dated stories. Living people get a birthday; the dead get a
  * remembrance. */
 export function onThisDay(tree: FamilyTree, today = new Date()): FamilyFact[] {
+  const generations = familyGenerations(tree);
   const stamp = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const facts: FamilyFact[] = [];
   for (const person of tree.people) {
@@ -34,7 +36,7 @@ export function onThisDay(tree: FamilyTree, today = new Date()): FamilyFact[] {
       const age = born ? today.getFullYear() - born : null;
       facts.push({
         kind: "onThisDay", personId: person.id,
-        text: presumedLiving(person, today) && age
+        text: presumedLiving(person, today, generations) && age
           ? `Today is ${person.displayName}'s birthday — they turn ${age}.`
           : age
             ? `${person.displayName} was born on this day in ${born}, ${age} years ago today.`

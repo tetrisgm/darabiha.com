@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FamilyTree, OpenQuestion, Person } from "../../lib/types";
 import { buildGenerations, buildRelationMaps, hiddenRelativeCount } from "../../lib/tree-layout";
+import { familyGenerations, lifeStatus } from "../../lib/life-status";
 import { useLanguage } from "./LanguageContext";
 
 function years(person: Person | undefined) {
@@ -699,11 +700,10 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
     const moved = row.getBoundingClientRect().top - hold.top;
     if (Math.abs(moved) > 0.5) scroller.scrollTop += moved;
   }, [expandedId]);
-  const deathRecorded = (person: Person) => Boolean(person.deathDate || person.deathCity || person.deathCountry || person.burialPlace);
-  const presumedLiving = (person: Person) => {
-    const born = Number(person.birthDate?.slice(0, 4));
-    return !deathRecorded(person) && (!born || new Date().getFullYear() - born <= 110);
-  };
+  // the archive's own answer about a life, shared with the record panel
+  const lifeGenerations = useMemo(() => familyGenerations(tree), [tree]);
+  const deathRecorded = (person: Person) => lifeStatus(person, lifeGenerations) === "died";
+  const presumedLiving = (person: Person) => lifeStatus(person, lifeGenerations) === "living";
   const missingOf = (person: Person) => {
     const missing: string[] = [];
     if (!person.gender) missing.push("gender");
