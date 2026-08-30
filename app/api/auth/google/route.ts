@@ -1,11 +1,12 @@
 import { getAppleUser, signToken } from "../../../apple-auth";
 import { resolveMemberEmail } from "../../../../db/store";
+import { preventSharedCaching, privateJsonResponse } from "../../../../lib/archive-cache";
 
 export async function GET(request: Request) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const origin = (process.env.PUBLIC_ORIGIN || "").replace(/\/$/, "");
   if (!clientId || !origin || !process.env.AUTH_SESSION_SECRET) {
-    return Response.json({ error: "google_sign_in_not_configured" }, { status: 503 });
+    return privateJsonResponse({ error: "google_sign_in_not_configured" }, { status: 503 });
   }
   const url = new URL(request.url);
   const requestedReturn = url.searchParams.get("return_to") || "/";
@@ -17,7 +18,10 @@ export async function GET(request: Request) {
   const linker = url.searchParams.get("link") === "1" ? await getAppleUser() : null;
   const linkTo = linker ? await resolveMemberEmail(linker.email) : undefined;
   const nonce = crypto.randomUUID();
-  const state = await signToken({ nonce, returnTo, ...(linkTo ? { linkTo } : {}), exp: Math.floor(Date.now() / 1000) + 10 * 60 });
+  const state = await signToken(
+    { nonce, returnTo, ...(linkTo ? { linkTo } : {}), exp: Math.floor(Date.now() / 1000) + 10 * 60 },
+    "oauth-state",
+  );
   const authorize = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   authorize.searchParams.set("client_id", clientId);
   authorize.searchParams.set("redirect_uri", `${origin}/api/auth/google/callback`);
@@ -26,5 +30,5 @@ export async function GET(request: Request) {
   authorize.searchParams.set("state", state);
   authorize.searchParams.set("nonce", nonce);
   authorize.searchParams.set("prompt", "select_account");
-  return Response.redirect(authorize, 302);
+  return preventSharedCaching(Response.redirect(authorize, 302));
 }

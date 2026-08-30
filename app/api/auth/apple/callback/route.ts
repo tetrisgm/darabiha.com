@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, importPKCS8, jwtVerify, SignJWT } from "jose";
 import { createSession, sessionCookie, verifyToken } from "../../../../apple-auth";
 import { linkIdentity, recordSignInProvider, registerViewer } from "../../../../../db/store";
+import { preventSharedCaching, privateJsonResponse } from "../../../../../lib/archive-cache";
 
 type State = { nonce: string; returnTo: string; linkTo?: string; exp: number };
 const appleKeys = createRemoteJWKSet(new URL("https://appleid.apple.com/auth/keys"));
@@ -35,12 +36,12 @@ export async function POST(request: Request) {
   const keyId = process.env.APPLE_KEY_ID || "";
   const origin = (process.env.PUBLIC_ORIGIN || "").replace(/\/$/, "");
   if (!clientId || !teamId || !keyId || !origin || !normalizedPrivateKey()) {
-    return Response.json({ error: "apple_sign_in_not_configured" }, { status: 503 });
+    return privateJsonResponse({ error: "apple_sign_in_not_configured" }, { status: 503 });
   }
   const form = await request.formData();
-  const state = await verifyToken<State>(String(form.get("state") || ""));
+  const state = await verifyToken<State>(String(form.get("state") || ""), "oauth-state");
   const code = String(form.get("code") || "");
-  if (!state || !code) return Response.redirect(`${origin}/settings?auth_error=invalid_response`, 303);
+  if (!state || !code) return preventSharedCaching(Response.redirect(`${origin}/settings?auth_error=invalid_response`, 303));
 
   try {
     const tokenResponse = await fetch("https://appleid.apple.com/auth/token", {
@@ -73,11 +74,11 @@ export async function POST(request: Request) {
     const session = await createSession({ subject: payload.sub, email, displayName: email.split("@")[0] });
     const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
     response.headers.append("set-cookie", sessionCookie(session));
-    return response;
+    return preventSharedCaching(response);
   } catch (error) {
     const detail = error instanceof Error ? error.message : "unknown_error";
     console.warn("Apple sign-in failed", detail);
     const code = detail.startsWith("token_exchange_failed") ? "apple_token_exchange_failed" : detail === "invalid_identity_token" || detail === "identity_linked_elsewhere" ? detail : "sign_in_failed";
-    return Response.redirect(`${origin}/settings?auth_error=${code}`, 303);
+    return preventSharedCaching(Response.redirect(`${origin}/settings?auth_error=${code}`, 303));
   }
 }

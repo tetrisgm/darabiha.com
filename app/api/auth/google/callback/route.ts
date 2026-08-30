@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createSession, sessionCookie, verifyToken } from "../../../../apple-auth";
 import { linkIdentity, recordSignInProvider, registerViewer } from "../../../../../db/store";
+import { preventSharedCaching, privateJsonResponse } from "../../../../../lib/archive-cache";
 
 type State = { nonce: string; returnTo: string; linkTo?: string; exp: number };
 const googleKeys = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
@@ -10,12 +11,12 @@ export async function GET(request: Request) {
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
   const origin = (process.env.PUBLIC_ORIGIN || "").replace(/\/$/, "");
   if (!clientId || !clientSecret || !origin) {
-    return Response.json({ error: "google_sign_in_not_configured" }, { status: 503 });
+    return privateJsonResponse({ error: "google_sign_in_not_configured" }, { status: 503 });
   }
   const url = new URL(request.url);
-  const state = await verifyToken<State>(url.searchParams.get("state") || "");
+  const state = await verifyToken<State>(url.searchParams.get("state") || "", "oauth-state");
   const code = url.searchParams.get("code") || "";
-  if (!state || !code) return Response.redirect(`${origin}/settings?auth_error=invalid_response`, 303);
+  if (!state || !code) return preventSharedCaching(Response.redirect(`${origin}/settings?auth_error=invalid_response`, 303));
 
   try {
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -49,11 +50,11 @@ export async function GET(request: Request) {
     const session = await createSession({ subject: `google:${payload.sub}`, email, displayName });
     const response = new Response(null, { status: 303, headers: { Location: `${origin}${state.returnTo}` } });
     response.headers.append("set-cookie", sessionCookie(session));
-    return response;
+    return preventSharedCaching(response);
   } catch (error) {
     const detail = error instanceof Error ? error.message : "unknown_error";
     console.warn("Google sign-in failed", detail);
     const errorCode = detail.startsWith("token_exchange_failed") ? "google_token_exchange_failed" : detail === "invalid_identity_token" || detail === "identity_linked_elsewhere" ? detail : "sign_in_failed";
-    return Response.redirect(`${origin}/settings?auth_error=${errorCode}`, 303);
+    return preventSharedCaching(Response.redirect(`${origin}/settings?auth_error=${errorCode}`, 303));
   }
 }

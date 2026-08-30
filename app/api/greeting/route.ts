@@ -1,6 +1,7 @@
 import { readTree } from "../../../db/store";
 import { requireVisitor } from "../../authz";
 import { familyFactoids, greetingFact } from "../../../lib/family-facts";
+import { archiveCacheHeaders, preventSharedCaching } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -11,7 +12,7 @@ export const runtime = "edge";
  * as chores rather than as anything the family would want to know. */
 export async function GET() {
   const auth = await requireVisitor();
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) return preventSharedCaching(auth.response);
   const tree = await readTree();
   const fact = greetingFact(tree);
 
@@ -22,6 +23,8 @@ export async function GET() {
   const rotated = pool.map((_, index) => pool[(index + day) % pool.length]);
   const factoids = rotated.slice(0, 3).map((candidate) => ({ text: candidate.text, ask: candidate.ask!, personId: candidate.personId ?? null }));
 
-  return Response.json({ fact: fact?.text ?? null, personId: fact?.personId ?? null, factoids },
-    { headers: { "cache-control": "private, max-age=300" } });
+  return Response.json(
+    { fact: fact?.text ?? null, personId: fact?.personId ?? null, factoids },
+    { headers: archiveCacheHeaders(auth.visibility, "public, max-age=300") },
+  );
 }

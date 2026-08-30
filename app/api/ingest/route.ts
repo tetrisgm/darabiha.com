@@ -11,6 +11,7 @@ import { reconcileProposals } from "../../../lib/agent-reconcile";
 import { conflictFromCall, proposalFromCall } from "../../../lib/agent-calls";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
 import type { ChangeProposal } from "../../../lib/types";
+import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -32,9 +33,9 @@ function proposalRank(proposal: ChangeProposal): number {
 
 export async function GET() {
   const auth = await requireEditor();
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) return preventSharedCaching(auth.response);
   const queue = await listDocumentQueue();
-  return Response.json({ queue, pending: queue.filter((item) => item.status === "pending").length });
+  return privateJsonResponse({ queue, pending: queue.filter((item) => item.status === "pending").length });
 }
 
 export async function POST() {

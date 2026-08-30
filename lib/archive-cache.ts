@@ -23,12 +23,23 @@ export function privateArchiveCacheHeaders(): Record<string, string> {
  * reuse it for a different visitor. */
 export function preventSharedCaching(response: Response): Response {
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(privateArchiveCacheHeaders())) {
-    headers.set(name, value);
-  }
+  headers.set("cache-control", "private, no-store, max-age=0");
+  const vary = (headers.get("vary") ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!vary.some((value) => value.toLowerCase() === "cookie")) vary.push("Cookie");
+  headers.set("vary", vary.join(", "));
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
     headers,
   });
+}
+
+/** JSON whose contents or authorization decision depends on the visitor's
+ * cookie. Keeping this construction in one place makes it harder for a new
+ * account endpoint to accidentally inherit framework or CDN caching. */
+export function privateJsonResponse(data: unknown, init?: ResponseInit): Response {
+  return preventSharedCaching(Response.json(data, init));
 }

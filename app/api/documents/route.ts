@@ -1,6 +1,7 @@
 import { listAttachments, queueDocument, saveAttachment } from "../../../db/store";
 import { requestExceedsUploadEnvelope, validateUploadBatch } from "../../../lib/upload-policy";
 import { requireEditor } from "../../authz";
+import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -8,8 +9,8 @@ export const runtime = "edge";
  * these are private source documents, not published material. */
 export async function GET() {
   const auth = await requireEditor();
-  if (!auth.ok) return auth.response;
-  return Response.json({ documents: await listAttachments() });
+  if (!auth.ok) return preventSharedCaching(auth.response);
+  return privateJsonResponse({ documents: await listAttachments() });
 }
 
 /** Sending the archive a document. It is stored and queued; reading it is

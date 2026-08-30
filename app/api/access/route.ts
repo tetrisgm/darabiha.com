@@ -1,6 +1,7 @@
 import { signToken } from "../../apple-auth";
 import { getSiteVisibility, accessPasswordDigest, shareToken } from "../../../db/store";
 import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, verifyAccessPassword } from "../../../lib/access";
+import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -15,18 +16,23 @@ function grantCookie(token: string) {
 }
 
 async function grant(): Promise<string> {
-  return grantCookie(await signToken({ access: true, exp: Math.floor(Date.now() / 1000) + ACCESS_TTL_SECONDS }));
+  return grantCookie(await signToken(
+    { access: true, exp: Math.floor(Date.now() / 1000) + ACCESS_TTL_SECONDS },
+    "archive-access",
+  ));
 }
 
 export async function POST(request: Request) {
-  if ((await getSiteVisibility()) !== "password") return Response.json({ error: "not_password_protected" }, { status: 400 });
+  if ((await getSiteVisibility(true)) !== "password") {
+    return privateJsonResponse({ error: "not_password_protected" }, { status: 400 });
+  }
   const body = await request.json().catch(() => null) as { password?: unknown } | null;
   const password = typeof body?.password === "string" ? body.password : "";
-  if (!password) return Response.json({ error: "password_required" }, { status: 400 });
+  if (!password) return privateJsonResponse({ error: "password_required" }, { status: 400 });
   if (!(await verifyAccessPassword(password, await accessPasswordDigest()))) {
-    return Response.json({ error: "wrong_password" }, { status: 401 });
+    return privateJsonResponse({ error: "wrong_password" }, { status: 401 });
   }
-  return Response.json({ ok: true }, { headers: { "set-cookie": await grant() } });
+  return privateJsonResponse({ ok: true }, { headers: { "set-cookie": await grant() } });
 }
 
 /** The private link: /api/access?key=… lets the holder in and sends them to
@@ -36,7 +42,7 @@ export async function GET(request: Request) {
   const key = new URL(request.url).searchParams.get("key") ?? "";
   const expected = await shareToken();
   if (!key || !expected || key !== expected) {
-    return new Response(null, { status: 302, headers: { location: "/" } });
+    return preventSharedCaching(new Response(null, { status: 302, headers: { location: "/" } }));
   }
-  return new Response(null, { status: 302, headers: { location: "/", "set-cookie": await grant() } });
+  return preventSharedCaching(new Response(null, { status: 302, headers: { location: "/", "set-cookie": await grant() } }));
 }

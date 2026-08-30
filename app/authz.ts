@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getAppleUser, verifyToken, type AppleUser } from "./apple-auth";
+import { getAppleUser, verifyArchiveAccessToken, type AppleUser } from "./apple-auth";
 import { getMemberRole, getSiteVisibility, type MemberRole, type SiteVisibility } from "../db/store";
 import { ACCESS_COOKIE } from "../lib/access";
 
@@ -44,7 +44,7 @@ export async function requireEditor(): Promise<
  * carries its own expiry. */
 export async function hasAccessPass(): Promise<boolean> {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
-  return Boolean(await verifyToken<{ access?: boolean }>(token));
+  return verifyArchiveAccessToken(token);
 }
 
 export type VisitorGate = "ok" | "sign-in" | "not-a-member" | "password";

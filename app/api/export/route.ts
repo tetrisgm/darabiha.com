@@ -1,6 +1,7 @@
 import { readTree } from "../../../db/store";
 import { requireEditor } from "../../authz";
 import { buildGedcom } from "../../../lib/gedcom";
+import { preventSharedCaching } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -8,14 +9,13 @@ export const runtime = "edge";
  * only: it is the whole archive in one file. */
 export async function GET() {
   const auth = await requireEditor();
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) return preventSharedCaching(auth.response);
   const tree = await readTree();
   const stamp = new Date().toISOString().slice(0, 10);
-  return new Response(buildGedcom(tree), {
+  return preventSharedCaching(new Response(buildGedcom(tree), {
     headers: {
       "content-type": "text/vnd.familysearch.gedcom; charset=utf-8",
       "content-disposition": `attachment; filename="darabiha-${stamp}.ged"`,
-      "cache-control": "no-store",
     },
-  });
+  }));
 }

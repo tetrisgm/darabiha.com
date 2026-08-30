@@ -1,6 +1,7 @@
 import { addComment, listComments, removeComment } from "../../../db/store";
 import { getViewerRole } from "../../authz";
 import { getAppleUser } from "../../apple-auth";
+import { privateJsonResponse } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -15,8 +16,8 @@ async function member() {
 
 export async function GET() {
   const who = await member();
-  if (!who) return Response.json({ error: "sign_in_required" }, { status: 401 });
-  return Response.json({ comments: await listComments(), me: who.user.email });
+  if (!who) return privateJsonResponse({ error: "sign_in_required" }, { status: 401 });
+  return privateJsonResponse({ comments: await listComments(), me: who.user.email });
 }
 
 export async function POST(request: Request) {

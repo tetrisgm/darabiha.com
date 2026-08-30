@@ -1,10 +1,11 @@
 import { answerQuestion, listOpenQuestions } from "../../../db/store";
 import { requireEditor } from "../../authz";
+import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 export async function GET() {
   const auth = await requireEditor();
-  if (!auth.ok) return auth.response;
-  return Response.json({ questions: await listOpenQuestions() });
+  if (!auth.ok) return preventSharedCaching(auth.response);
+  return privateJsonResponse({ questions: await listOpenQuestions() });
 }
 
 export async function POST(request: Request) {

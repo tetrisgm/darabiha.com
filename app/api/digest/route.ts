@@ -2,6 +2,7 @@ import { listChangeLog, listMembers, readTree } from "../../../db/store";
 import { requireAdmin, requireEditor } from "../../authz";
 import { buildDigest, digestHtml, digestText } from "../../../lib/digest";
 import { sendMail } from "../../../lib/smtp";
+import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -10,19 +11,19 @@ export const runtime = "edge";
  * pretends to deliver mail it cannot send. */
 export async function GET(request: Request) {
   const auth = await requireEditor();
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) return preventSharedCaching(auth.response);
   const url = new URL(request.url);
   const days = Math.min(90, Math.max(1, Number(url.searchParams.get("days") ?? 7)));
   const since = new Date(Date.now() - days * 86_400_000);
   const [tree, log] = await Promise.all([readTree(), listChangeLog(null, 300)]);
   const digest = buildDigest(tree, log.entries, since);
   if (url.searchParams.get("format") === "html") {
-    return new Response(digestHtml(digest), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    return preventSharedCaching(new Response(digestHtml(digest), { headers: { "content-type": "text/html; charset=utf-8" } }));
   }
   if (url.searchParams.get("format") === "text") {
-    return new Response(digestText(digest), { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
+    return preventSharedCaching(new Response(digestText(digest), { headers: { "content-type": "text/plain; charset=utf-8" } }));
   }
-  return Response.json(digest, { headers: { "cache-control": "no-store" } });
+  return privateJsonResponse(digest);
 }
 
 /** Send the digest. Admin only, and never automatic: a weekly schedule is the

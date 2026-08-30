@@ -6,8 +6,11 @@ export type AppleUser = {
   displayName: string;
 };
 
+export type SignedTokenPurpose = "session" | "archive-access" | "oauth-state";
+
 const SESSION_COOKIE = "darabiha_session";
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+let cachedHmacKey: { secret: string; key: Promise<CryptoKey> } | null = null;
 
 function secret() {
   return process.env.AUTH_SESSION_SECRET || "";
@@ -26,13 +29,20 @@ function fromBase64Url(value: string) {
 }
 
 async function hmac(value: string) {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret()),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
+  const currentSecret = secret();
+  if (!cachedHmacKey || cachedHmacKey.secret !== currentSecret) {
+    cachedHmacKey = {
+      secret: currentSecret,
+      key: crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(currentSecret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+      ),
+    };
+  }
+  const key = await cachedHmacKey.key;
   return toBase64Url(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value))));
 }
 
@@ -43,29 +53,61 @@ function safeEqual(left: string, right: string) {
   return difference === 0;
 }
 
-export async function signToken(payload: Record<string, unknown>) {
+export async function signToken(
+  payload: Record<string, unknown> & { exp: number },
+  purpose: SignedTokenPurpose,
+) {
   if (!secret()) throw new Error("AUTH_SESSION_SECRET is not configured.");
-  const encoded = toBase64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const encoded = toBase64Url(new TextEncoder().encode(JSON.stringify({ ...payload, purpose })));
   return `${encoded}.${await hmac(encoded)}`;
 }
 
-export async function verifyToken<T>(token: string | undefined): Promise<T | null> {
+async function verifiedClaims(token: string | undefined): Promise<Record<string, unknown> | null> {
   if (!secret() || !token) return null;
   const separator = token.lastIndexOf(".");
   if (separator < 1) return null;
   const encoded = token.slice(0, separator);
   if (!safeEqual(token.slice(separator + 1), await hmac(encoded))) return null;
   try {
-    const value = JSON.parse(new TextDecoder().decode(fromBase64Url(encoded))) as T & { exp?: number };
-    if (typeof value.exp !== "number" || Date.now() / 1000 > value.exp) return null;
-    return value;
+    const value = JSON.parse(new TextDecoder().decode(fromBase64Url(encoded))) as unknown;
+    if (!value || typeof value !== "object") return null;
+    const claims = value as Record<string, unknown>;
+    if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp) || Date.now() / 1000 > claims.exp) return null;
+    return claims;
   } catch {
     return null;
   }
 }
 
+export async function verifyToken<T>(
+  token: string | undefined,
+  expectedPurpose: SignedTokenPurpose,
+): Promise<T | null> {
+  const claims = await verifiedClaims(token);
+  return claims?.purpose === expectedPurpose ? claims as T : null;
+}
+
+const hasOnlyKeys = (value: Record<string, unknown>, allowed: readonly string[]) =>
+  Object.keys(value).every((key) => allowed.includes(key));
+
+const isUserClaims = (value: Record<string, unknown>) =>
+  typeof value.subject === "string"
+  && typeof value.email === "string"
+  && typeof value.displayName === "string";
+
+/** Old access cookies did not carry a purpose. Their exact two-field shape is
+ * still safe to honor: session and OAuth-state tokens cannot satisfy it. */
+export async function verifyArchiveAccessToken(token: string | undefined): Promise<boolean> {
+  const claims = await verifiedClaims(token);
+  if (!claims || claims.access !== true) return false;
+  if (claims.purpose === "archive-access") {
+    return hasOnlyKeys(claims, ["access", "exp", "purpose"]);
+  }
+  return claims.purpose === undefined && hasOnlyKeys(claims, ["access", "exp"]);
+}
+
 export async function createSession(user: AppleUser) {
-  return signToken({ ...user, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS });
+  return signToken({ ...user, exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS }, "session");
 }
 
 export function sessionCookie(value: string) {
@@ -78,7 +120,14 @@ export function clearSessionCookie() {
 
 export async function getAppleUser(): Promise<AppleUser | null> {
   const store = await cookies();
-  return verifyToken<AppleUser & { exp: number }>(store.get(SESSION_COOKIE)?.value);
+  const claims = await verifiedClaims(store.get(SESSION_COOKIE)?.value);
+  if (!claims || !isUserClaims(claims)) return null;
+  const current = claims.purpose === "session"
+    && hasOnlyKeys(claims, ["subject", "email", "displayName", "exp", "purpose"]);
+  const legacy = claims.purpose === undefined
+    && hasOnlyKeys(claims, ["subject", "email", "displayName", "exp"]);
+  if (!current && !legacy) return null;
+  return { subject: claims.subject as string, email: claims.email as string, displayName: claims.displayName as string };
 }
 
 export function appleSignInPath(returnTo = "/") {

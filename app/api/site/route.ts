@@ -4,6 +4,7 @@ import {
   setShareToken, setSiteVisibility, shareToken, type SiteVisibility,
 } from "../../../db/store";
 import { hashAccessPassword, newShareToken } from "../../../lib/access";
+import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 /** Who can see the archive, the family password, and the private link.
  *
@@ -23,8 +24,8 @@ async function state() {
 
 export async function GET() {
   const auth = await requireAdmin();
-  if (!auth.ok) return auth.response;
-  return Response.json(await state());
+  if (!auth.ok) return preventSharedCaching(auth.response);
+  return privateJsonResponse(await state());
 }
 
 export async function POST(request: Request) {

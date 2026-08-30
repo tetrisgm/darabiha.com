@@ -1,11 +1,12 @@
 import { getAppleUser } from "../../apple-auth";
 import { getViewerRole, requireAdmin } from "../../authz";
 import { linkIdentity, listMembers, removeMember, resolveMemberEmail, unlinkIdentity, upsertMember } from "../../../db/store";
+import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 export async function GET() {
   const auth = await requireAdmin();
-  if (!auth.ok) return auth.response;
-  return Response.json({ members: await listMembers() });
+  if (!auth.ok) return preventSharedCaching(auth.response);
+  return privateJsonResponse({ members: await listMembers() });
 }
 
 export async function POST(request: Request) {

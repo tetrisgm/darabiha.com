@@ -1,6 +1,7 @@
 import { getAppleUser } from "../../apple-auth";
 import { getViewerRole } from "../../authz";
 import { claimMemberPerson, getMemberPerson } from "../../../db/store";
+import { privateJsonResponse } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
 
@@ -14,8 +15,8 @@ export const runtime = "edge";
 
 export async function GET() {
   const user = await getAppleUser();
-  if (!user) return Response.json({ signedIn: false, personId: null });
-  return Response.json({ signedIn: true, personId: await getMemberPerson(user.email) });
+  if (!user) return privateJsonResponse({ signedIn: false, personId: null });
+  return privateJsonResponse({ signedIn: true, personId: await getMemberPerson(user.email) });
 }
 
 export async function POST(request: Request) {
