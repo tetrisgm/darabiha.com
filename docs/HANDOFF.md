@@ -109,13 +109,16 @@ index; member/admin invariants have read-then-write races; the story tool promis
 `original_body` but cannot accept it; `/api/agent` and `/api/ingest` duplicate and
 already drift in model/policy.
 
-### Bloat and performance findings not yet fixed
+### Resolved bloat finding
 
-- `@react-three/drei`, `@react-three/fiber`, `three`, and `@types/three` have no
-  source imports. They are obsolete install/CI bloat (tens of megabytes in
-  `node_modules`) and do not appear in the existing client manifest. Remove the
-  four direct dependencies together and verify lockfile, typecheck, lint, and
-  unit tests.
+- On 2026-08-30, `@react-three/drei`, `@react-three/fiber`, `three`, and
+  `@types/three` were removed after confirming that source, config, and tests
+  had no imports or runtime references. The cleanup removed 54 lockfile package
+  entries and 166,240 KiB from the installed `node_modules` tree; typecheck,
+  lint, and all 81 unit tests passed. The orphaned `.three-person-label` CSS
+  rules were removed with them.
+
+### Bloat and performance findings not yet fixed
 - `FamilyTreeApp` eagerly imports every archive view. `ArchiveViews` in turn
   eagerly imports `lib/world-map-paths.ts` (114,272 source bytes, about 40 KB
   gzip) even when Map is never opened. The existing `FamilyTreeApp` client chunk
