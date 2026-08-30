@@ -24,6 +24,12 @@ export const attachments = sqliteTable("attachments", {
   id: text("id").primaryKey(), objectKey: text("object_key").notNull(), filename: text("filename").notNull(),
   contentType: text("content_type").notNull(), size: integer("size").notNull(), createdBy: text("created_by").notNull(), createdAt: text("created_at").notNull(),
 });
+export const objectDeletionQueue = sqliteTable("object_deletion_queue", {
+  objectKey: text("object_key").primaryKey(), queuedAt: text("queued_at").notNull(),
+});
+export const questionAnswerClaims = sqliteTable("question_answer_claims", {
+  questionId: text("question_id").primaryKey(), claimedAt: text("claimed_at").notNull(),
+});
 export const storyAttachments = sqliteTable("story_attachments", { storyId: text("story_id").notNull(), attachmentId: text("attachment_id").notNull() },
   (table) => [uniqueIndex("idx_story_attachments_unique").on(table.storyId, table.attachmentId)]);
 export const changeLog = sqliteTable("change_log", {

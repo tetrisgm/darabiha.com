@@ -1,9 +1,13 @@
 import { env } from "cloudflare:workers";
 import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
 import { safeAttachmentContentType } from "../lib/attachment-types";
+import { isChangeProposal } from "../lib/change-proposal";
 import { runRecordChecks } from "../lib/record-checks";
+import { finalizeQueuedObjectDeletion, prepareAttachmentDeletion } from "./attachment-deletion";
 import { LEGACY_MEMBER_ROLE_MIGRATION_SQL, MEMBERS_PERSON_INDEX_SQL } from "./legacy-migrations";
+import { MutationInvariants } from "./mutation-invariants";
 import { preparePersonDeletion } from "./person-deletion";
+import { CLAIM_QUESTION_ANSWER_SQL, RUNTIME_INTEGRITY_SCHEMA } from "./runtime-integrity";
 import { createSingleFlightInitializer, ensureColumns } from "./schema-initialization";
 
 const schemaStatements = [
@@ -60,9 +64,13 @@ const schemaStatements = [
     result TEXT, created_at TEXT NOT NULL, processed_at TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_document_queue_status ON document_queue(status, created_at)`,
+  `CREATE TABLE IF NOT EXISTS object_deletion_queue (
+    object_key TEXT PRIMARY KEY, queued_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS site_settings (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
+  ...RUNTIME_INTEGRITY_SCHEMA,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -450,6 +458,41 @@ export async function listAttachments(): Promise<Attachment[]> {
   return result.results;
 }
 
+async function finalizeAttachmentObjectDeletion(objectKey: string): Promise<void> {
+  // The queue reserves a key against reuse until R2 confirms deletion. A
+  // surviving legacy metadata row means this was not the last reference and
+  // the physical object must remain.
+  const live = await env.DB.prepare("SELECT id FROM attachments WHERE object_key = ? LIMIT 1").bind(objectKey).first<{ id: string }>();
+  if (live) {
+    await env.DB.prepare("DELETE FROM object_deletion_queue WHERE object_key = ?").bind(objectKey).run();
+    return;
+  }
+  const queued = await env.DB.prepare("SELECT object_key FROM object_deletion_queue WHERE object_key = ?").bind(objectKey).first<{ object_key: string }>();
+  if (!queued) return;
+  await finalizeQueuedObjectDeletion(objectKey, {
+    deleteObject: (key) => env.FILES.delete(key),
+    clearQueuedObject: async (key) => {
+      await env.DB.prepare("DELETE FROM object_deletion_queue WHERE object_key = ?").bind(key).run();
+    },
+  });
+}
+
+async function retryPendingObjectDeletions(): Promise<void> {
+  const pending = await env.DB.prepare("SELECT object_key AS objectKey FROM object_deletion_queue ORDER BY queued_at LIMIT 10")
+    .all<{ objectKey: string }>();
+  for (const { objectKey } of pending.results) {
+    try {
+      await finalizeAttachmentObjectDeletion(objectKey);
+    } catch (error) {
+      console.error(JSON.stringify({
+        message: "attachment object deletion remains queued",
+        objectKey,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
+}
+
 function nullable(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -463,27 +506,53 @@ function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   };
 }
 
+async function readMutationInvariants(includeAttachments = false) {
+  // readTree already fans out to D1's six per-invocation connections, so the
+  // optional seventh query runs afterward rather than competing with it.
+  const tree = await readTree();
+  const attachmentRows = includeAttachments
+    ? await env.DB.prepare("SELECT id FROM attachments").all<{ id: string }>()
+    : { results: [] as { id: string }[] };
+  return new MutationInvariants(tree, attachmentRows.results.map(({ id }) => id));
+}
+
 export async function applyProposal(proposal: ChangeProposal, actorEmail: string): Promise<FamilyTree> {
+  if (!isChangeProposal(proposal)) throw new Error("Invalid change proposal.");
   await ensureSchema();
+  await retryPendingObjectDeletions();
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
-  let addedPersonId: string | null = null;
   let deletedObjectKey: string | null = null;
   if (proposal.kind === "add_person") {
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
-    const personId = crypto.randomUUID(); addedPersonId = personId;
+    const personId = crypto.randomUUID();
     statements.push(env.DB.prepare(`INSERT INTO people
       (id, display_name, gender, given_name, family_name, maiden_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, burial_place, residence, biography, photo_attachment_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(personId, person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate,
         person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.residence, person.biography, person.photoAttachmentId, now, now));
+    if (proposal.relationshipHints?.length) {
+      const invariants = await readMutationInvariants();
+      invariants.addPerson(personId);
+      for (const hint of proposal.relationshipHints) {
+        const relatedPersonId = invariants.personIdByUniqueName(hint.personName);
+        if (!relatedPersonId) continue;
+        const from = hint.relationshipType === "parent" ? relatedPersonId : personId;
+        const to = hint.relationshipType === "parent" ? personId : relatedPersonId;
+        invariants.addRelationship(from, to, hint.relationshipType);
+        statements.push(env.DB.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)")
+          .bind(crypto.randomUUID(), from, to, hint.relationshipType, now));
+      }
+    }
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
+    (await readMutationInvariants()).person(proposal.personId);
     statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, maiden_name = ?, birth_date = ?,
       death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, burial_place = ?, residence = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
       .bind(person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate, person.deathDate,
         person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.residence, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "delete_person") {
+    (await readMutationInvariants()).person(proposal.personId);
     statements.push(...preparePersonDeletion(env.DB, { personId: proposal.personId, actorEmail, deletedAt: now }));
   } else if (proposal.kind === "add_relationship") {
     const resolvePersonId = async (id: string, name?: string | null) => {
@@ -499,15 +568,19 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     };
     const fromPersonId = await resolvePersonId(proposal.fromPersonId, proposal.fromPersonName);
     const toPersonId = await resolvePersonId(proposal.toPersonId, proposal.toPersonName);
-    if (fromPersonId === toPersonId) throw new Error("A person cannot be related to themself.");
     if (!(["parent", "spouse"] as const).includes(proposal.relationshipType)) throw new Error("Unsupported relationship.");
-    statements.push(env.DB.prepare(`INSERT OR IGNORE INTO relationships
+    new MutationInvariants(await readTree()).addRelationship(fromPersonId, toPersonId, proposal.relationshipType);
+    statements.push(env.DB.prepare(`INSERT INTO relationships
       (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)`)
       .bind(crypto.randomUUID(), fromPersonId, toPersonId, proposal.relationshipType, now));
   } else if (proposal.kind === "delete_relationship") {
+    new MutationInvariants(await readTree()).relationship(proposal.relationshipId);
     statements.push(env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(proposal.relationshipId));
   } else if (proposal.kind === "add_story") {
     if (!proposal.title.trim() || !proposal.body.trim()) throw new Error("A story needs a title and text.");
+    const invariants = await readMutationInvariants(true);
+    invariants.storyPeople(proposal.personIds);
+    invariants.storyAttachments(proposal.attachmentIds);
     const storyId = crypto.randomUUID();
     statements.push(env.DB.prepare(`INSERT INTO stories (id, title, body, date, place, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .bind(storyId, proposal.title.trim(), proposal.body.trim(), nullable(proposal.date), nullable(proposal.place), now));
@@ -515,6 +588,10 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     for (const attachmentId of proposal.attachmentIds) statements.push(env.DB.prepare(`INSERT OR IGNORE INTO story_attachments (story_id, attachment_id) VALUES (?, ?)`).bind(storyId, attachmentId));
   } else if (proposal.kind === "update_story") {
     if (!proposal.title.trim() || !proposal.body.trim()) throw new Error("A story needs a title and text.");
+    const invariants = await readMutationInvariants(true);
+    invariants.story(proposal.storyId);
+    invariants.storyPeople(proposal.personIds);
+    invariants.storyAttachments(proposal.attachmentIds);
     statements.push(
       env.DB.prepare("UPDATE stories SET title = ?, body = ?, date = ?, place = ? WHERE id = ?").bind(proposal.title.trim(), proposal.body.trim(), nullable(proposal.date), nullable(proposal.place), proposal.storyId),
       env.DB.prepare("DELETE FROM story_people WHERE story_id = ?").bind(proposal.storyId),
@@ -523,6 +600,7 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     for (const personId of proposal.personIds) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)").bind(proposal.storyId, personId));
     for (const attachmentId of proposal.attachmentIds) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_attachments (story_id, attachment_id) VALUES (?, ?)").bind(proposal.storyId, attachmentId));
   } else if (proposal.kind === "delete_story") {
+    new MutationInvariants(await readTree()).story(proposal.storyId);
     statements.push(
       env.DB.prepare("DELETE FROM story_people WHERE story_id = ?").bind(proposal.storyId),
       env.DB.prepare("DELETE FROM story_attachments WHERE story_id = ?").bind(proposal.storyId),
@@ -532,27 +610,31 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     const attachment = await env.DB.prepare("SELECT object_key AS objectKey FROM attachments WHERE id = ?").bind(proposal.attachmentId).first<{ objectKey: string }>();
     if (!attachment) throw new Error("That attachment no longer exists.");
     deletedObjectKey = attachment.objectKey;
-    statements.push(
-      env.DB.prepare("UPDATE people SET photo_attachment_id = NULL, updated_at = ? WHERE photo_attachment_id = ?").bind(now, proposal.attachmentId),
-      env.DB.prepare("DELETE FROM story_attachments WHERE attachment_id = ?").bind(proposal.attachmentId),
-      env.DB.prepare("DELETE FROM attachments WHERE id = ?").bind(proposal.attachmentId),
-    );
+    statements.push(...prepareAttachmentDeletion(env.DB, {
+      attachmentId: proposal.attachmentId,
+      objectKey: attachment.objectKey,
+      deletedAt: now,
+    }));
   }
   statements.push(env.DB.prepare(`INSERT INTO change_log
     (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(crypto.randomUUID(), actorEmail, proposal.kind, proposal.summary, JSON.stringify(proposal), now));
-    await env.DB.batch(statements);
-    if (deletedObjectKey) await env.FILES.delete(deletedObjectKey);
-    if (proposal.kind === "add_person" && proposal.relationshipHints?.length) {
-      for (const hint of proposal.relationshipHints) {
-        const related = await env.DB.prepare("SELECT id FROM people WHERE lower(display_name) = lower(?) LIMIT 1").bind(hint.personName.trim()).first<{ id: string }>();
-        if (related && addedPersonId && related.id !== addedPersonId) {
-          const from = hint.relationshipType === "parent" ? related.id : addedPersonId;
-          const to = hint.relationshipType === "parent" ? addedPersonId : related.id;
-          await env.DB.prepare("INSERT OR IGNORE INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)").bind(crypto.randomUUID(), from, to, hint.relationshipType, now).run();
-        }
-      }
+  await env.DB.batch(statements);
+  treeJsonCache = null;
+  if (deletedObjectKey) {
+    try {
+      await finalizeAttachmentObjectDeletion(deletedObjectKey);
+    } catch (error) {
+      // D1 no longer exposes the attachment and retains the object key for a
+      // later retry. The logical delete is complete even if physical cleanup
+      // is temporarily unavailable.
+      console.error(JSON.stringify({
+        message: "attachment object deletion queued after immediate cleanup failed",
+        objectKey: deletedObjectKey,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
+  }
   return readTree();
 }
 
@@ -569,6 +651,7 @@ export async function addRelationship(fromPersonId: string, toPersonId: string, 
 
 export async function setRelationshipStatus(relationshipId: string, status: string | null, actorEmail: string) {
   await ensureSchema();
+  new MutationInvariants(await readTree()).relationship(relationshipId, "spouse");
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("UPDATE relationships SET status = ? WHERE id = ? AND type = 'spouse'").bind(status, relationshipId),
@@ -579,6 +662,7 @@ export async function setRelationshipStatus(relationshipId: string, status: stri
 }
 
 export async function removeRelationship(relationshipId: string, actorEmail: string) {
+  new MutationInvariants(await readTree()).relationship(relationshipId);
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(relationshipId),
@@ -612,6 +696,7 @@ export async function removePersonPhoto(personId: string, actorEmail: string) {
 
 export async function removePerson(personId: string, actorEmail: string) {
   await ensureSchema();
+  (await readMutationInvariants()).person(personId);
   const now = new Date().toISOString();
   await env.DB.batch([
     ...preparePersonDeletion(env.DB, { personId, actorEmail, deletedAt: now }),
@@ -641,8 +726,8 @@ type QuestionAction =
  *
  * An upload should not have to be watched. A file goes to R2 and a row goes
  * here; something drains the queue afterwards and the reader can close the
- * tab. Rows are never deleted - what was read, and what came of it, is part
- * of the archive's record of itself. */
+ * tab. Rows survive processing as part of the archive's record; explicitly
+ * deleting their attachment removes the unusable queue reference too. */
 
 export type QueuedDocument = {
   id: string; attachmentId: string; filename: string; uploadedBy: string;
@@ -788,18 +873,24 @@ export async function answerQuestion(id: string, verdict: "confirm" | "deny", no
   if (!row) throw new Error("question_not_found");
   if (row.status !== "open") throw new Error("question_already_answered");
   const now = new Date().toISOString();
-  const statements: D1PreparedStatement[] = [];
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare(CLAIM_QUESTION_ANSWER_SQL).bind(id, now),
+  ];
   const applied: string[] = [];
   if (verdict === "confirm" && row.proposalJson) {
     const actions = (JSON.parse(row.proposalJson).actions ?? []) as QuestionAction[];
+    const invariants = new MutationInvariants(await readTree());
     for (const action of actions) {
       if (action.type === "add_parent") {
-        statements.push(env.DB.prepare("INSERT OR IGNORE INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, 'parent', ?)")
+        invariants.addRelationship(action.parentId, action.childId, "parent");
+        statements.push(env.DB.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, 'parent', ?)")
           .bind(crypto.randomUUID(), action.parentId, action.childId, now));
         applied.push("parent link added");
       } else if (action.type === "append_biography") {
+        invariants.person(action.personId);
         const person = await env.DB.prepare("SELECT biography FROM people WHERE id = ?").bind(action.personId).first<{ biography: string | null }>();
-        const current = person?.biography?.trim() ?? "";
+        if (!person) throw new Error("That person is no longer in the tree.");
+        const current = person.biography?.trim() ?? "";
         if (!current.includes(action.text.slice(0, 40))) {
           const next = current ? `${current}${current.endsWith(".") ? "" : "."} ${action.text}` : action.text;
           statements.push(env.DB.prepare("UPDATE people SET biography = ?, updated_at = ? WHERE id = ?").bind(next, now, action.personId));
@@ -809,6 +900,8 @@ export async function answerQuestion(id: string, verdict: "confirm" | "deny", no
         const name = note?.trim();
         if (!name) throw new Error("answer_name_required");
         const personId = crypto.randomUUID();
+        invariants.addPerson(personId);
+        invariants.addRelationship(action.ofId, personId, "spouse");
         statements.push(env.DB.prepare("INSERT INTO people (id, display_name, gender, biography, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
           .bind(personId, name, action.gender, action.biography, now, now));
         statements.push(env.DB.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, 'spouse', ?)")
