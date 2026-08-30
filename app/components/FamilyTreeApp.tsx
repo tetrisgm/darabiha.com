@@ -459,7 +459,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                 {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => openPerson(person)} onPreview={setHoverPreview} meId={identity} />}
                 {viewMode === "fill" && viewer.canEdit && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
                 {viewMode === "timeline" && <TimelineView tree={tree} meId={identity} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
-                {viewMode === "calendar" && treeLoaded && <CalendarView tree={tree} meId={identity} onSelect={(person) => openPerson(person)} />}
+                {viewMode === "calendar" && treeLoaded && <CalendarView tree={tree} onSelect={(person) => openPerson(person)} />}
                 {viewMode === "stats" && treeLoaded && <StatisticsView tree={tree} onSelect={(person) => openPerson(person)} />}
                 {viewMode === "map" && <WorldMapView tree={tree} onPreviewPlace={setHoverPlace} onSelectPlace={(place) => { setHoverPlace(null); setPlaceFocus(place); setSelectedPerson(null); setHighlightedIds(place.people.map((person) => person.id)); }} />}
               </Suspense>

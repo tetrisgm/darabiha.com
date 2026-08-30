@@ -268,7 +268,7 @@ function useScrollIntoView(id: string | null | undefined) {
   };
 }
 
-export function CalendarView({ tree, onSelect, meId }: { tree: FamilyTree; onSelect: (person: Person) => void; meId?: string | null }) {
+export function CalendarView({ tree, onSelect }: { tree: FamilyTree; onSelect: (person: Person) => void }) {
   const { t } = useLanguage();
   const today = new Date();
   const dayOf = (value: string | null) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) ? String(value).slice(5) : null;
