@@ -48,10 +48,18 @@ export function reconcileProposals(tree: FamilyTree, proposals: ChangeProposal[]
   const accepted: ChangeProposal[] = [];
   const conflicts: AgentConflict[] = [];
   const pendingAdds = new Map<string, { index: number; proposal: AddPersonProposal }>();
+  const peopleByName = new Map<string, Person[]>();
+  for (const person of tree.people) {
+    const name = normalizedName(person.displayName);
+    if (!name) continue;
+    const matches = peopleByName.get(name);
+    if (matches) matches.push(person);
+    else peopleByName.set(name, [person]);
+  }
   for (const proposal of proposals) {
     if (proposal.kind !== "add_person") { accepted.push(proposal); continue; }
     const name = normalizedName(proposal.person.displayName);
-    const matches = name ? tree.people.filter((person) => normalizedName(person.displayName) === name) : [];
+    const matches = name ? peopleByName.get(name) ?? [] : [];
     if (!matches.length) {
       if (!name) {
         accepted.push(proposal);
