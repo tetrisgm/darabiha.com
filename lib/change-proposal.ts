@@ -8,8 +8,11 @@ const MAX_LOCATION = 500;
 const MAX_BIOGRAPHY = 50_000;
 const MAX_STORY_TITLE = 500;
 const MAX_STORY_BODY = 200_000;
-const MAX_LINKS = 512;
-const MAX_RELATIONSHIP_HINTS = 64;
+// Each link becomes its own D1 statement. Keep one proposal comfortably below
+// the invocation ceiling after validation reads, the audit row, and the final
+// tree refresh are included. Larger imports must be split into bounded work.
+const MAX_STORY_LINKS = 32;
+const MAX_RELATIONSHIP_HINTS = 16;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -65,7 +68,7 @@ function isNullableText(value: unknown, maximum: number): value is string | null
 }
 
 function isIdList(value: unknown): value is string[] {
-  return Array.isArray(value) && value.length <= MAX_LINKS && value.every(isId);
+  return Array.isArray(value) && value.every(isId);
 }
 
 function hasSummary(value: UnknownRecord): boolean {
@@ -80,7 +83,8 @@ function hasStoryFields(value: UnknownRecord): boolean {
     && Object.prototype.hasOwnProperty.call(value, "place")
     && isNullableText(value.place, MAX_LOCATION)
     && isIdList(value.personIds)
-    && isIdList(value.attachmentIds);
+    && isIdList(value.attachmentIds)
+    && value.personIds.length + value.attachmentIds.length <= MAX_STORY_LINKS;
 }
 
 /**

@@ -54,4 +54,11 @@ describe("change proposal validation", () => {
     expect(isChangeProposal({ kind: "add_story", summary: "Add", title: "Story", body: "x".repeat(200_001), date: null, place: null, personIds: [], attachmentIds: [] })).toBe(false);
     expect(isChangeProposal({ kind: "delete_story", summary: "x".repeat(501), storyId: "story-1" })).toBe(false);
   });
+
+  it("bounds mutation fan-out before it can exceed D1 invocation limits", () => {
+    const ids = Array.from({ length: 33 }, (_, index) => `person-${index}`);
+    expect(isChangeProposal({ kind: "add_story", summary: "Add", title: "Story", body: "Text", date: null, place: null, personIds: ids.slice(0, 16), attachmentIds: ids.slice(16, 32) })).toBe(true);
+    expect(isChangeProposal({ kind: "add_story", summary: "Add", title: "Story", body: "Text", date: null, place: null, personIds: ids, attachmentIds: [] })).toBe(false);
+    expect(isChangeProposal({ kind: "add_person", summary: "Add", person, relationshipHints: Array.from({ length: 17 }, () => ({ personName: "Relative", relationshipType: "parent" })) })).toBe(false);
+  });
 });
