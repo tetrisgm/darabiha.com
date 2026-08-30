@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampScale, zoomView } from "../app/components/FamilyTreeCanvas";
+import { clampScale, panView, zoomView } from "../app/components/FamilyTreeCanvas";
 
 describe("family canvas viewport math", () => {
   it("keeps zoom within usable bounds", () => {
@@ -14,5 +14,11 @@ describe("family canvas viewport math", () => {
     expect(after.scale).toBe(2);
     expect((cursor.x - after.x) / after.scale).toBe((cursor.x - before.x) / before.scale);
     expect((cursor.y - after.y) / after.scale).toBe((cursor.y - before.y) / before.scale);
+  });
+
+  it("derives a pan from the gesture-start camera without mutating it", () => {
+    const before = { x: 40, y: -20, scale: 1.25 };
+    expect(panView(before, { x: 75, y: -30 })).toEqual({ x: 115, y: -50, scale: 1.25 });
+    expect(before).toEqual({ x: 40, y: -20, scale: 1.25 });
   });
 });
