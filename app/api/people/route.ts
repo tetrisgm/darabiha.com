@@ -1,8 +1,8 @@
 import { requireEditor } from "../../authz";
 import { addRelationship, applyProposal, attachPersonPhoto, linkPersonPhoto, readTree, removePerson, removePersonPhoto, removeRelationship, setPersonPortrait, setRelationshipStatus, unlinkPersonPhoto, updatePerson } from "../../../db/store";
+import { isPublicRasterContentType, safeAttachmentContentType } from "../../../lib/attachment-types";
 
 export const runtime = "edge";
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 export async function POST(request: Request) {
@@ -14,10 +14,12 @@ export async function POST(request: Request) {
       const form = await request.formData();
       const personId = String(form.get("personId") ?? "");
       const file = form.get("photo");
-      if (!personId || !(file instanceof File) || !IMAGE_TYPES.has(file.type)) {
+      if (!personId || !(file instanceof File)) {
         return Response.json({ error: "invalid_photo" }, { status: 400 });
       }
       if (file.size > MAX_PHOTO_BYTES) return Response.json({ error: "photo_too_large" }, { status: 413 });
+      const contentType = safeAttachmentContentType(new Uint8Array(await file.slice(0, 16).arrayBuffer()), file.type);
+      if (!isPublicRasterContentType(contentType)) return Response.json({ error: "invalid_photo" }, { status: 400 });
       return Response.json({ ok: true, tree: await attachPersonPhoto(personId, file, auth.user.email) });
     }
     const body = await request.json() as Record<string, unknown>;
