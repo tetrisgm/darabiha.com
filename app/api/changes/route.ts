@@ -1,19 +1,17 @@
 import { requireEditor } from "../../authz";
 import { applyProposal } from "../../../db/store";
-import type { ChangeProposal } from "../../../lib/types";
-
-const allowedKinds = new Set(["add_person", "update_person", "delete_person", "add_relationship", "delete_relationship", "add_story", "update_story", "delete_story", "delete_attachment"]);
+import { isChangeProposal } from "../../../lib/change-proposal";
 
 export async function POST(request: Request) {
   const auth = await requireEditor();
   if (!auth.ok) return auth.response;
-  let proposal: ChangeProposal;
+  let proposal: unknown;
   try {
-    proposal = (await request.json()) as ChangeProposal;
+    proposal = await request.json();
   } catch {
     return Response.json({ error: "invalid_json" }, { status: 400 });
   }
-  if (!proposal || !allowedKinds.has(proposal.kind) || typeof proposal.summary !== "string") {
+  if (!isChangeProposal(proposal)) {
     return Response.json({ error: "invalid_proposal" }, { status: 400 });
   }
   try {
