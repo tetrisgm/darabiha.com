@@ -1,5 +1,11 @@
 import type { FamilyTree, Person } from "./types";
 
+function appendMapValue<K, V>(map: Map<K, V[]>, key: K, value: V) {
+  const values = map.get(key);
+  if (values) values.push(value);
+  else map.set(key, [value]);
+}
+
 export function buildGenerations(tree: FamilyTree) {
   const depth = new Map(tree.people.map((person) => [person.id, 0]));
   const parentLinks = tree.relationships.filter((item) => item.type === "parent");
@@ -8,12 +14,15 @@ export function buildGenerations(tree: FamilyTree) {
   const childrenOfRootless = new Map<string, string[]>();
   for (const link of parentLinks) {
     if (!hasParent.has(link.fromPersonId)) {
-      childrenOfRootless.set(link.fromPersonId, [...(childrenOfRootless.get(link.fromPersonId) ?? []), link.toPersonId]);
+      appendMapValue(childrenOfRootless, link.fromPersonId, link.toPersonId);
     }
   }
   for (let pass = 0; pass < tree.people.length; pass += 1) {
+    let changed = false;
     for (const link of parentLinks) {
-      depth.set(link.toPersonId, Math.max(depth.get(link.toPersonId) ?? 0, (depth.get(link.fromPersonId) ?? 0) + 1));
+      const current = depth.get(link.toPersonId) ?? 0;
+      const next = Math.max(current, (depth.get(link.fromPersonId) ?? 0) + 1);
+      if (next !== current) { depth.set(link.toPersonId, next); changed = true; }
     }
     // Spouses share a row: the shallower partner moves down to the deeper
     // one (a married-in spouse leaves the top row, and a bride with a
@@ -21,20 +30,23 @@ export function buildGenerations(tree: FamilyTree) {
     for (const link of spouseLinks) {
       const a = link.fromPersonId, b = link.toPersonId;
       const shared = Math.max(depth.get(a) ?? 0, depth.get(b) ?? 0);
-      depth.set(a, shared);
-      depth.set(b, shared);
+      if ((depth.get(a) ?? 0) !== shared) { depth.set(a, shared); changed = true; }
+      if ((depth.get(b) ?? 0) !== shared) { depth.set(b, shared); changed = true; }
     }
     // An in-law parent with no recorded ancestry (a bride's father named in
     // the biography) sits one row above their shallowest child.
     for (const [parent, children] of childrenOfRootless) {
       const shallowest = Math.min(...children.map((child) => depth.get(child) ?? 0));
-      depth.set(parent, Math.max(depth.get(parent) ?? 0, shallowest - 1));
+      const current = depth.get(parent) ?? 0;
+      const next = Math.max(current, shallowest - 1);
+      if (next !== current) { depth.set(parent, next); changed = true; }
     }
+    if (!changed) break;
   }
   const groups = new Map<number, Person[]>();
   tree.people.forEach((person) => {
     const level = depth.get(person.id) ?? 0;
-    groups.set(level, [...(groups.get(level) ?? []), person]);
+    appendMapValue(groups, level, person);
   });
   return { depth, groups };
 }
@@ -67,9 +79,13 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
   const lineage = new Map(tree.people.map((person) => [person.id, 0]));
   const parentEdges = tree.relationships.filter((item) => item.type === "parent");
   for (let pass = 0; pass < tree.people.length; pass += 1) {
+    let changed = false;
     for (const link of parentEdges) {
-      lineage.set(link.toPersonId, Math.max(lineage.get(link.toPersonId) ?? 0, (lineage.get(link.fromPersonId) ?? 0) + 1));
+      const current = lineage.get(link.toPersonId) ?? 0;
+      const next = Math.max(current, (lineage.get(link.fromPersonId) ?? 0) + 1);
+      if (next !== current) { lineage.set(link.toPersonId, next); changed = true; }
     }
+    if (!changed) break;
   }
   const byId = new Map(tree.people.map((person) => [person.id, person]));
   const parentsOf = new Map<string, string[]>();
@@ -77,11 +93,11 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
   const spousesOf = new Map<string, string[]>();
   for (const link of tree.relationships) {
     if (link.type === "parent") {
-      parentsOf.set(link.toPersonId, [...(parentsOf.get(link.toPersonId) ?? []), link.fromPersonId]);
-      childrenOf.set(link.fromPersonId, [...(childrenOf.get(link.fromPersonId) ?? []), link.toPersonId]);
+      appendMapValue(parentsOf, link.toPersonId, link.fromPersonId);
+      appendMapValue(childrenOf, link.fromPersonId, link.toPersonId);
     } else {
-      spousesOf.set(link.fromPersonId, [...(spousesOf.get(link.fromPersonId) ?? []), link.toPersonId]);
-      spousesOf.set(link.toPersonId, [...(spousesOf.get(link.toPersonId) ?? []), link.fromPersonId]);
+      appendMapValue(spousesOf, link.fromPersonId, link.toPersonId);
+      appendMapValue(spousesOf, link.toPersonId, link.fromPersonId);
     }
   }
   // two people who share a child stand together even without a recorded
@@ -90,8 +106,8 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
     if (parents.length !== 2) continue;
     const [a, b] = parents;
     if (!(spousesOf.get(a) ?? []).includes(b)) {
-      spousesOf.set(a, [...(spousesOf.get(a) ?? []), b]);
-      spousesOf.set(b, [...(spousesOf.get(b) ?? []), a]);
+      appendMapValue(spousesOf, a, b);
+      appendMapValue(spousesOf, b, a);
     }
   }
   const hasParents = (id: string) => (parentsOf.get(id)?.length ?? 0) > 0;
@@ -177,7 +193,7 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
   const attachedOf = new Map<string, string[]>();
   for (const [loser] of attachedTo) {
     const owner = attachRoot(loser);
-    attachedOf.set(owner, [...(attachedOf.get(owner) ?? []), loser]);
+    appendMapValue(attachedOf, owner, loser);
   }
   const memberRow = (owner: string) => {
     const attached = [...(attachedOf.get(owner) ?? [])];
@@ -283,11 +299,11 @@ export function buildRelationMaps(tree: FamilyTree): RelationMaps {
   const spouseStatus = new Map<string, string | null>();
   for (const link of tree.relationships) {
     if (link.type === "parent") {
-      parentsOf.set(link.toPersonId, [...(parentsOf.get(link.toPersonId) ?? []), link.fromPersonId]);
-      childrenOf.set(link.fromPersonId, [...(childrenOf.get(link.fromPersonId) ?? []), link.toPersonId]);
+      appendMapValue(parentsOf, link.toPersonId, link.fromPersonId);
+      appendMapValue(childrenOf, link.fromPersonId, link.toPersonId);
     } else {
-      spousesOf.set(link.fromPersonId, [...(spousesOf.get(link.fromPersonId) ?? []), link.toPersonId]);
-      spousesOf.set(link.toPersonId, [...(spousesOf.get(link.toPersonId) ?? []), link.fromPersonId]);
+      appendMapValue(spousesOf, link.fromPersonId, link.toPersonId);
+      appendMapValue(spousesOf, link.toPersonId, link.fromPersonId);
       spouseStatus.set([link.fromPersonId, link.toPersonId].sort().join("|"), link.status ?? null);
     }
   }
