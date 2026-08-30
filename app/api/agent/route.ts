@@ -5,7 +5,7 @@ import { requireEditor } from "../../authz";
 import { cookies } from "next/headers";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
 import { listAttachments, readTree, recordAgentQuestions, saveAttachment } from "../../../db/store";
-import { extractArchiveEntries } from "../../../lib/archive-import";
+import { extractArchive } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
 import { describeRelationship, relationshipSentence } from "../../../lib/relationship-path";
@@ -81,26 +81,39 @@ export async function POST(request: Request) {
   for (const file of files) {
     if (file.name.toLowerCase().endsWith(".zip")) {
       try {
-        const entries = extractArchiveEntries(new Uint8Array(await file.arrayBuffer()), { entryBytes: MAX_ARCHIVE_ENTRY_BYTES, totalBytes: MAX_ARCHIVE_EXTRACTED_BYTES, entries: 500 });
+        const report = extractArchive(new Uint8Array(await file.arrayBuffer()), { entryBytes: MAX_ARCHIVE_ENTRY_BYTES, totalBytes: MAX_ARCHIVE_EXTRACTED_BYTES, entries: 500 });
         let textChars = 0;
         let imageCount = 0;
-        for (const { path, bytes, kind } of entries) {
+        let omittedTextEntries = 0;
+        let omittedImageEntries = 0;
+        for (const entry of report.entries) {
+          const { path, bytes, kind } = entry;
           if (kind === "text") {
             const remaining = MAX_ARCHIVE_TEXT_CHARS - textChars;
-            if (remaining <= 0) continue;
-            const extracted = strFromU8(bytes).slice(0, Math.min(120_000, remaining));
+            if (remaining <= 0) { omittedTextEntries += 1; continue; }
+            const decoded = strFromU8(bytes);
+            const allowed = Math.min(120_000, remaining);
+            const extracted = decoded.slice(0, allowed);
+            if (decoded.length > allowed) omittedTextEntries += 1;
             textChars += extracted.length;
             content.push({ type: "input_text", text: `Extracted from ${file.name}/${path}:\n${extracted}` });
           } else {
-            if (imageCount >= MAX_ARCHIVE_IMAGES) continue;
+            if (imageCount >= MAX_ARCHIVE_IMAGES) { omittedImageEntries += 1; continue; }
             imageCount += 1;
-            const extension = path.split(".").pop()?.toLowerCase();
-            const mime = extension === "jpg" || extension === "jpeg" ? "image/jpeg" : `image/${extension}`;
+            const mime = entry.contentType;
             const embedded = await saveAttachment(new File([bytes as unknown as BlobPart], path, { type: mime }), auth.user.email);
             stored.push(embedded);
             content.push({ type: "input_text", text: `Embedded image ${file.name}/${path} was preserved as attachment ID ${embedded.id}. Use that ID as a portrait only if the archive explicitly links this image to a person.` });
             content.push({ type: "input_image", image_url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`, detail: "high" });
           }
+        }
+        if (report.skippedTotal || omittedTextEntries || omittedImageEntries) {
+          const reasons = Object.entries(report.skippedCounts).map(([reason, count]) => `${count} ${reason.replaceAll("_", " ")}`).join(", ");
+          const incomplete = report.truncated || omittedTextEntries > 0 || omittedImageEntries > 0;
+          content.push({
+            type: "input_text",
+            text: `Archive processing note for ${file.name}: ${report.entries.length} supported entries were selected; ${report.skippedTotal} entries were ignored${reasons ? ` (${reasons})` : ""}; ${omittedTextEntries} selected text entries and ${omittedImageEntries} selected images could not fit in this request.${incomplete ? " This request did not examine every supported archive resource, so do not describe it as a complete import." : " All supported archive resources fit in this request."}`,
+          });
         }
       } catch { content.push({ type: "input_text", text: `The uploaded ZIP ${file.name} could not be unpacked; use its filename as evidence only.` }); }
       continue;
