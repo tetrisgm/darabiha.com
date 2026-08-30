@@ -5,26 +5,7 @@ import type { FamilyTree, OpenQuestion, Person } from "../../lib/types";
 import { buildGenerations, buildRelationMaps, hiddenRelativeCount } from "../../lib/tree-layout";
 import { familyGenerations, lifeStatus } from "../../lib/life-status";
 import { useLanguage } from "./LanguageContext";
-
-function years(person: Person | undefined) {
-  if (!person) return "";
-  const b = person.birthDate?.slice(0, 4);
-  const d = person.deathDate?.slice(0, 4);
-  if (b && d) return `${b}–${d}`;
-  if (b) return `b. ${b}`;
-  if (d) return `d. ${d}`;
-  return "";
-}
-
-/** Ancestry-style pedigree around a focal person: children stacked on the
- * left, the focal couple in the middle, parents and grandparents branching
- * to the right, with measured connector lines, gendered silhouettes, ghost
- * "add parent" slots, and a click popover offering Tree here / Profile. */
-export function Silhouette({ gender }: { gender: Person["gender"] }) {
-  return <span className={`ped-portrait ped-${gender ?? "unknown"}`} aria-hidden="true">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" /></svg>
-  </span>;
-}
+import { personYears, Silhouette } from "./TreePrimitives";
 
 /** Safari on macOS will not reliably draw native hand/grab cursors over
  * these cards (the documented pathology in docs/HANDOFF.md), so the stage
@@ -37,6 +18,10 @@ function PedCursor({ mode, cursorRef }: { mode: "grab" | "grabbing" | "pointer";
   </span>;
 }
 
+/** Ancestry-style pedigree around a focal person: children stacked on the
+ * left, the focal couple in the middle, parents and grandparents branching
+ * to the right, with measured connector lines, gendered silhouettes, ghost
+ * "add parent" slots, and a click popover offering Tree here / Profile. */
 export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnly, onPreview, onBack, onForward, canBack, canForward, onOpen }: { tree: FamilyTree; focusId: string; selectedId?: string | null; onPick: (person: Person) => void; onSelectOnly: (person: Person) => void; onPreview: (person: Person | null) => void; onBack?: () => void; onForward?: () => void; canBack?: boolean; canForward?: boolean; onOpen: (person: Person) => void }) {
   const { t } = useLanguage();
   const maps = useMemo(() => buildRelationMaps(tree), [tree]);
@@ -342,7 +327,7 @@ export function FocusFamilyView({ tree, focusId, selectedId, onPick, onSelectOnl
     onPick(person);
   };
   const card = (person: Person, key: string, subtitle?: string) => {
-    const meta = [years(person), subtitle].filter(Boolean).join(" · ");
+    const meta = [personYears(person), subtitle].filter(Boolean).join(" · ");
     // Only the person already at the centre keeps the layout - the tree is
     // already theirs, so a click just moves the selection. Everyone else,
     // spouses included, becomes the new centre: clicking a wife should show
@@ -502,10 +487,10 @@ export function OutlineView({ tree, onSelect, onPreview, meId }: { tree: FamilyT
       <button type="button" className="outline-name" onClick={() => onSelect(person)}
         onMouseEnter={() => onPreview?.(person)} onMouseLeave={() => onPreview?.(null)}
         onFocus={() => onPreview?.(person)} onBlur={() => onPreview?.(null)}>{person.displayName}</button>
-      {years(person) && <span className="outline-years">{years(person)}</span>}
+      {personYears(person) && <span className="outline-years">{personYears(person)}</span>}
       {spouses.map((spouse) => <span className="outline-spouse" key={spouse.id}>⚭ <button type="button" onClick={() => onSelect(spouse)}
         onMouseEnter={() => onPreview?.(spouse)} onMouseLeave={() => onPreview?.(null)}
-        onFocus={() => onPreview?.(spouse)} onBlur={() => onPreview?.(null)}>{spouse.displayName}</button>{years(spouse) ? ` ${years(spouse)}` : ""}</span>)}
+        onFocus={() => onPreview?.(spouse)} onBlur={() => onPreview?.(null)}>{spouse.displayName}</button>{personYears(spouse) ? ` ${personYears(spouse)}` : ""}</span>)}
     </span>;
     if (!kids.length) return <div className="outline-leaf" key={person.id}>{line}</div>;
     return <details key={person.id} open>
@@ -517,49 +502,6 @@ export function OutlineView({ tree, onSelect, onPreview, meId }: { tree: FamilyT
   return <section className="outline-view" aria-label="Family list">
     {roots.map((root) => renderPerson(root, 0, seen))}
   </section>;
-}
-
-/** Type-ahead person search shared by every view. */
-export function TreeSearch({ tree, onPick }: { tree: FamilyTree; onPick: (person: Person) => void }) {
-  const { t } = useLanguage();
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const matches = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    if (!needle) return [];
-    return tree.people
-      .filter((person) => person.displayName.toLocaleLowerCase().includes(needle))
-      .sort((a, b) => {
-        const aStarts = a.displayName.toLocaleLowerCase().startsWith(needle) ? 0 : 1;
-        const bStarts = b.displayName.toLocaleLowerCase().startsWith(needle) ? 0 : 1;
-        return aStarts - bStarts || a.displayName.localeCompare(b.displayName);
-      })
-      .slice(0, 8);
-  }, [tree, query]);
-  const pick = (person: Person) => {
-    setQuery("");
-    setOpen(false);
-    onPick(person);
-  };
-  return <div className="tree-search" ref={boxRef}>
-    <input
-      type="search"
-      placeholder={t("nav.search")}
-      value={query}
-      autoComplete="off"
-      aria-label={t("nav.search")}
-      onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setTimeout(() => setOpen(false), 150)}
-      onKeyDown={(event) => { if (event.key === "Enter" && matches[0]) pick(matches[0]); if (event.key === "Escape") { setQuery(""); setOpen(false); } }}
-    />
-    {open && matches.length > 0 && <div className="tree-search-results">
-      {matches.map((person) => <button type="button" key={person.id} onMouseDown={(event) => event.preventDefault()} onClick={() => pick(person)}>
-        <strong>{person.displayName}</strong><span>{years(person) || "dates unknown"}</span>
-      </button>)}
-    </div>}
-  </div>;
 }
 
 /** Every incomplete record as a browsable, searchable list of cards; click

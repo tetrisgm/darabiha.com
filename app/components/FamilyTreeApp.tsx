@@ -6,7 +6,7 @@ import { relatedPeople } from "../../lib/relationships";
 import IdentifyMe from "./IdentifyMe";
 import { familyGenerations, lifeStatus } from "../../lib/life-status";
 import type { MappedPlace } from "../../lib/archive-views";
-import { FocusFamilyView, MissingDataView, OutlineView, Silhouette, TreeSearch } from "./TreeViews";
+import { Silhouette, TreeSearch } from "./TreePrimitives";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { Markdown } from "./Markdown";
 import { useLanguage } from "./LanguageContext";
@@ -18,6 +18,9 @@ const TimelineView = lazy(() => import("./ArchiveViews").then((module) => ({ def
 const CalendarView = lazy(() => import("./ArchiveViews").then((module) => ({ default: module.CalendarView })));
 const WorldMapView = lazy(() => import("./ArchiveViews").then((module) => ({ default: module.WorldMapView })));
 const StatisticsView = lazy(() => import("./ArchiveViews").then((module) => ({ default: module.StatisticsView })));
+const FocusFamilyView = lazy(() => import("./TreeViews").then((module) => ({ default: module.FocusFamilyView })));
+const OutlineView = lazy(() => import("./TreeViews").then((module) => ({ default: module.OutlineView })));
+const MissingDataView = lazy(() => import("./TreeViews").then((module) => ({ default: module.MissingDataView })));
 
 type Props = {
   initialTree: FamilyTree | null;
@@ -458,11 +461,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
 
             <div className="relative h-full min-h-0 overflow-hidden stage-bg">
               {viewMode !== "timeline" && viewMode !== "map" && !treeLoaded && <div className="family-canvas" aria-busy="true" aria-label="Loading the family tree" />}
-              {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} selectedId={selectedPerson?.id ?? null} canBack canForward onBack={() => window.history.back()} onForward={() => window.history.forward()} onPick={(person) => openPerson(person)} onSelectOnly={(person) => openPerson(person, true, false)} onPreview={setHoverPreview} onOpen={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
-              {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => openPerson(person)} onPreview={setHoverPreview} meId={identity} />}
-              {viewMode === "fill" && viewer.canEdit && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
               {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
-              <Suspense fallback={<div className="family-canvas" aria-busy="true" aria-label="Loading archive view" />}>
+              <Suspense fallback={<div className="family-canvas" aria-busy="true" aria-label="Loading view" />}>
+                {viewMode === "family" && treeLoaded && (focal ? <FocusFamilyView tree={tree} focusId={focal.id} selectedId={selectedPerson?.id ?? null} canBack canForward onBack={() => window.history.back()} onForward={() => window.history.forward()} onPick={(person) => openPerson(person)} onSelectOnly={(person) => openPerson(person, true, false)} onPreview={setHoverPreview} onOpen={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
+                {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => openPerson(person)} onPreview={setHoverPreview} meId={identity} />}
+                {viewMode === "fill" && viewer.canEdit && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
                 {viewMode === "timeline" && <TimelineView tree={tree} meId={identity} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
                 {viewMode === "calendar" && treeLoaded && <CalendarView tree={tree} meId={identity} onSelect={(person) => openPerson(person)} />}
                 {viewMode === "stats" && treeLoaded && <StatisticsView tree={tree} onSelect={(person) => openPerson(person)} />}

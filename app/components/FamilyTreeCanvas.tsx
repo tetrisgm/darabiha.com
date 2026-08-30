@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildFamilyLayout } from "../../lib/tree-layout";
-import { Silhouette } from "./TreeViews";
+import { Silhouette } from "./TreePrimitives";
 
 const cardDateFormat = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 const noHighlightedIds: string[] = [];
