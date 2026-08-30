@@ -1,6 +1,6 @@
 # Darabiha handoff
 
-Last updated: 2026-08-27
+Last updated: 2026-08-30
 
 ## Read this first
 
@@ -11,6 +11,147 @@ Last updated: 2026-08-27
 - Sign-in lives on `/settings` (Apple + Google); the header's Sign in pill points there. Editors today: `nasserdarabiha@gmail.com`, `parissima.d@gmail.com`; admins: `ramine@ramine.net` with `leshokunin@gmail.com` linked.
 - Production exposes its uncached identity at `/api/version` and as visible version text at the lower-left edge.
 - **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
+
+## Continuation point: deep review paused for handoff (2026-08-30)
+
+The owner asked for a complete code, bloat, and performance review followed by
+small, regularly committed refactors. This review was deliberately stopped when
+the owner asked for this handoff. **No source change, refactor, commit, build, or
+deployment was made during the review.** `main` was clean and matched
+`origin/main` at `58bc1ff` when this section was written.
+
+Baseline checks on that exact checkout:
+
+- `npx tsc --noEmit`: passed.
+- `npm test`: 39 tests passed in 10 files.
+- `npm run lint`: passed with **11 warnings and no errors**, not the seven in the
+  older release snapshot below. Four are confirmed unused declarations
+  (`Person` in `app/api/agent/route.ts`, `meId` in `ArchiveViews.tsx`,
+  `useCallback` and `birthYear` in `FamilyTreeApp.tsx`); six are raw `<img>`
+  warnings; one is the canvas focus effect's dependency warning.
+- A build was intentionally not run because the owner asked not to spend time
+  building after every increment and no increment had yet been made.
+- The Chrome DevTools performance tracer was unavailable in this session. The
+  bundle/algorithm findings below are measured from source and the existing
+  `dist` manifest; **no new Core Web Vitals or real-browser runtime claim was
+  made**.
+
+The attached legacy archive is the already-audited source, not a new import:
+`/Users/shokunin/Downloads/Darabi_Family_Tree_RD.zip` is 11,665,604 bytes and
+has SHA-256
+`ed5e7b3ae3686670e5e536e1ee7949174cca197f15e7cfbafc978764268138ee`,
+matching the archive recorded under “Legacy archive reconstruction.” Do not
+blindly import it again; use the existing extractor, validator, report, and
+idempotent D1 merge pipeline described below.
+
+### Security and data-integrity findings not yet fixed
+
+These are static-review findings, not claims that an exploit was exercised.
+They should be handled before performance refactors:
+
+1. **Password-gated data is marked publicly cacheable.**
+   `app/api/tree/route.ts` and `app/api/photos/[id]/route.ts` use public cache
+   headers for every visibility except `members`, which includes the current
+   `password` mode. Only literal `public` visibility may be publicly cached;
+   password/member responses need private/no-store behavior and cache-policy
+   tests. Previously cached objects may also need an explicit purge when this
+   lands.
+2. **Arbitrary uploaded “images” can become same-origin active content.**
+   `app/api/documents/route.ts` accepts arbitrary files, `saveAttachment()`
+   trusts the client MIME type, and `/api/photos/:id` serves every `image/*`
+   inline. An SVG uploaded as `image/svg+xml` is therefore a stored-XSS path.
+   Published photographs need a byte-signature-checked JPEG/PNG/WebP allowlist;
+   other evidence must stay behind the editor route and download safely.
+3. **Upload caps exceed the Worker's memory budget by construction.**
+   `/api/agent` accepts 50 MB per file / 100 MB total, buffers multipart bodies,
+   buffers R2 writes, inflates ZIPs, and makes base64 copies. One 50 MB file can
+   become about 67 MB of base64 before tree JSON and SDK allocations. Lower the
+   immediate caps, add count and aggregate checks to both upload routes, process
+   sequentially/stream where possible, and add boundary tests.
+4. **Unattended ingestion has destructive full CRUD authority.**
+   `lib/archivist.ts` exposes deletes and replacement updates;
+   `lib/agent-reconcile.ts` passes every non-add proposal through; and
+   `/api/ingest` auto-applies the result with nobody present. Untrusted document
+   instructions or model error can delete records or erase fields. Limit
+   unattended work to safe additive/field-level candidates, quarantine deletes
+   and destructive conflicts for human review, and add adversarial-document
+   tests.
+5. **Failed proposal applications are lost.** `/api/ingest` catches each apply
+   failure, records nothing, and still marks the document `read`. Persist every
+   rejection, retry infrastructure failures, and do not mark a document read
+   until accepted work is durable.
+6. **Persian names normalize to the empty string.**
+   `lib/agent-reconcile.ts` removes every character outside `[a-z0-9]`, so
+   distinct Persian names collide. Preserve Unicode letters/numbers
+   (`\p{L}`/`\p{N}`) and cover Persian, mixed-script, and diacritic cases.
+7. **Runtime schema compatibility can lose `members.person_id`.**
+   `ensureSchema()` adds that column and index, then its legacy-role rebuild
+   creates `members_next` without the column and drops the original table. DDL
+   and `PRAGMA optimize` also run on the request path in each fresh isolate.
+   Replace this with versioned migrations that preserve all columns/indexes and
+   prove a fresh database plus every supported historical schema.
+8. **Mutation cascades drift.** Manual person deletion omits records handled by
+   proposal deletion; attachment deletion omits `person_photos` and the document
+   queue; some mutations log success without proving an affected row. Consolidate
+   mutation implementations, add foreign-key/cascade support where practical,
+   and make orphan-invariant tests authoritative.
+9. **Access grants are not revocable.** The 90-day access cookie contains only
+   `access` and `exp`, so password/private-link/visibility changes do not retire
+   redeemed grants. Add a stored access generation to grants and increment it on
+   every access-policy or secret change.
+10. **Public AI/password entry have no abuse controls; OAuth state is not bound
+    to the initiating browser.** Add rate/budget controls, repeated-failure
+    escalation, nonce/PKCE binding, and verified-email checks for Google.
+
+Also outstanding: ingestion rereads and serializes the full tree after every
+proposal; `change_log` pagination can skip equal timestamps and lacks its hot
+index; member/admin invariants have read-then-write races; the story tool promises
+`original_body` but cannot accept it; `/api/agent` and `/api/ingest` duplicate and
+already drift in model/policy.
+
+### Bloat and performance findings not yet fixed
+
+- `@react-three/drei`, `@react-three/fiber`, `three`, and `@types/three` have no
+  source imports. They are obsolete install/CI bloat (tens of megabytes in
+  `node_modules`) and do not appear in the existing client manifest. Remove the
+  four direct dependencies together and verify lockfile, typecheck, lint, and
+  unit tests.
+- `FamilyTreeApp` eagerly imports every archive view. `ArchiveViews` in turn
+  eagerly imports `lib/world-map-paths.ts` (114,272 source bytes, about 40 KB
+  gzip) even when Map is never opened. The existing `FamilyTreeApp` client chunk
+  is about 227 KB raw / 73 KB gzip. Lazy-load Map and its geometry first, then
+  the other rarely selected views, with a browser check for first-open behavior.
+- Pointer/wheel/animation-frame updates in `FamilyTreeCanvas`, `ArchiveViews`,
+  and `TreeViews` write React state at event rate and recreate full scenes.
+  Separate static/memoized scene data from an imperative rAF transform, then
+  commit state at gesture end/control clicks.
+- `FamilyTreeApp` owns chat, sidebar, resize, selection, and every archive view;
+  chat resize rerenders the whole application on every pointer move. Extract and
+  memoize the sidebar/stage boundary and rAF-throttle or imperatively set the
+  width custom property.
+- Timeline/calendar/list/fill-in views repeatedly rebuild derived data and use
+  `people.find` inside loops. Cache one `peopleById` map, date formatter, and
+  memoized view models before considering virtualization.
+- Viewers currently request `/api/greeting` twice. Fetch once or gate the parent
+  request to editors. Dead proposal UI state also causes writes/rerenders without
+  being read.
+- `app/globals.css` is 1,537 lines / about 122 KB source (about 23 KB gzip) and
+  contains multiple confirmed orphaned legacy UI blocks plus overlapping
+  overrides. Delete one proven-dead block per commit with desktop/phone/RTL
+  browser coverage; do not bulk-rewrite it.
+- `public/og.png` is 1,020,891 bytes at 1200×630. Optimize it while preserving
+  dimensions and appearance.
+- Add a real `typecheck` package script and make the release/CI gate run it after
+  cleaning the four confirmed unused declarations. Keep the Vinext peer
+  dependencies that look unused in source.
+
+Recommended small-commit order: cache/privacy headers; safe photo/evidence MIME
+handling; bounded/streamed uploads; unattended-ingestion policy and durable
+failure recording; Unicode reconciliation; authoritative migrations/cascades;
+unused Three dependency removal plus typecheck gate; map/view lazy loading;
+memoized derived data and gesture transforms; CSS/image cleanup. Run targeted
+tests per increment, then one complete typecheck/lint/unit/build/browser/data
+gate before deployment.
 
 ## Live state verified on 2026-08-27
 
