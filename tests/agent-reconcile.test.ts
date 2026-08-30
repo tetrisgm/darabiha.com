@@ -39,4 +39,53 @@ describe("agent reconciliation", () => {
     expect(result.proposals).toHaveLength(1);
     expect(result.proposals[0]).toMatchObject({ kind: "add_person", person: { birthDate: "1940", birthCity: "Tehran", biography: "Family notes" } });
   });
+
+  it("does not collapse different Persian names", () => {
+    const tree: FamilyTree = { people: [person({ displayName: "علی رضایی" })], relationships: [], stories: [] };
+    const result = reconcileProposals(tree, [incoming({ displayName: "مریم احمدی" })]);
+    expect(result.conflicts).toEqual([]);
+    expect(result.proposals).toEqual([expect.objectContaining({ kind: "add_person", person: expect.objectContaining({ displayName: "مریم احمدی" }) })]);
+  });
+
+  it("keeps different Persian names separate within one import batch", () => {
+    const tree: FamilyTree = { people: [], relationships: [], stories: [] };
+    const result = reconcileProposals(tree, [incoming({ displayName: "علی رضایی" }), incoming({ displayName: "مریم احمدی" })]);
+    expect(result.conflicts).toEqual([]);
+    expect(result.proposals).toHaveLength(2);
+  });
+
+  it("matches Persian names written with Arabic Yeh and Kaf variants", () => {
+    const tree: FamilyTree = { people: [person({ displayName: "علي كاظمي" })], relationships: [], stories: [] };
+    const result = reconcileProposals(tree, [incoming({ displayName: "علی کاظمی" })]);
+    expect(result.conflicts).toEqual([]);
+    expect(result.proposals[0]).toMatchObject({ kind: "update_person", personId: "p1" });
+  });
+
+  it("does not conflate Arabic Alef Maksura with Yeh", () => {
+    const tree: FamilyTree = { people: [person({ displayName: "هدى" })], relationships: [], stories: [] };
+    const result = reconcileProposals(tree, [incoming({ displayName: "هدي" })]);
+    expect(result.conflicts).toEqual([]);
+    expect(result.proposals[0]).toMatchObject({ kind: "add_person", person: { displayName: "هدي" } });
+  });
+
+  it("detects conflicting Persian identity values", () => {
+    const tree: FamilyTree = { people: [person({ displayName: "علی رضایی", birthCity: "تهران" })], relationships: [], stories: [] };
+    const result = reconcileProposals(tree, [incoming({ displayName: "علی رضایی", birthCity: "قزوین" })]);
+    expect(result.proposals).toEqual([]);
+    expect(result.conflicts[0]).toMatchObject({ candidatePersonIds: ["p1"], reason: "The incoming identity fields conflict with the existing record." });
+  });
+
+  it("matches identity years written with Persian numerals", () => {
+    const tree: FamilyTree = { people: [person({ displayName: "علی رضایی", birthDate: "۱۹۴۰" })], relationships: [], stories: [] };
+    const result = reconcileProposals(tree, [incoming({ displayName: "علی رضایی", birthDate: "1940" })]);
+    expect(result.conflicts).toEqual([]);
+    expect(result.proposals[0]).toMatchObject({ kind: "update_person", personId: "p1" });
+  });
+
+  it("does not use an empty canonical name as a deduplication key", () => {
+    const tree: FamilyTree = { people: [], relationships: [], stories: [] };
+    const result = reconcileProposals(tree, [incoming({ displayName: "—" }), incoming({ displayName: "…" })]);
+    expect(result.conflicts).toEqual([]);
+    expect(result.proposals).toHaveLength(2);
+  });
 });

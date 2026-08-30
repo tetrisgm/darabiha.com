@@ -1,6 +1,20 @@
 import type { AddPersonProposal, AgentConflict, ChangeProposal, FamilyTree, Person } from "./types";
 
-const normalizedName = (value: string) => value.normalize("NFKD").replace(/\p{Diacritic}/gu, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const asciiDigit = (digit: string) => {
+  const code = digit.charCodeAt(0);
+  return String(code - (code >= 0x06f0 ? 0x06f0 : 0x0660));
+};
+
+const normalizedName = (value: string) => value
+  .normalize("NFKD")
+  .replace(/\p{Diacritic}/gu, "")
+  .normalize("NFC")
+  .toLowerCase()
+  .replace(/\u064a/g, "\u06cc")
+  .replace(/\u0643/g, "\u06a9")
+  .replace(/[\u0660-\u0669\u06f0-\u06f9]/g, asciiDigit)
+  .replace(/[^\p{L}\p{N}\p{M}]+/gu, " ")
+  .trim();
 
 const identityFields = ["birthDate", "deathDate", "birthCity", "birthCountry"] as const;
 
@@ -14,7 +28,7 @@ function mergePerson(existing: Omit<Person, "id">, incoming: AddPersonProposal["
     gender: incoming.gender ?? existing.gender,
     givenName: incoming.givenName ?? existing.givenName,
     familyName: incoming.familyName ?? existing.familyName,
-  maidenName: incoming.maidenName ?? existing.maidenName,
+    maidenName: incoming.maidenName ?? existing.maidenName,
     birthDate: incoming.birthDate ?? existing.birthDate,
     deathDate: incoming.deathDate ?? existing.deathDate,
     birthPlace: incoming.birthPlace ?? existing.birthPlace,
@@ -37,8 +51,12 @@ export function reconcileProposals(tree: FamilyTree, proposals: ChangeProposal[]
   for (const proposal of proposals) {
     if (proposal.kind !== "add_person") { accepted.push(proposal); continue; }
     const name = normalizedName(proposal.person.displayName);
-    const matches = tree.people.filter((person) => normalizedName(person.displayName) === name);
+    const matches = name ? tree.people.filter((person) => normalizedName(person.displayName) === name) : [];
     if (!matches.length) {
+      if (!name) {
+        accepted.push(proposal);
+        continue;
+      }
       const pending = pendingAdds.get(name);
       if (!pending) {
         pendingAdds.set(name, { index: accepted.length, proposal });
