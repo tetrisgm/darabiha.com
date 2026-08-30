@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
 import { safeAttachmentContentType } from "../lib/attachment-types";
 import { runRecordChecks } from "../lib/record-checks";
+import { LEGACY_MEMBER_ROLE_MIGRATION_SQL, MEMBERS_PERSON_INDEX_SQL } from "./legacy-migrations";
 
 let initialized = false;
 const schemaStatements = [
@@ -73,9 +74,6 @@ export async function ensureSchema() {
   // Which person in the tree an account belongs to, so the archive can open
   // where that person stands rather than at the founders.
   try { await env.DB.prepare("ALTER TABLE members ADD COLUMN person_id TEXT").run(); } catch { /* existing deployment */ }
-  // claimMemberPerson checks this too, but a check followed by a write is not
-  // atomic: two claims arriving together would both pass it
-  try { await env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_members_person ON members(person_id) WHERE person_id IS NOT NULL").run(); } catch { /* older SQLite */ }
   // Imported archive material is written in its own language; body holds the
   // English a reader sees first, original_body the words the family wrote.
   try { await env.DB.prepare("ALTER TABLE stories ADD COLUMN original_body TEXT").run(); } catch { /* existing deployment */ }
@@ -85,18 +83,13 @@ export async function ensureSchema() {
   // values mapped across.
   const membersSchema = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='members'").first<{ sql: string }>();
   if (membersSchema && !membersSchema.sql.includes("'canView'")) {
-    await env.DB.batch([
-      env.DB.prepare(`CREATE TABLE IF NOT EXISTS members_next (
-        email TEXT PRIMARY KEY, role TEXT NOT NULL CHECK(role IN ('admin', 'canEdit', 'canView')),
-        added_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-      )`),
-      env.DB.prepare(`INSERT OR IGNORE INTO members_next
-        SELECT email, CASE role WHEN 'editor' THEN 'canEdit' WHEN 'viewer' THEN 'canView' ELSE role END,
-        added_by, created_at, updated_at FROM members`),
-      env.DB.prepare("DROP TABLE members"),
-      env.DB.prepare("ALTER TABLE members_next RENAME TO members"),
-    ]);
+    await env.DB.batch(LEGACY_MEMBER_ROLE_MIGRATION_SQL.map((sql) => env.DB.prepare(sql)));
   }
+  // claimMemberPerson checks this too, but a check followed by a write is not
+  // atomic. Recreate the index after the legacy rebuild because dropping the
+  // old table also drops its indexes. Duplicate claims must stop startup rather
+  // than silently weakening this invariant.
+  await env.DB.prepare(MEMBERS_PERSON_INDEX_SQL).run();
   // First run seeds the member list: the owner as admin, plus any emails the
   // old EDITOR_EMAILS allow-list carried, as editors.
   const memberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM members").first<{ count: number }>();
