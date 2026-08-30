@@ -222,23 +222,39 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
     const owner = attachRoot(loser);
     appendMapValue(attachedOf, owner, loser);
   }
+  const memberRows = new Map<string, string[]>();
   const memberRow = (owner: string) => {
+    const cached = memberRows.get(owner);
+    if (cached) return cached;
     const attached = [...(attachedOf.get(owner) ?? [])];
     attached.sort((a, b) => name(a).localeCompare(name(b)));
-    if (attached.length <= 1) return [owner, ...attached];
-    return [attached[0], owner, ...attached.slice(1)]; // sit between two spouses
+    const members = attached.length <= 1
+      ? [owner, ...attached]
+      : [attached[0], owner, ...attached.slice(1)]; // sit between two spouses
+    memberRows.set(owner, members);
+    return members;
   };
+  const childLists = new Map<string, string[]>();
   const childList = (owner: string) => {
+    const cached = childLists.get(owner);
+    if (cached) return cached;
     const members = memberRow(owner);
+    const memberIds = new Set(members);
     const ids = new Set<string>();
-    for (const member of members) for (const child of childrenOf.get(member) ?? []) if (members.includes(primaryParent.get(child) ?? "")) ids.add(child);
-    return [...ids]
+    for (const member of members) {
+      for (const child of childrenOf.get(member) ?? []) {
+        if (memberIds.has(primaryParent.get(child) ?? "")) ids.add(child);
+      }
+    }
+    const children = [...ids]
       .filter((child) => !attachedTo.has(child)) // drawn beside their spouse instead
       .sort((a, b) => {
         const ya = Number(byId.get(a)?.birthDate?.slice(0, 4)) || 9999;
         const yb = Number(byId.get(b)?.birthDate?.slice(0, 4)) || 9999;
         return ya - yb || name(a).localeCompare(name(b));
       });
+    childLists.set(owner, children);
+    return children;
   };
 
   const widths = new Map<string, number>();
