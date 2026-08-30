@@ -8,7 +8,7 @@ import { listAttachments, readTree, recordAgentQuestions, saveAttachment } from 
 import { extractArchive } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
-import { describeRelationship, relationshipSentence } from "../../../lib/relationship-path";
+import { createRelationshipDescriber, relationshipSentence } from "../../../lib/relationship-path";
 import { interviewLeads } from "../../../lib/interview";
 import { archivistInstructions, archivistTools } from "../../../lib/archivist";
 import { conflictFromCall, proposalFromCall } from "../../../lib/agent-calls";
@@ -34,9 +34,10 @@ function archivistContext(tree: FamilyTree, conversation: string): string {
   const asked = conversation.toLocaleLowerCase();
   const named = tree.people.filter((person) => person.displayName.length >= 4 && asked.includes(person.displayName.toLocaleLowerCase().split(" ")[0]));
   const pairs: string[] = [];
+  let describeRelationship: ReturnType<typeof createRelationshipDescriber> | undefined;
   for (let i = 0; i < named.length && i < 6; i += 1) {
     for (let j = i + 1; j < named.length && j < 6; j += 1) {
-      const result = describeRelationship(tree, named[i].id, named[j].id);
+      const result = (describeRelationship ??= createRelationshipDescriber(tree))(named[i].id, named[j].id);
       if (result) pairs.push(relationshipSentence(result));
     }
   }

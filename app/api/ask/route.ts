@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { readTree } from "../../../db/store";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
-import { describeRelationship, relationshipSentence } from "../../../lib/relationship-path";
+import { createRelationshipDescriber, relationshipSentence } from "../../../lib/relationship-path";
 import { requireVisitor } from "../../authz";
 import { cookies } from "next/headers";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
@@ -15,9 +15,10 @@ function context(tree: Awaited<ReturnType<typeof readTree>>, message: string): s
   const asked = message.toLocaleLowerCase();
   const named = tree.people.filter((person) => person.displayName.length >= 4 && asked.includes(person.displayName.toLocaleLowerCase().split(" ")[0]));
   const lines: string[] = [];
+  let describeRelationship: ReturnType<typeof createRelationshipDescriber> | undefined;
   for (let i = 0; i < named.length && i < 6; i += 1) {
     for (let j = i + 1; j < named.length && j < 6; j += 1) {
-      const result = describeRelationship(tree, named[i].id, named[j].id);
+      const result = (describeRelationship ??= createRelationshipDescriber(tree))(named[i].id, named[j].id);
       if (result) lines.push(relationshipSentence(result));
     }
   }

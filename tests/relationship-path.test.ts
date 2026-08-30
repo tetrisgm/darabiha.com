@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeRelationship, relationshipSentence } from "../lib/relationship-path";
+import { createRelationshipDescriber, describeRelationship, relationshipSentence } from "../lib/relationship-path";
 import type { FamilyTree, Person } from "../lib/types";
 
 const person = (id: string, displayName: string, gender: Person["gender"] = null): Person => ({
@@ -62,5 +62,12 @@ describe("relationship paths", () => {
 
   it("does not claim a direct ancestor is shared with himself", () => {
     expect(relationshipSentence(describeRelationship(tree, "me", "gf")!)).toBe("Grandfather is Me's grandfather.");
+  });
+
+  it("reuses one graph index when describing several pairs", () => {
+    const describe = createRelationshipDescriber(tree);
+    expect(describe("me", "cous")?.relationship).toBe("first cousin");
+    expect(describe("me", "wife")?.relationship).toBe("wife");
+    expect(describe("me", "stranger")?.relationship).toBe("not connected in the records");
   });
 });

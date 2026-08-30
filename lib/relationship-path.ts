@@ -14,6 +14,13 @@ export type RelationshipResult = {
   sharedAncestors: Person[];
 };
 
+type RelationshipIndex = {
+  byId: Map<string, Person>;
+  parentsOf: Map<string, string[]>;
+  spousesOf: Map<string, string[]>;
+  neighboursOf: Map<string, string[]>;
+};
+
 const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth"];
 const greats = (steps: number, base: string) => steps <= 1 ? base : steps === 2 ? `grand${base}` : `${"great-".repeat(steps - 2)}grand${base}`;
 
@@ -39,35 +46,43 @@ function ancestorsOf(personId: string, parentsOf: Map<string, string[]>): Map<st
   return found;
 }
 
-export function describeRelationship(tree: FamilyTree, fromId: string, toId: string): RelationshipResult | null {
+function relationshipIndex(tree: FamilyTree): RelationshipIndex {
   const byId = new Map(tree.people.map((person) => [person.id, person]));
+  const parentsOf = new Map<string, string[]>();
+  const spousesOf = new Map<string, string[]>();
+  const neighboursOf = new Map<string, string[]>();
+  const link = (map: Map<string, string[]>, from: string, to: string) => {
+    const existing = map.get(from);
+    if (existing) existing.push(to);
+    else map.set(from, [to]);
+  };
+  for (const relationship of tree.relationships) {
+    link(neighboursOf, relationship.fromPersonId, relationship.toPersonId);
+    link(neighboursOf, relationship.toPersonId, relationship.fromPersonId);
+    if (relationship.type === "parent") link(parentsOf, relationship.toPersonId, relationship.fromPersonId);
+    else if (relationship.type === "spouse") {
+      link(spousesOf, relationship.fromPersonId, relationship.toPersonId);
+      link(spousesOf, relationship.toPersonId, relationship.fromPersonId);
+    }
+  }
+  return { byId, parentsOf, spousesOf, neighboursOf };
+}
+
+function describeIndexedRelationship(index: RelationshipIndex, fromId: string, toId: string): RelationshipResult | null {
+  const { byId, parentsOf, spousesOf, neighboursOf } = index;
   const from = byId.get(fromId), to = byId.get(toId);
   if (!from || !to) return null;
   if (fromId === toId) return { from, to, relationship: "the same person", path: [from], sharedAncestors: [] };
 
-  const parentsOf = new Map<string, string[]>();
-  const spousesOf = new Map<string, string[]>();
-  for (const link of tree.relationships) {
-    if (link.type === "parent") parentsOf.set(link.toPersonId, [...(parentsOf.get(link.toPersonId) ?? []), link.fromPersonId]);
-    else if (link.type === "spouse") {
-      spousesOf.set(link.fromPersonId, [...(spousesOf.get(link.fromPersonId) ?? []), link.toPersonId]);
-      spousesOf.set(link.toPersonId, [...(spousesOf.get(link.toPersonId) ?? []), link.fromPersonId]);
-    }
-  }
-
   const shortestPath = (): Person[] => {
-    // undirected walk over parent and spouse links, for the trail of names
-    const neighbours = (id: string) => [
-      ...(parentsOf.get(id) ?? []),
-      ...tree.relationships.filter((link) => link.type === "parent" && link.fromPersonId === id).map((link) => link.toPersonId),
-      ...(spousesOf.get(id) ?? []),
-    ];
+    // Undirected walk over the pre-indexed parent and spouse links, for the
+    // trail of names. Avoid scanning every relationship once per BFS node.
     const previous = new Map<string, string | null>([[fromId, null]]);
     const queue = [fromId];
-    while (queue.length) {
-      const id = queue.shift()!;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const id = queue[cursor];
       if (id === toId) break;
-      for (const nextId of neighbours(id)) {
+      for (const nextId of neighboursOf.get(id) ?? []) {
         if (previous.has(nextId)) continue;
         previous.set(nextId, id);
         queue.push(nextId);
@@ -128,6 +143,17 @@ export function describeRelationship(tree: FamilyTree, fromId: string, toId: str
     };
   }
   return { from, to, relationship: "not connected in the records", path: [], sharedAncestors: [] };
+}
+
+/** Build the immutable graph index once when several relationships are being
+ * described from the same tree (for example, the names in one chat request). */
+export function createRelationshipDescriber(tree: FamilyTree) {
+  const index = relationshipIndex(tree);
+  return (fromId: string, toId: string) => describeIndexedRelationship(index, fromId, toId);
+}
+
+export function describeRelationship(tree: FamilyTree, fromId: string, toId: string): RelationshipResult | null {
+  return describeIndexedRelationship(relationshipIndex(tree), fromId, toId);
 }
 
 /** A sentence a person can read: "Niloufar is your second cousin — you share
