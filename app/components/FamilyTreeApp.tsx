@@ -30,7 +30,6 @@ type Props = {
 };
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
-type PendingProposal = { id: string; proposal: ChangeProposal; state: "pending" | "applying" | "applied" | "error"; appliedPersonId?: string };
 type FamilyNote = { id: string; personId: string; authorName: string; body: string; createdAt: string };
 type Greeting = { fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] };
 
@@ -78,7 +77,6 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const [input, setInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [, setProposals] = useState<PendingProposal[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
@@ -276,12 +274,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
       let appliedCount = 0;
       const failures: string[] = [];
       if (data.proposals?.length) {
-        const imported = [...data.proposals].sort((left, right) => proposalRank(left) - proposalRank(right)).map((proposal) => ({ id: crypto.randomUUID(), proposal, state: "pending" as const }));
-        setProposals((current) => [...current, ...imported]);
-        for (const item of imported) {
-          const result = await applyChange(item);
+        const imported = [...data.proposals].sort((left, right) => proposalRank(left) - proposalRank(right));
+        for (const proposal of imported) {
+          const result = await applyChange(proposal);
           if (result.tree) { latestTree = result.tree; appliedCount += 1; }
-          else failures.push(result.error || item.proposal.summary);
+          else failures.push(result.error || proposal.summary);
         }
       }
       const applied = appliedCount ? `Done — I applied ${appliedCount} ${appliedCount === 1 ? "update" : "updates"} to the family tree.` : "";
@@ -306,21 +303,16 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     } finally { setBusy(false); }
   }
 
-  async function applyChange(item: PendingProposal): Promise<{ tree?: FamilyTree; error?: string }> {
-    setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "applying" } : candidate));
+  async function applyChange(proposal: ChangeProposal): Promise<{ tree?: FamilyTree; error?: string }> {
     try {
       const response = await fetch("/api/changes", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(item.proposal),
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(proposal),
       });
       const data = await response.json() as { tree?: FamilyTree; error?: string };
       if (!response.ok || !data.tree) throw new Error(data.error || "change_failed");
       setTree(data.tree);
-      const proposal = item.proposal;
-      const appliedPersonId = proposal.kind === "add_person" ? data.tree.people.find((person) => person.displayName === proposal.person.displayName)?.id : undefined;
-      setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "applied", appliedPersonId } : candidate));
       return { tree: data.tree };
     } catch (error) {
-      setProposals((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, state: "error" } : candidate));
       return { error: error instanceof Error ? error.message : "Change failed" };
     }
   }
@@ -445,7 +437,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
           // the hover preview IS the profile: the same panel a click opens,
           // rendered read-only and inert
           <div className="person-hover-preview" aria-hidden="true">
-            <PersonModalV2 key={hoverPreview.id} person={hoverPreview} tree={tree} canEdit={false} preview onClose={() => {}} onSelect={() => {}} onTreeChange={() => {}} />
+            <PersonModalV2 key={hoverPreview.id} person={hoverPreview} tree={tree} canEdit={false} canComment={false} preview onClose={() => {}} onSelect={() => {}} onTreeChange={() => {}} />
           </div>
         )}
         {hoverPlace && viewMode === "map" && hoverPlace.key !== placeFocus?.key && (
@@ -454,7 +446,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
           </div>
         )}
         {!selectedPerson && placeFocus && viewMode === "map" && <PlacePanel place={placeFocus} onPick={(person) => openPerson(person, true, false)} onClose={() => setPlaceFocus(null)} />}
-        {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
+        {selectedPerson && <PersonModalV2 key={selectedPerson.id} person={selectedPerson} tree={tree} canEdit={viewer.canEdit} canComment={Boolean(viewer.role)} onClose={closePerson} onSelect={(person) => openPerson(person)} onTreeChange={(next) => { setTree(next); setSelectedPerson(next.people.find((candidate) => candidate.id === selectedPerson.id) ?? null); }} />}
         <section className="relative h-full min-h-0 min-w-0 flex-1 overflow-hidden">
           <div className="absolute inset-0 tree-grid opacity-20" aria-hidden="true" />
           <div className="relative h-full min-h-0">
@@ -654,7 +646,7 @@ function PersonComments({ personId }: { personId: string }) {
   </div>;
 }
 
-function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange, preview }: { person: Person; tree: FamilyTree; canEdit: boolean; preview?: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
+function PersonModalV2({ person, tree, canEdit, canComment, onClose, onSelect, onTreeChange, preview }: { person: Person; tree: FamilyTree; canEdit: boolean; canComment: boolean; preview?: boolean; onClose: () => void; onSelect: (person: Person) => void; onTreeChange: (tree: FamilyTree) => void }) {
   const { t } = useLanguage();
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -811,7 +803,7 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange,
     {/* the hover card is a glance, not a visit: PersonComments fetches the
         whole comment list on mount, and remounting it for every card the
         pointer crosses is a request each time */}
-    {!preview && <PersonComments personId={person.id} />}
+    {!preview && canComment && <PersonComments personId={person.id} />}
     {notice && <p className="modal-notice" role="status">{notice}</p>}
     {canEdit && <div className="person-delete-footer">{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>{t("person.removePortrait")}</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>{t("person.delete")}</button></div>}
   </section>;
