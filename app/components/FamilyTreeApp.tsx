@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
-import { CalendarView, StatisticsView, TimelineView, WorldMapView } from "./ArchiveViews";
 import IdentifyMe from "./IdentifyMe";
 import { familyGenerations, lifeStatus } from "../../lib/life-status";
 import type { MappedPlace } from "../../lib/archive-views";
@@ -14,6 +13,11 @@ import { useLanguage } from "./LanguageContext";
 import { LANGUAGES, LANGUAGE_FLAGS, LANGUAGE_NAMES } from "../../lib/i18n";
 import { BUILD_ID, VERSION } from "../../lib/build";
 import { isUsefulArchivePath, selectedFileKey, selectedFilePath } from "../../lib/upload-policy";
+
+const TimelineView = lazy(() => import("./ArchiveViews").then((module) => ({ default: module.TimelineView })));
+const CalendarView = lazy(() => import("./ArchiveViews").then((module) => ({ default: module.CalendarView })));
+const WorldMapView = lazy(() => import("./ArchiveViews").then((module) => ({ default: module.WorldMapView })));
+const StatisticsView = lazy(() => import("./ArchiveViews").then((module) => ({ default: module.StatisticsView })));
 
 type Props = {
   initialTree: FamilyTree | null;
@@ -457,10 +461,12 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
               {viewMode === "list" && treeLoaded && <OutlineView tree={tree} onSelect={(person) => openPerson(person)} onPreview={setHoverPreview} meId={identity} />}
               {viewMode === "fill" && viewer.canEdit && treeLoaded && <MissingDataView tree={tree} onSaved={setTree} onOpen={(person) => openPerson(person)} />}
               {viewMode === "tree" && treeLoaded && (tree.people.length ? <FamilyTreeCanvas tree={tree} highlightedIds={highlightedIds} focusPersonId={highlightedIds[0]} onSelect={(person) => openPerson(person)} /> : <EmptyTree canEdit={viewer.canEdit} />)}
-              {viewMode === "timeline" && <TimelineView tree={tree} meId={identity} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
-              {viewMode === "calendar" && treeLoaded && <CalendarView tree={tree} meId={identity} onSelect={(person) => openPerson(person)} />}
-              {viewMode === "stats" && treeLoaded && <StatisticsView tree={tree} onSelect={(person) => openPerson(person)} />}
-              {viewMode === "map" && <WorldMapView tree={tree} onPreviewPlace={setHoverPlace} onSelectPlace={(place) => { setHoverPlace(null); setPlaceFocus(place); setSelectedPerson(null); setHighlightedIds(place.people.map((person) => person.id)); }} />}
+              <Suspense fallback={<div className="family-canvas" aria-busy="true" aria-label="Loading archive view" />}>
+                {viewMode === "timeline" && <TimelineView tree={tree} meId={identity} onSelect={(person) => { setHighlightedIds([person.id]); setSelectedPerson(person); }} />}
+                {viewMode === "calendar" && treeLoaded && <CalendarView tree={tree} meId={identity} onSelect={(person) => openPerson(person)} />}
+                {viewMode === "stats" && treeLoaded && <StatisticsView tree={tree} onSelect={(person) => openPerson(person)} />}
+                {viewMode === "map" && <WorldMapView tree={tree} onPreviewPlace={setHoverPlace} onSelectPlace={(place) => { setHoverPlace(null); setPlaceFocus(place); setSelectedPerson(null); setHighlightedIds(place.people.map((person) => person.id)); }} />}
+              </Suspense>
             </div>
           </div>
         </section>
@@ -704,9 +710,6 @@ function PersonModalV2({ person, tree, canEdit, onClose, onSelect, onTreeChange,
     } catch (error) { setNotice(error instanceof Error ? error.message : "Could not add relative"); }
     finally { setSaving(false); }
   }
-  // born within a plausible lifetime and no death recorded -> presumed living;
-  // an ancestor born in 1856 with no death date is simply unrecorded
-  const birthYear = Number(person.birthDate?.slice(0, 4));
   /* Three answers, not two: the archive records a death, or has reason to
      think someone is living, or does not know. It used to read a missing
      death date as a life, which had it calling Haj Chorok - born 1720 -
