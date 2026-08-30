@@ -27,13 +27,18 @@ const presumedLiving = (person: Person, today: Date, generations: Generations | 
  * family, and dated stories. Living people get a birthday; the dead get a
  * remembrance. */
 export function onThisDay(tree: FamilyTree, today = new Date()): FamilyFact[] {
-  const generations = familyGenerations(tree);
   const stamp = `${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const facts: FamilyFact[] = [];
+  // Working out generations walks the complete relationship graph. Most days
+  // have no recorded birthday, and death/story anniversaries do not need that
+  // work at all, so defer it until a matching birth actually needs a life
+  // status. Several birthdays on the same day still share one computation.
+  let generations: Generations | undefined;
   for (const person of tree.people) {
     if (monthDay(person.birthDate) === stamp) {
       const born = year(person.birthDate);
       const age = born ? today.getFullYear() - born : null;
+      generations ??= familyGenerations(tree, today);
       facts.push({
         kind: "onThisDay", personId: person.id,
         text: presumedLiving(person, today, generations) && age
