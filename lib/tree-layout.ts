@@ -6,9 +6,36 @@ function appendMapValue<K, V>(map: Map<K, V[]>, key: K, value: V) {
   else map.set(key, [value]);
 }
 
+/** Put parent edges in ancestor-first order when the recorded graph is a DAG.
+ * Relaxation then reaches the same fixed point in one pass regardless of SQL
+ * row order. Malformed cycles deliberately keep their original bounded-pass
+ * behavior and are reported separately by the data-integrity checks. */
+function orderParentEdges<T extends { fromPersonId: string; toPersonId: string }>(people: Person[], links: T[]): T[] {
+  if (links.length < 2) return links;
+  const ids = new Set(people.map((person) => person.id));
+  if (links.some((link) => !ids.has(link.fromPersonId) || !ids.has(link.toPersonId))) return links;
+  const indegree = new Map(people.map((person) => [person.id, 0]));
+  const outgoing = new Map<string, T[]>();
+  for (const link of links) {
+    indegree.set(link.toPersonId, (indegree.get(link.toPersonId) ?? 0) + 1);
+    appendMapValue(outgoing, link.fromPersonId, link);
+  }
+  const queue = people.filter((person) => indegree.get(person.id) === 0).map((person) => person.id);
+  const ordered: T[] = [];
+  for (let index = 0; index < queue.length; index += 1) {
+    for (const link of outgoing.get(queue[index]) ?? []) {
+      ordered.push(link);
+      const remaining = (indegree.get(link.toPersonId) ?? 1) - 1;
+      indegree.set(link.toPersonId, remaining);
+      if (remaining === 0) queue.push(link.toPersonId);
+    }
+  }
+  return ordered.length === links.length ? ordered : links;
+}
+
 export function buildGenerations(tree: FamilyTree) {
   const depth = new Map(tree.people.map((person) => [person.id, 0]));
-  const parentLinks = tree.relationships.filter((item) => item.type === "parent");
+  const parentLinks = orderParentEdges(tree.people, tree.relationships.filter((item) => item.type === "parent"));
   const spouseLinks = tree.relationships.filter((item) => item.type === "spouse");
   const hasParent = new Set(parentLinks.map((item) => item.toPersonId));
   const childrenOfRootless = new Map<string, string[]>();
@@ -77,7 +104,7 @@ export function buildFamilyLayout(tree: FamilyTree): FamilyLayout {
   // ancestry depth over parent edges only (no spouse alignment): how far a
   // person's recorded ancestor chain reaches up
   const lineage = new Map(tree.people.map((person) => [person.id, 0]));
-  const parentEdges = tree.relationships.filter((item) => item.type === "parent");
+  const parentEdges = orderParentEdges(tree.people, tree.relationships.filter((item) => item.type === "parent"));
   for (let pass = 0; pass < tree.people.length; pass += 1) {
     let changed = false;
     for (const link of parentEdges) {

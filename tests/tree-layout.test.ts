@@ -26,6 +26,13 @@ describe("tree generation layout", () => {
     expect(result.groups.get(1)?.map((person) => person.id)).toEqual(["daughter", "son"]);
   });
 
+  it("is independent of parent-edge storage order", () => {
+    const reversed = buildGenerations({ ...tree, relationships: [...tree.relationships].reverse() });
+    expect(reversed.depth.get("mother")).toBe(0);
+    expect(reversed.depth.get("daughter")).toBe(1);
+    expect(reversed.depth.get("grandchild")).toBe(2);
+  });
+
   it("draws a couple side by side with their children beneath them", () => {
     const layout = buildFamilyLayout(tree);
     const mother = layout.positions.get("mother")!;
