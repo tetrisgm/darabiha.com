@@ -12,12 +12,11 @@ import { describeRelationship, relationshipSentence } from "../../../lib/relatio
 import { interviewLeads } from "../../../lib/interview";
 import { archivistInstructions, archivistTools } from "../../../lib/archivist";
 import { conflictFromCall, proposalFromCall } from "../../../lib/agent-calls";
-import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../../lib/types";
+import { MAX_UPLOAD_MANIFEST_CHARS, requestExceedsUploadEnvelope, validateUploadBatch } from "../../../lib/upload-policy";
+import type { AgentConflict, Attachment, ChangeProposal, FamilyTree } from "../../../lib/types";
 
 export const runtime = "edge";
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 const MAX_ARCHIVE_ENTRY_BYTES = 4 * 1024 * 1024;
 const MAX_ARCHIVE_EXTRACTED_BYTES = 30 * 1024 * 1024;
 const MAX_ARCHIVE_TEXT_CHARS = 1_000_000;
@@ -57,6 +56,7 @@ export async function POST(request: Request) {
   if (!auth.ok) return auth.response;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "openai_not_configured" }, { status: 503 });
+  if (requestExceedsUploadEnvelope(request.headers)) return Response.json({ error: "files_too_large" }, { status: 413 });
 
   // a request that is not multipart throws here, outside the try below, and
   // used to surface as an empty 500 with nothing to read
@@ -64,16 +64,16 @@ export async function POST(request: Request) {
   if (!form) return Response.json({ error: "expected_form_data" }, { status: 400 });
   const message = String(form.get("message") ?? "").trim().slice(0, MAX_MESSAGE_CHARS);
   const history = String(form.get("history") ?? "").slice(0, 16_000);
-  const manifest = String(form.get("file_manifest") ?? "").slice(0, 20_000);
+  const manifest = String(form.get("file_manifest") ?? "").slice(0, MAX_UPLOAD_MANIFEST_CHARS);
   const files = form.getAll("files").filter((value): value is File => value instanceof File && value.size > 0);
   if (!message && files.length === 0) return Response.json({ error: "empty_message" }, { status: 400 });
-  if (files.some((file) => file.size > MAX_FILE_BYTES) || files.reduce((sum, file) => sum + file.size, 0) > MAX_TOTAL_BYTES) {
-    return Response.json({ error: "files_too_large" }, { status: 413 });
-  }
+  const uploadError = validateUploadBatch(files);
+  if (uploadError) return Response.json({ error: uploadError }, { status: 413 });
   const [tree, existingAttachments] = await Promise.all([readTree(), listAttachments()]);
   // the archive is multilingual and so is the reader
   const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
-  const stored = await Promise.all(files.map((file) => saveAttachment(file, auth.user.email)));
+  const stored: Attachment[] = [];
+  for (const file of files) stored.push(await saveAttachment(file, auth.user.email));
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
     text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\n${archivistContext(tree, `${message} ${history}`)}Current tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,

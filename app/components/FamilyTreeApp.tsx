@@ -13,6 +13,7 @@ import { Markdown } from "./Markdown";
 import { useLanguage } from "./LanguageContext";
 import { LANGUAGES, LANGUAGE_FLAGS, LANGUAGE_NAMES } from "../../lib/i18n";
 import { BUILD_ID, VERSION } from "../../lib/build";
+import { isUsefulArchivePath, selectedFileKey, selectedFilePath } from "../../lib/upload-policy";
 
 type Props = {
   initialTree: FamilyTree | null;
@@ -35,6 +36,18 @@ function proposalRank(proposal: ChangeProposal) {
 
 
 function locationLine(city: string | null, country: string | null, fallback: string | null) { return city || country ? [city, country].filter(Boolean).join(", ") : fallback; }
+
+function appendSelectedFiles(current: File[], incoming: File[], fromFolder = false): File[] {
+  const known = new Set(current.map(selectedFileKey));
+  const additions = incoming.filter((file) => {
+    if (fromFolder && !isUsefulArchivePath(selectedFilePath(file))) return false;
+    const key = selectedFileKey(file);
+    if (known.has(key)) return false;
+    known.add(key);
+    return true;
+  });
+  return [...current, ...additions];
+}
 
 const EMPTY_TREE: FamilyTree = { people: [], relationships: [], stories: [] };
 const VIEW_MODES = ["tree", "family", "list", "timeline", "calendar", "map", "stats", "fill"] as const;
@@ -245,7 +258,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     const form = new FormData();
     form.set("message", selectedPerson ? `[We are currently viewing the record of ${selectedPerson.displayName} (person id ${selectedPerson.id}). Unless another person is named, apply details and answers to this person.]\n${text}` : text);
     form.set("history", JSON.stringify(messages.slice(-6)));
-    form.set("file_manifest", JSON.stringify(files.map((file) => ({ name: file.name, path: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name, size: file.size, type: file.type }))));
+    form.set("file_manifest", JSON.stringify(files.map((file) => ({ name: file.name, path: selectedFilePath(file), size: file.size, type: file.type }))));
     files.forEach((file) => form.append("files", file));
     try {
       const response = await fetch("/api/agent", { method: "POST", body: form });
@@ -278,7 +291,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
       const friendly = code === "openai_not_configured"
         ? "The archivist is ready, but the OpenAI key still needs to be connected."
         : code === "unsupported_file_type" ? "That file type is not supported yet. Try a PDF, image, text file, Word document, or spreadsheet."
-        : code === "files_too_large" ? "Those files are too large. Keep each file under 50 MB and the total under 100 MB."
+        : code === "too_many_files" ? "That selection contains too many files. Send a ZIP, or keep the selection under 256 useful files."
+        : code === "file_too_large" || code === "files_too_large" ? "Those files are too large. Keep each file under 16 MB and the total under 24 MB."
         : "The archivist could not finish that request. Please try again.";
       setError(friendly);
     } finally { setBusy(false); }
@@ -388,7 +402,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                   {error && <p className="rounded-xl bg-[rgba(226,140,115,.12)] px-3 py-2 text-xs leading-5 text-[#e8a289]">{error}</p>}
                 </div>
                 <div className="pt-5">
-                  {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={file.name}>{file.name}</span>)}</div>}
+                  {files.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{files.map((file) => <span className="file-chip" key={selectedFileKey(file)}>{file.name}</span>)}</div>}
                   <div className="editor-composer rounded-[1.5rem] border border-[var(--line)] bg-[var(--card)] p-4 shadow-[0_12px_40px_rgba(0,0,0,0.3)]">
                     {selectedPerson && <ComposerFocus person={selectedPerson} canEdit onClear={closePerson} />}
                     <textarea ref={inputRef} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); sendMessage(); } }} className="min-h-20 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[var(--muted)]" placeholder={selectedPerson ? t("chat.placeholderPerson", { name: selectedPerson.displayName.split(" ")[0] }) : t("chat.placeholder")} aria-label="Message the family archivist" />
@@ -406,8 +420,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
                           drainRef.current?.();
                         } catch { setIngesting("Those documents could not be sent."); }
                       }} />
-                      <input ref={fileRef} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
-                      <input ref={(node) => { folderRef.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...incoming.filter((file) => !current.some((existing) => `${existing.name}:${existing.size}` === `${file.name}:${file.size}`))]); event.target.value = ""; }} />
+                      <input ref={fileRef} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => appendSelectedFiles(current, incoming)); event.target.value = ""; }} />
+                      <input ref={(node) => { folderRef.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} className="sr-only" type="file" multiple onChange={(event) => { const incoming = Array.from(event.target.files ?? []); setFiles((current) => appendSelectedFiles(current, incoming, true)); event.target.value = ""; }} />
                       <AttachMenu onFiles={() => fileRef.current?.click()} onFolder={() => folderRef.current?.click()} onSend={() => sendRef.current?.click()} />
                       <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent-fill)] text-white transition hover:bg-[#3a604a] disabled:opacity-40" disabled={busy || (!input.trim() && !files.length)} onClick={sendMessage} aria-label={t("chat.send")}>↑</button>
                     </div>
