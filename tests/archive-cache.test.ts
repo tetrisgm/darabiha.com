@@ -15,6 +15,7 @@ vi.mock("../db/store", () => store);
 vi.mock("../app/authz", () => authz);
 
 import { GET as getPhoto } from "../app/api/photos/[id]/route";
+import { GET as getFile } from "../app/api/files/[id]/route";
 import { GET as getTree } from "../app/api/tree/route";
 
 type Visibility = "public" | "members" | "password";
@@ -27,7 +28,7 @@ beforeEach(() => {
   store.readTree.mockResolvedValue({ people: [] });
   store.readAttachment.mockResolvedValue({
     metadata: { contentType: "image/jpeg", filename: "portrait.jpg" },
-    object: { body: "portrait" },
+    object: { body: "portrait", writeHttpMetadata: vi.fn() },
   });
 });
 
@@ -75,6 +76,8 @@ describe("archive cache policy", () => {
 
     expect(response.headers.get("cache-control")).toBe("public, max-age=86400, immutable");
     expect(response.headers.has("vary")).toBe(false);
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-disposition")).toContain("inline");
   });
 
   it.each(["password", "members"] satisfies Visibility[])(
@@ -95,7 +98,7 @@ describe("archive cache policy", () => {
     store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
     store.readAttachment.mockResolvedValue({
       metadata: { contentType: "application/pdf", filename: "source.pdf" },
-      object: { body: "source" },
+      object: { body: "source", writeHttpMetadata: vi.fn() },
     });
 
     const response = await getPhoto(new Request("https://darabiha.com/api/photos/source-1"), {
@@ -105,13 +108,15 @@ describe("archive cache policy", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
     expect(response.headers.get("vary")).toBe("Cookie");
+    expect(response.headers.get("content-disposition")).toContain("attachment");
+    expect(response.headers.get("content-security-policy")).toBe("sandbox");
   });
 
   it("prevents an editor-only evidence denial from poisoning caches", async () => {
     store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
     store.readAttachment.mockResolvedValue({
       metadata: { contentType: "application/pdf", filename: "source.pdf" },
-      object: { body: "source" },
+      object: { body: "source", writeHttpMetadata: vi.fn() },
     });
     authz.requireEditor.mockResolvedValue({
       ok: false,
@@ -125,6 +130,42 @@ describe("archive cache policy", () => {
     expect(response.status).toBe(404);
     expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
     expect(response.headers.get("vary")).toBe("Cookie");
+  });
+
+  it("does not expose SVG evidence as a public photograph", async () => {
+    store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
+    store.readAttachment.mockResolvedValue({
+      metadata: { contentType: "image/svg+xml", filename: "active.svg" },
+      object: { body: "<svg />", writeHttpMetadata: vi.fn() },
+    });
+    authz.requireEditor.mockResolvedValue({
+      ok: false,
+      response: new Response("Forbidden", { status: 403 }),
+    });
+
+    const response = await getPhoto(new Request("https://darabiha.com/api/photos/active"), {
+      params: Promise.resolve({ id: "active" }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("downloads authenticated evidence with sandbox and no sniffing", async () => {
+    store.readAttachment.mockResolvedValue({
+      metadata: { contentType: "text/html", filename: "source.html" },
+      object: { body: "<script />", writeHttpMetadata: vi.fn() },
+    });
+
+    const response = await getFile(new Request("https://darabiha.com/api/files/source"), {
+      params: Promise.resolve({ id: "source" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toContain("attachment");
+    expect(response.headers.get("content-security-policy")).toBe("sandbox");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
   });
 
   it("prevents a missing-photo response from poisoning caches", async () => {

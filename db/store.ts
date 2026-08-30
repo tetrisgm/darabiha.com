@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
+import { safeAttachmentContentType } from "../lib/attachment-types";
 import { runRecordChecks } from "../lib/record-checks";
 
 let initialized = false;
@@ -407,19 +408,21 @@ export async function saveAttachment(file: File, actorEmail: string): Promise<At
   await ensureSchema();
   const id = crypto.randomUUID();
   const objectKey = `evidence/${id}`;
-  await env.FILES.put(objectKey, await file.arrayBuffer(), {
-    httpMetadata: { contentType: file.type || "application/octet-stream" },
+  const prefix = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const contentType = safeAttachmentContentType(prefix, file.type);
+  await env.FILES.put(objectKey, file.stream(), {
+    httpMetadata: { contentType },
     customMetadata: { filename: file.name },
   });
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO attachments
       (id, object_key, filename, content_type, size, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .bind(id, objectKey, file.name, file.type || "application/octet-stream", file.size, actorEmail, now),
+      .bind(id, objectKey, file.name, contentType, file.size, actorEmail, now),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), actorEmail, "upload_attachment", `Uploaded ${file.name}`, JSON.stringify({ attachmentId: id, filename: file.name, contentType: file.type || "application/octet-stream", size: file.size }), now),
+      .bind(crypto.randomUUID(), actorEmail, "upload_attachment", `Uploaded ${file.name}`, JSON.stringify({ attachmentId: id, filename: file.name, contentType, size: file.size }), now),
   ]);
-  return { id, filename: file.name, contentType: file.type || "application/octet-stream", size: file.size };
+  return { id, filename: file.name, contentType, size: file.size };
 }
 
 export async function readAttachment(id: string) {
