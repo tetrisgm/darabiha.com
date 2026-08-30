@@ -1,4 +1,5 @@
 import { cachedTreeJson, getSiteVisibility, readTree } from "../../../db/store";
+import { archiveCacheHeaders } from "../../../lib/archive-cache";
 import { requireVisitor } from "../../authz";
 
 export async function GET() {
@@ -6,7 +7,7 @@ export async function GET() {
   if (!access.ok) return access.response;
   const visibility = await getSiteVisibility();
   const headers = {
-    "cache-control": visibility === "members" ? "private, max-age=30" : "public, max-age=30, stale-while-revalidate=120",
+    ...archiveCacheHeaders(visibility, "public, max-age=30, stale-while-revalidate=120"),
     "content-type": "application/json",
   };
   const cached = cachedTreeJson();
