@@ -29,6 +29,7 @@ type Props = {
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type PendingProposal = { id: string; proposal: ChangeProposal; state: "pending" | "applying" | "applied" | "error"; appliedPersonId?: string };
 type FamilyNote = { id: string; personId: string; authorName: string; body: string; createdAt: string };
+type Greeting = { fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] };
 
 function proposalRank(proposal: ChangeProposal) {
   if (proposal.kind === "add_person") return 0;
@@ -234,11 +235,11 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   };
   // what the archive volunteers before it is asked: an anniversary today, or
   // a fact about the family, with openers worth tapping
-  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] } | null>(null);
+  const [greeting, setGreeting] = useState<Greeting | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/greeting")
-      .then((response) => response.ok ? response.json() as Promise<{ fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] }> : null)
+      .then((response) => response.ok ? response.json() as Promise<Greeting> : null)
       .then((data) => { if (!cancelled && data) setGreeting(data); })
       .catch(() => { /* the chat works without it */ });
     return () => { cancelled = true; };
@@ -376,7 +377,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
               <IdentifyMe tree={tree} onClaimed={(person) => { setIdentity(person.id); openPerson(person); }} />
             )}
             {!viewer.canEdit ? (
-              <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} focusPerson={selectedPerson} onClearFocus={closePerson} onOpenPerson={(person) => openPerson(person)} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); setViewMode("tree"); }} />
+              <PublicArchiveChat signedIn={viewer.signedIn} tree={tree} greeting={greeting} focusPerson={selectedPerson} onClearFocus={closePerson} onOpenPerson={(person) => openPerson(person)} onPeopleMentioned={(people) => { setHighlightedIds(people.map((person) => person.id)); setViewMode("tree"); }} />
             ) : (
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
@@ -831,17 +832,9 @@ function EmptyTree({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PublicArchiveChat({ signedIn, tree, focusPerson, onClearFocus, onPeopleMentioned, onOpenPerson }: { signedIn: boolean; tree: FamilyTree; focusPerson: Person | null; onClearFocus: () => void; onPeopleMentioned: (people: Person[]) => void; onOpenPerson: (person: Person) => void }) {
+function PublicArchiveChat({ signedIn, tree, greeting, focusPerson, onClearFocus, onPeopleMentioned, onOpenPerson }: { signedIn: boolean; tree: FamilyTree; greeting: Greeting | null; focusPerson: Person | null; onClearFocus: () => void; onPeopleMentioned: (people: Person[]) => void; onOpenPerson: (person: Person) => void }) {
   const { t } = useLanguage();
   const [question, setQuestion] = useState("");
-  const [greeting, setGreeting] = useState<{ fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/greeting").then((response) => response.ok ? response.json() : null)
-      .then((data) => { if (!cancelled && data) setGreeting(data as { fact: string | null; personId: string | null; factoids: { text: string; ask: string; personId: string | null }[] }); })
-      .catch(() => { /* the chat works without it */ });
-    return () => { cancelled = true; };
-  }, []);
   const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [asked, setAsked] = useState<string[]>([]);
