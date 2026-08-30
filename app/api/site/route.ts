@@ -15,10 +15,15 @@ import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-
 const VISIBILITIES: SiteVisibility[] = ["public", "members", "password"];
 
 async function state() {
+  const [visibility, hasPassword, token] = await Promise.all([
+    getSiteVisibility(true),
+    hasAccessPassword(),
+    shareToken(),
+  ]);
   return {
-    visibility: await getSiteVisibility(true),
-    hasPassword: await hasAccessPassword(),
-    shareUrl: (await shareToken()) ? `/api/access?key=${await shareToken()}` : null,
+    visibility,
+    hasPassword,
+    shareUrl: token ? `/api/access?key=${token}` : null,
   };
 }
 
@@ -30,38 +35,38 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const auth = await requireAdmin();
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) return preventSharedCaching(auth.response);
   const body = await request.json().catch(() => null) as { visibility?: string; password?: unknown; action?: string } | null;
 
   if (body?.action === "set_password") {
     const password = typeof body.password === "string" ? body.password.trim() : "";
-    if (password.length < 6) return Response.json({ error: "password_too_short" }, { status: 400 });
+    if (password.length < 6) return privateJsonResponse({ error: "password_too_short" }, { status: 400 });
     await setAccessPasswordDigest(await hashAccessPassword(password), auth.user.email);
     // a password is no use without a link to go with it
     if (!(await shareToken())) await setShareToken(newShareToken(), auth.user.email);
-    return Response.json(await state());
+    return privateJsonResponse(await state());
   }
   if (body?.action === "clear_password") {
     // Removing the password while the archive is behind it would change who
     // can see the archive as a side effect of a different request. Say no and
     // let the admin choose.
     if ((await getSiteVisibility(true)) === "password") {
-      return Response.json({ error: "password_in_use" }, { status: 400 });
+      return privateJsonResponse({ error: "password_in_use" }, { status: 400 });
     }
     await clearAccessPassword(auth.user.email);
-    return Response.json(await state());
+    return privateJsonResponse(await state());
   }
   if (body?.action === "new_link") {
     await setShareToken(newShareToken(), auth.user.email);
-    return Response.json(await state());
+    return privateJsonResponse(await state());
   }
 
   const visibility = VISIBILITIES.find((candidate) => candidate === body?.visibility);
-  if (!visibility) return Response.json({ error: "invalid_visibility" }, { status: 400 });
+  if (!visibility) return privateJsonResponse({ error: "invalid_visibility" }, { status: 400 });
   // locking the door needs a key to have been cut first
   if (visibility === "password" && !(await hasAccessPassword())) {
-    return Response.json({ error: "set_a_password_first" }, { status: 400 });
+    return privateJsonResponse({ error: "set_a_password_first" }, { status: 400 });
   }
   await setSiteVisibility(visibility, auth.user.email);
-  return Response.json(await state());
+  return privateJsonResponse(await state());
 }
