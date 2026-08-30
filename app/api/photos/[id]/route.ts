@@ -1,4 +1,4 @@
-import { getSiteVisibility, readAttachment } from "../../../../db/store";
+import { readAttachment } from "../../../../db/store";
 import { archiveCacheHeaders, preventSharedCaching, privateArchiveCacheHeaders } from "../../../../lib/archive-cache";
 import { isPublicRasterContentType } from "../../../../lib/attachment-types";
 import { requireEditor, requireVisitor } from "../../../authz";
@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return preventSharedCaching(new Response("Not found", { status: 404 }));
   }
   const cacheHeaders = isPublicRaster
-    ? archiveCacheHeaders(await getSiteVisibility(), "public, max-age=86400, immutable")
+    ? archiveCacheHeaders(access.visibility, "public, max-age=86400, immutable")
     : privateArchiveCacheHeaders();
   return new Response(attachment.object.body, {
     headers: {

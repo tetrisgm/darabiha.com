@@ -1,13 +1,12 @@
-import { cachedTreeJson, getSiteVisibility, readTree } from "../../../db/store";
+import { cachedTreeJson, readTree } from "../../../db/store";
 import { archiveCacheHeaders, preventSharedCaching } from "../../../lib/archive-cache";
 import { requireVisitor } from "../../authz";
 
 export async function GET() {
   const access = await requireVisitor();
   if (!access.ok) return preventSharedCaching(access.response);
-  const visibility = await getSiteVisibility();
   const headers = {
-    ...archiveCacheHeaders(visibility, "public, max-age=30, stale-while-revalidate=120"),
+    ...archiveCacheHeaders(access.visibility, "public, max-age=30, stale-while-revalidate=120"),
     "content-type": "application/json",
   };
   const cached = cachedTreeJson();

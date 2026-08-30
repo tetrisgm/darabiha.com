@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { getAppleUser, verifyToken, type AppleUser } from "./apple-auth";
-import { getMemberRole, getSiteVisibility, type MemberRole } from "../db/store";
+import { getMemberRole, getSiteVisibility, type MemberRole, type SiteVisibility } from "../db/store";
 import { ACCESS_COOKIE } from "../lib/access";
 
 // Editing is enforced: only members with the editor or admin role can
@@ -56,8 +56,10 @@ export type VisitorGate = "ok" | "sign-in" | "not-a-member" | "password";
  * or has followed the private link. Being on the member list always passes,
  * in every mode - the owner asked that people they have added are never
  * asked for the password. */
-export async function visitorGate(): Promise<VisitorGate> {
-  const visibility = await getSiteVisibility();
+export async function visitorGate(
+  knownVisibility?: SiteVisibility,
+): Promise<VisitorGate> {
+  const visibility = knownVisibility ?? await getSiteVisibility(true);
   if (visibility === "public") return "ok";
   const user = await getAppleUser();
   if (user && (await getViewerRole(user))) return "ok";
@@ -66,10 +68,15 @@ export async function visitorGate(): Promise<VisitorGate> {
 }
 
 export async function requireVisitor(): Promise<
-  { ok: true } | { ok: false; response: Response }
+  { ok: true; visibility: SiteVisibility } | { ok: false; response: Response }
 > {
-  const gate = await visitorGate();
-  if (gate === "ok") return { ok: true };
+  // Access and cache classification must use the same fresh value. The
+  // per-isolate visibility cache is useful for display-only reads, but an
+  // isolate can otherwise keep treating a newly-private archive as public for
+  // ten seconds after another isolate changes the setting.
+  const visibility = await getSiteVisibility(true);
+  const gate = await visitorGate(visibility);
+  if (gate === "ok") return { ok: true, visibility };
   if (gate === "password") return { ok: false, response: Response.json({ error: "password_required" }, { status: 401 }) };
   if (gate === "sign-in") return { ok: false, response: Response.json({ error: "sign_in_required" }, { status: 401 }) };
   return { ok: false, response: Response.json({ error: "viewer_access_required" }, { status: 403 }) };

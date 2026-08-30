@@ -22,7 +22,7 @@ type Visibility = "public" | "members" | "password";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  authz.requireVisitor.mockResolvedValue({ ok: true });
+  authz.requireVisitor.mockResolvedValue({ ok: true, visibility: "public" });
   authz.requireEditor.mockResolvedValue({ ok: true });
   store.cachedTreeJson.mockReturnValue('{"people":[]}');
   store.readTree.mockResolvedValue({ people: [] });
@@ -34,7 +34,7 @@ beforeEach(() => {
 
 describe("archive cache policy", () => {
   it("allows shared caching only when the tree is public", async () => {
-    store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
+    authz.requireVisitor.mockResolvedValue({ ok: true, visibility: "public" satisfies Visibility });
 
     const response = await getTree();
 
@@ -45,7 +45,7 @@ describe("archive cache policy", () => {
   it.each(["password", "members"] satisfies Visibility[])(
     "prevents shared caching of a %s-gated tree",
     async (visibility) => {
-      store.getSiteVisibility.mockResolvedValue(visibility);
+      authz.requireVisitor.mockResolvedValue({ ok: true, visibility });
 
       const response = await getTree();
 
@@ -68,7 +68,7 @@ describe("archive cache policy", () => {
   });
 
   it("allows shared caching only when photographs are public", async () => {
-    store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
+    authz.requireVisitor.mockResolvedValue({ ok: true, visibility: "public" satisfies Visibility });
 
     const response = await getPhoto(new Request("https://darabiha.com/api/photos/photo-1"), {
       params: Promise.resolve({ id: "photo-1" }),
@@ -83,7 +83,7 @@ describe("archive cache policy", () => {
   it.each(["password", "members"] satisfies Visibility[])(
     "prevents shared caching of a %s-gated photograph",
     async (visibility) => {
-      store.getSiteVisibility.mockResolvedValue(visibility);
+      authz.requireVisitor.mockResolvedValue({ ok: true, visibility });
 
       const response = await getPhoto(new Request("https://darabiha.com/api/photos/photo-1"), {
         params: Promise.resolve({ id: "photo-1" }),
