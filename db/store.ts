@@ -3,8 +3,9 @@ import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Rela
 import { safeAttachmentContentType } from "../lib/attachment-types";
 import { runRecordChecks } from "../lib/record-checks";
 import { LEGACY_MEMBER_ROLE_MIGRATION_SQL, MEMBERS_PERSON_INDEX_SQL } from "./legacy-migrations";
+import { preparePersonDeletion } from "./person-deletion";
+import { createSingleFlightInitializer, ensureColumns } from "./schema-initialization";
 
-let initialized = false;
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS people (
     id TEXT PRIMARY KEY, display_name TEXT NOT NULL, gender TEXT CHECK(gender IN ('male', 'female')), given_name TEXT, family_name TEXT,
@@ -64,19 +65,32 @@ const schemaStatements = [
   )`,
 ];
 
-export async function ensureSchema() {
-  if (initialized) return;
+type CompatibilityTable = "people" | "relationships" | "members" | "stories";
+
+async function compatibilityColumns(table: CompatibilityTable) {
+  const result = await env.DB.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+  return new Set(result.results.map(({ name }) => name));
+}
+
+async function ensureTextColumns(table: CompatibilityTable, columns: readonly string[]) {
+  await ensureColumns(columns, {
+    listColumns: () => compatibilityColumns(table),
+    addColumn: async (column) => {
+      await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`).run();
+    },
+  });
+}
+
+async function initializeSchema() {
   await env.DB.batch(schemaStatements.map((sql) => env.DB.prepare(sql)));
-  for (const column of ["birth_city", "birth_country", "death_city", "death_country", "gender", "maiden_name", "burial_place", "residence"]) {
-    try { await env.DB.prepare(`ALTER TABLE people ADD COLUMN ${column} TEXT`).run(); } catch { /* existing deployment */ }
-  }
-  try { await env.DB.prepare("ALTER TABLE relationships ADD COLUMN status TEXT").run(); } catch { /* existing deployment */ }
+  await ensureTextColumns("people", ["birth_city", "birth_country", "death_city", "death_country", "gender", "maiden_name", "burial_place", "residence"]);
+  await ensureTextColumns("relationships", ["status"]);
   // Which person in the tree an account belongs to, so the archive can open
   // where that person stands rather than at the founders.
-  try { await env.DB.prepare("ALTER TABLE members ADD COLUMN person_id TEXT").run(); } catch { /* existing deployment */ }
+  await ensureTextColumns("members", ["person_id"]);
   // Imported archive material is written in its own language; body holds the
   // English a reader sees first, original_body the words the family wrote.
-  try { await env.DB.prepare("ALTER TABLE stories ADD COLUMN original_body TEXT").run(); } catch { /* existing deployment */ }
+  await ensureTextColumns("stories", ["original_body"]);
   // The roles are named for what they let a person do - canView, canEdit,
   // admin - and older databases carry 'viewer' and 'editor' under a CHECK
   // constraint SQLite cannot alter, so the table is rebuilt once and the
@@ -103,8 +117,11 @@ export async function ensureSchema() {
       env.DB.prepare("INSERT OR IGNORE INTO members (email, role, added_by, created_at, updated_at) VALUES (?, ?, 'seed', ?, ?)").bind(email, role, now, now)));
   }
   await env.DB.prepare("PRAGMA optimize").run();
-  initialized = true;
 }
+
+const initializeSchemaOnce = createSingleFlightInitializer(initializeSchema);
+
+export const ensureSchema = () => initializeSchemaOnce();
 
 export type MemberRole = "admin" | "canEdit" | "canView";
 
@@ -467,18 +484,7 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       .bind(person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate, person.deathDate,
         person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.residence, person.biography, person.photoAttachmentId, now, proposal.personId));
   } else if (proposal.kind === "delete_person") {
-    // There are no foreign keys on these tables, so everything that points at
-    // a person has to be cleared here. Photographs and comments were added
-    // after this path was written and were being left behind; a member who
-    // had claimed the person would have been left pointing at a ghost.
-    statements.push(
-      env.DB.prepare("DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?").bind(proposal.personId, proposal.personId),
-      env.DB.prepare("DELETE FROM story_people WHERE person_id = ?").bind(proposal.personId),
-      env.DB.prepare("DELETE FROM person_photos WHERE person_id = ?").bind(proposal.personId),
-      env.DB.prepare("DELETE FROM person_comments WHERE person_id = ?").bind(proposal.personId),
-      env.DB.prepare("UPDATE members SET person_id = NULL WHERE person_id = ?").bind(proposal.personId),
-      env.DB.prepare("DELETE FROM people WHERE id = ?").bind(proposal.personId),
-    );
+    statements.push(...preparePersonDeletion(env.DB, { personId: proposal.personId, actorEmail, deletedAt: now }));
   } else if (proposal.kind === "add_relationship") {
     const resolvePersonId = async (id: string, name?: string | null) => {
       if (id) {
@@ -608,9 +614,7 @@ export async function removePerson(personId: string, actorEmail: string) {
   await ensureSchema();
   const now = new Date().toISOString();
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?").bind(personId, personId),
-    env.DB.prepare("DELETE FROM story_people WHERE person_id = ?").bind(personId),
-    env.DB.prepare("DELETE FROM people WHERE id = ?").bind(personId),
+    ...preparePersonDeletion(env.DB, { personId, actorEmail, deletedAt: now }),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "remove_person", "Removed a family member", JSON.stringify({ personId }), now),
   ]);
   return readTree();
