@@ -53,6 +53,19 @@ describe("archive cache policy", () => {
     },
   );
 
+  it("prevents caching of a visitor denial", async () => {
+    authz.requireVisitor.mockResolvedValue({
+      ok: false,
+      response: new Response("Password required", { status: 401 }),
+    });
+
+    const response = await getTree();
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
+    expect(response.headers.get("vary")).toBe("Cookie");
+  });
+
   it("allows shared caching only when photographs are public", async () => {
     store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
 
@@ -77,4 +90,52 @@ describe("archive cache policy", () => {
       expect(response.headers.get("vary")).toBe("Cookie");
     },
   );
+
+  it("never shares editor-only evidence even when the archive is public", async () => {
+    store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
+    store.readAttachment.mockResolvedValue({
+      metadata: { contentType: "application/pdf", filename: "source.pdf" },
+      object: { body: "source" },
+    });
+
+    const response = await getPhoto(new Request("https://darabiha.com/api/photos/source-1"), {
+      params: Promise.resolve({ id: "source-1" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
+    expect(response.headers.get("vary")).toBe("Cookie");
+  });
+
+  it("prevents an editor-only evidence denial from poisoning caches", async () => {
+    store.getSiteVisibility.mockResolvedValue("public" satisfies Visibility);
+    store.readAttachment.mockResolvedValue({
+      metadata: { contentType: "application/pdf", filename: "source.pdf" },
+      object: { body: "source" },
+    });
+    authz.requireEditor.mockResolvedValue({
+      ok: false,
+      response: new Response("Forbidden", { status: 403 }),
+    });
+
+    const response = await getPhoto(new Request("https://darabiha.com/api/photos/source-1"), {
+      params: Promise.resolve({ id: "source-1" }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
+    expect(response.headers.get("vary")).toBe("Cookie");
+  });
+
+  it("prevents a missing-photo response from poisoning caches", async () => {
+    store.readAttachment.mockResolvedValue(null);
+
+    const response = await getPhoto(new Request("https://darabiha.com/api/photos/missing"), {
+      params: Promise.resolve({ id: "missing" }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toBe("private, no-store, max-age=0");
+    expect(response.headers.get("vary")).toBe("Cookie");
+  });
 });
