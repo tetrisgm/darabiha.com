@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampScale, panView, zoomView } from "../app/components/FamilyTreeCanvas";
+import { centerViewOn, clampScale, panView, zoomView } from "../app/components/FamilyTreeCanvas";
 
 describe("family canvas viewport math", () => {
   it("keeps zoom within usable bounds", () => {
@@ -20,5 +20,16 @@ describe("family canvas viewport math", () => {
     const before = { x: 40, y: -20, scale: 1.25 };
     expect(panView(before, { x: 75, y: -30 })).toEqual({ x: 115, y: -50, scale: 1.25 });
     expect(before).toEqual({ x: 40, y: -20, scale: 1.25 });
+  });
+
+  it("centers a world point at every zoom level", () => {
+    const view = centerViewOn(
+      { x: 900, y: -300, scale: 2 },
+      { x: 175, y: 80 },
+      { width: 1_000, height: 600 },
+    );
+    expect(view).toEqual({ x: 150, y: 140, scale: 2 });
+    expect(view.x + 175 * view.scale).toBe(500);
+    expect(view.y + 80 * view.scale).toBe(300);
   });
 });

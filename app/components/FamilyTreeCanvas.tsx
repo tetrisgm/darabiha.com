@@ -26,6 +26,18 @@ export function panView(view: CanvasView, delta: { x: number; y: number }): Canv
   return { ...view, x: view.x + delta.x, y: view.y + delta.y };
 }
 
+export function centerViewOn(
+  view: CanvasView,
+  worldPoint: { x: number; y: number },
+  viewport: { width: number; height: number },
+): CanvasView {
+  return {
+    ...view,
+    x: viewport.width / 2 - worldPoint.x * view.scale,
+    y: viewport.height / 2 - worldPoint.y * view.scale,
+  };
+}
+
 type CanvasCursorMode = "grab" | "grabbing" | "pointer";
 
 function CanvasCursor({ mode, cursorRef }: { mode: CanvasCursorMode; cursorRef: React.RefObject<HTMLSpanElement | null> }) {
@@ -312,7 +324,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
     if (!rect) return;
     const p = point(person);
     const start = viewRef.current;
-    const target = { x: -(p.x - rect.width / 2) * start.scale, y: -(p.y - rect.height / 2) * start.scale };
+    const target = centerViewOn(start, p, rect);
     cancelCameraAnimation();
     cancelWheelCommit();
     if (!animate) { commitView({ ...start, ...target }); return; }
