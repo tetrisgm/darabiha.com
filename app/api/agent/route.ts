@@ -8,7 +8,7 @@ import { listAttachments, readTree, recordAgentQuestions, saveAttachment } from 
 import { extractArchive } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
-import { createRelationshipDescriber, relationshipSentence } from "../../../lib/relationship-path";
+import { archiveQueryRelationships } from "../../../lib/archive-query-context";
 import { interviewLeads } from "../../../lib/interview";
 import { archivistInstructions, archivistTools } from "../../../lib/archivist";
 import { conflictFromCall, proposalFromCall } from "../../../lib/agent-calls";
@@ -31,20 +31,11 @@ type ToolCall = { type: "function_call"; name: string; arguments: string };
  * being discussed, which is the only place a living relative can actually
  * help. */
 function archivistContext(tree: FamilyTree, conversation: string): string {
-  const asked = conversation.toLocaleLowerCase();
-  const named = tree.people.filter((person) => person.displayName.length >= 4 && asked.includes(person.displayName.toLocaleLowerCase().split(" ")[0]));
-  const pairs: string[] = [];
-  let describeRelationship: ReturnType<typeof createRelationshipDescriber> | undefined;
-  for (let i = 0; i < named.length && i < 6; i += 1) {
-    for (let j = i + 1; j < named.length && j < 6; j += 1) {
-      const result = (describeRelationship ??= createRelationshipDescriber(tree))(named[i].id, named[j].id);
-      if (result) pairs.push(relationshipSentence(result));
-    }
-  }
-  const leads = interviewLeads(tree, named.map((person) => person.id));
+  const { people, relationships } = archiveQueryRelationships(tree, conversation);
+  const leads = interviewLeads(tree, people.map((person) => person.id));
   const today = onThisDay(tree).map((fact) => fact.text);
   return [
-    pairs.length ? `Computed relationships (authoritative):\n${pairs.join("\n")}` : "",
+    relationships.length ? `Computed relationships (authoritative):\n${relationships.join("\n")}` : "",
     leads.length ? `Worth asking about (gaps near the people in this conversation):\n${leads.map((lead) => `- ${lead.personName}${lead.nearTo ? ` (near ${lead.nearTo})` : ""}: missing ${lead.missing.join(", ")}`).join("\n")}` : "",
     today.length ? `Anniversaries today:\n${today.join("\n")}` : "",
     `Facts about the archive:\n${familyFactoids(tree).map((fact) => fact.text).join("\n")}`,
