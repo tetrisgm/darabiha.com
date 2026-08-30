@@ -7,6 +7,7 @@
  */
 
 const nullableString = { type: ["string", "null"] } as const;
+const MAX_TOOL_LINKS_PER_KIND = 16;
 const personProperties = {
   display_name: { type: "string", description: "The person's public display name." },
   gender: { type: ["string", "null"], enum: ["male", "female", null], description: "Record only when the source states or unambiguously identifies it; otherwise null." },
@@ -28,7 +29,7 @@ export const archivistTools = [
     description: "Propose adding one person to the public family tree. Never invent missing facts.",
     parameters: {
       type: "object", additionalProperties: false,
-      properties: { summary: { type: "string" }, ...personProperties, relationship_hints: { type: "array", items: { type: "object", additionalProperties: false, properties: { person_name: { type: "string" }, relationship_type: { type: "string", enum: ["parent", "spouse"] } }, required: ["person_name", "relationship_type"] } } },
+      properties: { summary: { type: "string" }, ...personProperties, relationship_hints: { type: "array", maxItems: MAX_TOOL_LINKS_PER_KIND, items: { type: "object", additionalProperties: false, properties: { person_name: { type: "string" }, relationship_type: { type: "string", enum: ["parent", "spouse"] } }, required: ["person_name", "relationship_type"] } } },
       required: ["summary", ...personRequired, "relationship_hints"],
     },
   },
@@ -64,8 +65,8 @@ export const archivistTools = [
       properties: {
         summary: { type: "string" }, title: { type: "string" }, body: { type: "string" },
         date: nullableString, place: nullableString,
-        person_ids: { type: "array", items: { type: "string" } },
-        attachment_ids: { type: "array", items: { type: "string" } },
+        person_ids: { type: "array", maxItems: MAX_TOOL_LINKS_PER_KIND, items: { type: "string" } },
+        attachment_ids: { type: "array", maxItems: MAX_TOOL_LINKS_PER_KIND, items: { type: "string" } },
       },
       required: ["summary", "title", "body", "date", "place", "person_ids", "attachment_ids"],
     },
@@ -96,8 +97,8 @@ export const archivistTools = [
       properties: {
         summary: { type: "string" }, story_id: { type: "string" }, title: { type: "string" }, body: { type: "string" },
         date: nullableString, place: nullableString,
-        person_ids: { type: "array", items: { type: "string" } },
-        attachment_ids: { type: "array", items: { type: "string" } },
+        person_ids: { type: "array", maxItems: MAX_TOOL_LINKS_PER_KIND, items: { type: "string" } },
+        attachment_ids: { type: "array", maxItems: MAX_TOOL_LINKS_PER_KIND, items: { type: "string" } },
       },
       required: ["summary", "story_id", "title", "body", "date", "place", "person_ids", "attachment_ids"],
     },
