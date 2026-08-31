@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("cloudflare:workers", () => ({ env: {} }));
+vi.mock("cloudflare:workers", () => ({ env: {}, waitUntil: vi.fn() }));
 
 import { applyProposal } from "../db/store";
 

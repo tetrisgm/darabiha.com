@@ -123,6 +123,34 @@ export const RUNTIME_INTEGRITY_SCHEMA = [
         THEN RAISE(ABORT, 'person_photo_attachment_missing') END;
     END`,
 
+  `CREATE TRIGGER IF NOT EXISTS person_comments_validate_insert
+    BEFORE INSERT ON person_comments
+    BEGIN
+      SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM people WHERE id = NEW.person_id)
+        THEN RAISE(ABORT, 'person_comment_person_missing') END;
+    END`,
+  `CREATE TRIGGER IF NOT EXISTS person_comments_validate_update
+    BEFORE UPDATE OF person_id ON person_comments
+    BEGIN
+      SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM people WHERE id = NEW.person_id)
+        THEN RAISE(ABORT, 'person_comment_person_missing') END;
+    END`,
+
+  `CREATE TRIGGER IF NOT EXISTS members_validate_person_insert
+    BEFORE INSERT ON members
+    WHEN NEW.person_id IS NOT NULL
+    BEGIN
+      SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM people WHERE id = NEW.person_id)
+        THEN RAISE(ABORT, 'member_person_missing') END;
+    END`,
+  `CREATE TRIGGER IF NOT EXISTS members_validate_person_update
+    BEFORE UPDATE OF person_id ON members
+    WHEN NEW.person_id IS NOT NULL
+    BEGIN
+      SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM people WHERE id = NEW.person_id)
+        THEN RAISE(ABORT, 'member_person_missing') END;
+    END`,
+
   `CREATE TRIGGER IF NOT EXISTS people_validate_photo_insert
     BEFORE INSERT ON people
     WHEN NEW.photo_attachment_id IS NOT NULL

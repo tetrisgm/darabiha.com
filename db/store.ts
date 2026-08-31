@@ -1,9 +1,17 @@
-import { env } from "cloudflare:workers";
+import { env, waitUntil } from "cloudflare:workers";
 import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
 import { safeAttachmentContentType } from "../lib/attachment-types";
 import { isChangeProposal } from "../lib/change-proposal";
 import { runRecordChecks } from "../lib/record-checks";
-import { finalizeQueuedObjectDeletion, prepareAttachmentDeletion } from "./attachment-deletion";
+import {
+  deferObjectDeletionRetries,
+  finalizeQueuedObjectDeletion,
+  OBJECT_DELETION_RETRY_BATCH_SIZE,
+  persistAttachmentMetadataWithCompensation,
+  prepareAttachmentDeletion,
+  prepareUnreferencedAttachmentCompensation,
+  retryQueuedObjectDeletionBatch,
+} from "./attachment-deletion";
 import { LEGACY_MEMBER_ROLE_MIGRATION_SQL, MEMBERS_PERSON_INDEX_SQL } from "./legacy-migrations";
 import { MutationInvariants } from "./mutation-invariants";
 import { preparePersonDeletion } from "./person-deletion";
@@ -70,7 +78,6 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS site_settings (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
-  ...RUNTIME_INTEGRITY_SCHEMA,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -105,13 +112,25 @@ async function initializeSchema() {
   // values mapped across.
   const membersSchema = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='members'").first<{ sql: string }>();
   if (membersSchema && !membersSchema.sql.includes("'canView'")) {
-    await env.DB.batch(LEGACY_MEMBER_ROLE_MIGRATION_SQL.map((sql) => env.DB.prepare(sql)));
+    // A prior interrupted deployment may already have triggers that reference
+    // members. SQLite refuses to rebuild the table while those references
+    // would be temporarily invalid, so remove and reinstall them atomically
+    // around the one-time migration.
+    await env.DB.batch([
+      env.DB.prepare("DROP TRIGGER IF EXISTS people_restrict_delete"),
+      env.DB.prepare("DROP TRIGGER IF EXISTS members_validate_person_insert"),
+      env.DB.prepare("DROP TRIGGER IF EXISTS members_validate_person_update"),
+      ...LEGACY_MEMBER_ROLE_MIGRATION_SQL.map((sql) => env.DB.prepare(sql)),
+    ]);
   }
   // claimMemberPerson checks this too, but a check followed by a write is not
   // atomic. Recreate the index after the legacy rebuild because dropping the
   // old table also drops its indexes. Duplicate claims must stop startup rather
   // than silently weakening this invariant.
   await env.DB.prepare(MEMBERS_PERSON_INDEX_SQL).run();
+  // Install triggers only after the legacy members rebuild. DROP TABLE also
+  // drops that table's triggers, and older databases still take this path.
+  await env.DB.batch(RUNTIME_INTEGRITY_SCHEMA.map((sql) => env.DB.prepare(sql)));
   // First run seeds the member list: the owner as admin, plus any emails the
   // old EDITOR_EMAILS allow-list carried, as editors.
   const memberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM members").first<{ count: number }>();
@@ -433,13 +452,46 @@ export async function saveAttachment(file: File, actorEmail: string): Promise<At
     customMetadata: { filename: file.name },
   });
   const now = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare(`INSERT INTO attachments
-      (id, object_key, filename, content_type, size, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .bind(id, objectKey, file.name, contentType, file.size, actorEmail, now),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), actorEmail, "upload_attachment", `Uploaded ${file.name}`, JSON.stringify({ attachmentId: id, filename: file.name, contentType, size: file.size }), now),
-  ]);
+  await persistAttachmentMetadataWithCompensation(objectKey, {
+    persistMetadata: async () => {
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO attachments
+          (id, object_key, filename, content_type, size, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .bind(id, objectKey, file.name, contentType, file.size, actorEmail, now),
+        env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+          .bind(crypto.randomUUID(), actorEmail, "upload_attachment", `Uploaded ${file.name}`, JSON.stringify({ attachmentId: id, filename: file.name, contentType, size: file.size }), now),
+      ]);
+    },
+    metadataExists: async () => Boolean(await env.DB.prepare("SELECT id FROM attachments WHERE id = ?")
+      .bind(id).first<{ id: string }>()),
+    deleteObject: (key) => env.FILES.delete(key),
+    queueObjectDeletion: async (key) => {
+      await env.DB.prepare(`INSERT OR IGNORE INTO object_deletion_queue (object_key, queued_at)
+        SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM attachments WHERE object_key = ?)`)
+        .bind(key, new Date().toISOString(), key).run();
+    },
+    reportAmbiguousPersistence: ({ objectKey: failedKey, verificationError }) => {
+      console.error(JSON.stringify({
+        message: verificationError === undefined
+          ? "attachment metadata may have committed despite a rejected batch; preserving R2 object"
+          : "attachment metadata failure could not be verified; preserving possible live R2 object",
+        objectKey: failedKey,
+        ...(verificationError === undefined ? {} : {
+          verificationError: verificationError instanceof Error ? verificationError.message : String(verificationError),
+        }),
+      }));
+    },
+    reportDeferredCleanup: ({ deleteError, objectKey: failedKey, queueError }) => {
+      console.error(JSON.stringify({
+        message: queueError
+          ? "attachment upload compensation could not be queued"
+          : "attachment upload compensation queued after R2 deletion failed",
+        objectKey: failedKey,
+        deleteError: deleteError instanceof Error ? deleteError.message : String(deleteError),
+        ...(queueError === undefined ? {} : { queueError: queueError instanceof Error ? queueError.message : String(queueError) }),
+      }));
+    },
+  });
   return { id, filename: file.name, contentType, size: file.size };
 }
 
@@ -462,11 +514,10 @@ async function finalizeAttachmentObjectDeletion(objectKey: string): Promise<void
   // The queue reserves a key against reuse until R2 confirms deletion. A
   // surviving legacy metadata row means this was not the last reference and
   // the physical object must remain.
-  const live = await env.DB.prepare("SELECT id FROM attachments WHERE object_key = ? LIMIT 1").bind(objectKey).first<{ id: string }>();
-  if (live) {
-    await env.DB.prepare("DELETE FROM object_deletion_queue WHERE object_key = ?").bind(objectKey).run();
-    return;
-  }
+  const stale = await env.DB.prepare(`DELETE FROM object_deletion_queue
+    WHERE object_key = ? AND EXISTS (SELECT 1 FROM attachments WHERE object_key = ?)`)
+    .bind(objectKey, objectKey).run();
+  if (stale.meta.changes) return;
   const queued = await env.DB.prepare("SELECT object_key FROM object_deletion_queue WHERE object_key = ?").bind(objectKey).first<{ object_key: string }>();
   if (!queued) return;
   await finalizeQueuedObjectDeletion(objectKey, {
@@ -477,25 +528,110 @@ async function finalizeAttachmentObjectDeletion(objectKey: string): Promise<void
   });
 }
 
-async function retryPendingObjectDeletions(): Promise<void> {
-  const pending = await env.DB.prepare("SELECT object_key AS objectKey FROM object_deletion_queue ORDER BY queued_at LIMIT 10")
-    .all<{ objectKey: string }>();
-  for (const { objectKey } of pending.results) {
-    try {
-      await finalizeAttachmentObjectDeletion(objectKey);
-    } catch (error) {
-      console.error(JSON.stringify({
-        message: "attachment object deletion remains queued",
-        objectKey,
-        error: error instanceof Error ? error.message : String(error),
-      }));
-    }
+async function compensateFailedPersonPhotoLink(attachmentId: string): Promise<void> {
+  const metadata = await env.DB.prepare("SELECT object_key AS objectKey FROM attachments WHERE id = ?")
+    .bind(attachmentId).first<{ objectKey: string }>();
+  if (!metadata) return;
+  const [deleted] = await env.DB.batch(prepareUnreferencedAttachmentCompensation(env.DB, {
+    attachmentId,
+    objectKey: metadata.objectKey,
+    deletedAt: new Date().toISOString(),
+  }));
+  if (!deleted.meta.changes) {
+    console.error(JSON.stringify({
+      message: "failed person-photo link may have committed; preserving referenced attachment",
+      attachmentId,
+      objectKey: metadata.objectKey,
+    }));
+    return;
   }
+  try {
+    await finalizeAttachmentObjectDeletion(metadata.objectKey);
+  } catch (error) {
+    // Metadata is gone but the durable queue row remains for a later retry.
+    console.error(JSON.stringify({
+      message: "failed person-photo link cleanup remains queued",
+      attachmentId,
+      objectKey: metadata.objectKey,
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  }
+}
+
+async function retryPendingObjectDeletions(): Promise<void> {
+  try {
+    // Clear only queue rows that still have legacy live metadata. This single
+    // conditional write cannot lose a concurrent last-metadata deletion: that
+    // transaction will recreate the intent after our write commits.
+    await env.DB.prepare(`DELETE FROM object_deletion_queue
+      WHERE EXISTS (SELECT 1 FROM attachments WHERE attachments.object_key = object_deletion_queue.object_key)`).run();
+    const pending = await env.DB.prepare(`SELECT object_key AS objectKey FROM object_deletion_queue
+      WHERE NOT EXISTS (SELECT 1 FROM attachments WHERE attachments.object_key = object_deletion_queue.object_key)
+      ORDER BY queued_at, object_key LIMIT ?`)
+      .bind(OBJECT_DELETION_RETRY_BATCH_SIZE).all<{ objectKey: string }>();
+    const attemptedAt = new Date(Date.now() + 1).toISOString();
+    await retryQueuedObjectDeletionBatch(pending.results.map(({ objectKey }) => objectKey), {
+      markAttempts: async (objectKeys) => {
+        await env.DB.batch(objectKeys.map((objectKey) => env.DB.prepare(
+          "UPDATE object_deletion_queue SET queued_at = ? WHERE object_key = ?",
+        ).bind(attemptedAt, objectKey)));
+      },
+      deleteObjects: (objectKeys) => env.FILES.delete([...objectKeys]),
+      clearQueuedObjects: async (objectKeys) => {
+        await env.DB.batch(objectKeys.map((objectKey) => env.DB.prepare(`DELETE FROM object_deletion_queue
+          WHERE object_key = ? AND NOT EXISTS (SELECT 1 FROM attachments WHERE object_key = ?)`)
+          .bind(objectKey, objectKey)));
+      },
+      reportFailure: (objectKeys, error) => {
+        console.error(JSON.stringify({
+          message: "attachment object deletion batch remains queued",
+          objectKeys,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      },
+    });
+  } catch (error) {
+    console.error(JSON.stringify({
+      message: "attachment object deletion retry scan failed",
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  }
+}
+
+async function deferPendingObjectDeletions(): Promise<void> {
+  await deferObjectDeletionRetries(retryPendingObjectDeletions(), waitUntil, (error) => {
+    console.error(JSON.stringify({
+      message: "attachment object deletion retry could not be deferred; awaiting it before return",
+      error: error instanceof Error ? error.message : String(error),
+    }));
+  });
 }
 
 function nullable(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
+
+async function requirePersonTarget(personId: string): Promise<void> {
+  const person = await env.DB.prepare("SELECT id FROM people WHERE id = ?").bind(personId).first<{ id: string }>();
+  if (!person) throw new Error("That person is no longer in the tree.");
+}
+
+type PhotoTargetState = { personExists: number; attachmentExists: number; linkExists: number; portraitMatches: number };
+async function photoTargetState(personId: string, attachmentId: string): Promise<PhotoTargetState> {
+  return (await env.DB.prepare(`SELECT
+    EXISTS(SELECT 1 FROM people WHERE id = ?) AS personExists,
+    EXISTS(SELECT 1 FROM attachments WHERE id = ?) AS attachmentExists,
+    EXISTS(SELECT 1 FROM person_photos WHERE person_id = ? AND attachment_id = ?) AS linkExists,
+    EXISTS(SELECT 1 FROM people WHERE id = ? AND photo_attachment_id = ?) AS portraitMatches`)
+    .bind(personId, attachmentId, personId, attachmentId, personId, attachmentId).first<PhotoTargetState>())
+    ?? { personExists: 0, attachmentExists: 0, linkExists: 0, portraitMatches: 0 };
+}
+
+function requirePhotoTargets(target: PhotoTargetState): void {
+  if (!target.personExists) throw new Error("That person is no longer in the tree.");
+  if (!target.attachmentExists) throw new Error("That photograph no longer exists.");
+}
+
 function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   const displayName = typeof input.displayName === "string" ? input.displayName.trim() : "";
   if (!displayName) throw new Error("A person needs a display name.");
@@ -519,7 +655,6 @@ async function readMutationInvariants(includeAttachments = false) {
 export async function applyProposal(proposal: ChangeProposal, actorEmail: string): Promise<FamilyTree> {
   if (!isChangeProposal(proposal)) throw new Error("Invalid change proposal.");
   await ensureSchema();
-  await retryPendingObjectDeletions();
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
   let deletedObjectKey: string | null = null;
@@ -635,7 +770,9 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       }));
     }
   }
-  return readTree();
+  const tree = await readTree();
+  await deferPendingObjectDeletions();
+  return tree;
 }
 
 export async function updatePerson(personId: string, patch: Record<string, unknown>, actorEmail: string) {
@@ -672,24 +809,45 @@ export async function removeRelationship(relationshipId: string, actorEmail: str
 }
 
 export async function attachPersonPhoto(personId: string, file: File, actorEmail: string) {
-  const attachment = await saveAttachment(file, actorEmail);
   await ensureSchema();
+  // Validate before the R2 write. The insert trigger remains the concurrent
+  // backstop if the person is removed between this read and the D1 batch.
+  await requirePersonTarget(personId);
+  const attachment = await saveAttachment(file, actorEmail);
   const now = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)").bind(personId, attachment.id, now),
-    // the first photograph of someone becomes their portrait; later ones join the gallery
-    env.DB.prepare("UPDATE people SET photo_attachment_id = COALESCE(photo_attachment_id, ?), updated_at = ? WHERE id = ?").bind(attachment.id, now, personId),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "attach_person_photo", "Added a family photograph", JSON.stringify({ personId, attachmentId: attachment.id }), now),
-  ]);
+  try {
+    await env.DB.batch([
+      env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)").bind(personId, attachment.id, now),
+      // the first photograph of someone becomes their portrait; later ones join the gallery
+      env.DB.prepare("UPDATE people SET photo_attachment_id = COALESCE(photo_attachment_id, ?), updated_at = ? WHERE id = ?").bind(attachment.id, now, personId),
+      env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "attach_person_photo", "Added a family photograph", JSON.stringify({ personId, attachmentId: attachment.id }), now),
+    ]);
+  } catch (linkError) {
+    try {
+      await compensateFailedPersonPhotoLink(attachment.id);
+    } catch (compensationError) {
+      // Preserve the original link error while surfacing any possible private
+      // orphan for operators to reconcile.
+      console.error(JSON.stringify({
+        message: "failed person-photo link could not be safely compensated",
+        attachmentId: attachment.id,
+        error: compensationError instanceof Error ? compensationError.message : String(compensationError),
+      }));
+    }
+    throw linkError;
+  }
   return readTree();
 }
 
 export async function removePersonPhoto(personId: string, actorEmail: string) {
   await ensureSchema();
+  await requirePersonTarget(personId);
   const now = new Date().toISOString();
   await env.DB.batch([
-    env.DB.prepare("UPDATE people SET photo_attachment_id = NULL, updated_at = ? WHERE id = ?").bind(now, personId),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "remove_person_photo", "Removed a family portrait", JSON.stringify({ personId }), now),
+    env.DB.prepare("UPDATE people SET photo_attachment_id = NULL, updated_at = ? WHERE id = ? AND photo_attachment_id IS NOT NULL").bind(now, personId),
+    env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
+      SELECT ?, ?, ?, ?, ?, ? WHERE changes() > 0`)
+      .bind(crypto.randomUUID(), actorEmail, "remove_person_photo", "Removed a family portrait", JSON.stringify({ personId }), now),
   ]);
   return readTree();
 }
@@ -928,10 +1086,14 @@ export async function answerQuestion(id: string, verdict: "confirm" | "deny", no
  * person's photo_attachment_id points at. */
 export async function setPersonPortrait(personId: string, attachmentId: string | null, actorEmail: string) {
   await ensureSchema();
+  if (attachmentId) requirePhotoTargets(await photoTargetState(personId, attachmentId));
+  else await requirePersonTarget(personId);
   const now = new Date().toISOString();
   await env.DB.batch([
-    env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ?").bind(attachmentId, now, personId),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ? AND photo_attachment_id IS NOT ?")
+      .bind(attachmentId, now, personId, attachmentId),
+    env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
+      SELECT ?, ?, ?, ?, ?, ? WHERE changes() > 0`)
       .bind(crypto.randomUUID(), actorEmail, "set_person_portrait", attachmentId ? "Chose a portrait" : "Cleared a portrait", JSON.stringify({ personId, attachmentId }), now),
   ]);
   treeJsonCache = null;
@@ -940,12 +1102,20 @@ export async function setPersonPortrait(personId: string, attachmentId: string |
 
 export async function linkPersonPhoto(personId: string, attachmentId: string, actorEmail: string) {
   await ensureSchema();
+  const target = await photoTargetState(personId, attachmentId);
+  requirePhotoTargets(target);
+  // Linking is idempotent, but an idempotent retry is not a new audited change.
+  if (target.linkExists) return readTree();
   const now = new Date().toISOString();
+  const auditId = crypto.randomUUID();
   await env.DB.batch([
     env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)").bind(personId, attachmentId, now),
-    env.DB.prepare("UPDATE people SET photo_attachment_id = COALESCE(photo_attachment_id, ?), updated_at = ? WHERE id = ?").bind(attachmentId, now, personId),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), actorEmail, "link_person_photo", "Added someone to a photograph", JSON.stringify({ personId, attachmentId }), now),
+    env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
+      SELECT ?, ?, ?, ?, ?, ? WHERE changes() > 0`)
+      .bind(auditId, actorEmail, "link_person_photo", "Added someone to a photograph", JSON.stringify({ personId, attachmentId }), now),
+    env.DB.prepare(`UPDATE people SET photo_attachment_id = COALESCE(photo_attachment_id, ?), updated_at = ?
+      WHERE id = ? AND EXISTS (SELECT 1 FROM change_log WHERE id = ?)`)
+      .bind(attachmentId, now, personId, auditId),
   ]);
   treeJsonCache = null;
   return readTree();
@@ -953,14 +1123,27 @@ export async function linkPersonPhoto(personId: string, attachmentId: string, ac
 
 export async function unlinkPersonPhoto(personId: string, attachmentId: string, actorEmail: string) {
   await ensureSchema();
+  const target = await photoTargetState(personId, attachmentId);
+  requirePhotoTargets(target);
+  if (!target.linkExists && !target.portraitMatches) return readTree();
   const now = new Date().toISOString();
+  const auditId = crypto.randomUUID();
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM person_photos WHERE person_id = ? AND attachment_id = ?").bind(personId, attachmentId),
+    env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
+      SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (
+        SELECT 1 FROM person_photos WHERE person_id = ? AND attachment_id = ?
+      ) OR EXISTS (
+        SELECT 1 FROM people WHERE id = ? AND photo_attachment_id = ?
+      )`)
+      .bind(auditId, actorEmail, "unlink_person_photo", "Removed a photograph from a record", JSON.stringify({ personId, attachmentId }), now,
+        personId, attachmentId, personId, attachmentId),
+    env.DB.prepare(`DELETE FROM person_photos WHERE person_id = ? AND attachment_id = ?
+      AND EXISTS (SELECT 1 FROM change_log WHERE id = ?)`)
+      .bind(personId, attachmentId, auditId),
     // dropping the portrait promotes whatever else the person still has
     env.DB.prepare(`UPDATE people SET photo_attachment_id = (SELECT attachment_id FROM person_photos WHERE person_id = ? ORDER BY created_at LIMIT 1), updated_at = ?
-      WHERE id = ? AND photo_attachment_id = ?`).bind(personId, now, personId, attachmentId),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), actorEmail, "unlink_person_photo", "Removed a photograph from a record", JSON.stringify({ personId, attachmentId }), now),
+      WHERE id = ? AND photo_attachment_id = ? AND EXISTS (SELECT 1 FROM change_log WHERE id = ?)`)
+      .bind(personId, now, personId, attachmentId, auditId),
   ]);
   treeJsonCache = null;
   return readTree();
@@ -997,6 +1180,7 @@ export async function addComment(personId: string, body: string, actorEmail: str
   await ensureSchema();
   const text = body.trim().slice(0, 4000);
   if (!personId || !text) throw new Error("comment_required");
+  await requirePersonTarget(personId);
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("INSERT INTO person_comments (id, person_id, author_email, author_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)")
@@ -1014,10 +1198,19 @@ export async function removeComment(commentId: string, actorEmail: string, isAdm
   if (!owner) throw new Error("comment_not_found");
   if (!isAdmin && owner.authorEmail.toLocaleLowerCase() !== actorEmail.toLocaleLowerCase()) throw new Error("not_your_comment");
   const now = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM person_comments WHERE id = ?").bind(commentId),
-    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), actorEmail, "remove_comment", "Removed a comment", JSON.stringify({ commentId }), now),
+  const auditId = crypto.randomUUID();
+  const [claimed] = await env.DB.batch([
+    // Re-check existence and authorization inside the write transaction. A
+    // concurrent removal therefore cannot leave a false successful audit.
+    env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
+      SELECT ?, ?, ?, ?, ?, ? FROM person_comments
+      WHERE id = ? AND (? = 1 OR author_email = ?)`)
+      .bind(auditId, actorEmail, "remove_comment", "Removed a comment", JSON.stringify({ commentId }), now,
+        commentId, isAdmin ? 1 : 0, owner.authorEmail),
+    env.DB.prepare(`DELETE FROM person_comments WHERE id = ?
+      AND EXISTS (SELECT 1 FROM change_log WHERE id = ?)`)
+      .bind(commentId, auditId),
   ]);
+  if (!claimed.meta.changes) throw new Error("comment_not_found");
   return listComments();
 }

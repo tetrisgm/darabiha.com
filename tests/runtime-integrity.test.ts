@@ -76,11 +76,17 @@ describe("database-enforced relationship invariants", () => {
     try {
       database.prepare("INSERT INTO relationships VALUES (?, ?, ?, ?)").run("legacy-self", "a", "a", "parent");
       database.prepare("INSERT INTO attachments VALUES (?, ?)").run("legacy-shared", "evidence/photo");
+      database.prepare("INSERT INTO person_comments VALUES (?, ?)").run("legacy-comment", "missing-person");
+      database.prepare("INSERT INTO members VALUES (?, ?)").run("legacy@example.com", "missing-person");
       expect(() => database.exec(RUNTIME_INTEGRITY_SCHEMA.join(";\n"))).not.toThrow();
       expect(database.prepare("SELECT COUNT(*) AS count FROM attachments WHERE object_key = 'evidence/photo'").get())
         .toEqual({ count: 2 });
       expect(() => database.prepare("INSERT INTO attachments VALUES (?, ?)").run("another", "evidence/photo"))
         .toThrow(/attachment_object_key_unavailable/);
+      expect(() => database.prepare("INSERT INTO person_comments VALUES (?, ?)").run("future-comment", "missing-person"))
+        .toThrow(/person_comment_person_missing/);
+      expect(() => database.prepare("UPDATE members SET person_id = ? WHERE email = ?").run("another-missing-person", "legacy@example.com"))
+        .toThrow(/member_person_missing/);
     } finally {
       database.close();
     }
@@ -99,6 +105,17 @@ describe("database-enforced live references", () => {
         .toThrow(/story_attachment_attachment_missing/);
       expect(() => database.prepare("INSERT INTO person_photos VALUES (?, ?)").run("a", "missing"))
         .toThrow(/person_photo_attachment_missing/);
+      expect(() => database.prepare("INSERT INTO person_comments VALUES (?, ?)").run("comment", "missing"))
+        .toThrow(/person_comment_person_missing/);
+      database.prepare("INSERT INTO person_comments VALUES (?, ?)").run("comment", "a");
+      expect(() => database.prepare("UPDATE person_comments SET person_id = ? WHERE id = ?").run("missing", "comment"))
+        .toThrow(/person_comment_person_missing/);
+      expect(() => database.prepare("INSERT INTO members VALUES (?, ?)").run("missing@example.com", "missing"))
+        .toThrow(/member_person_missing/);
+      expect(() => database.prepare("INSERT INTO members VALUES (?, ?)").run("unclaimed@example.com", null))
+        .not.toThrow();
+      expect(() => database.prepare("UPDATE members SET person_id = ? WHERE email = ?").run("missing", "unclaimed@example.com"))
+        .toThrow(/member_person_missing/);
       expect(() => database.prepare("UPDATE people SET photo_attachment_id = ? WHERE id = ?").run("missing", "a"))
         .toThrow(/person_portrait_attachment_missing/);
       expect(() => database.prepare("INSERT INTO document_queue VALUES (?, ?)").run("queued", "missing"))
@@ -139,6 +156,29 @@ describe("database-enforced live references", () => {
       database.prepare("INSERT INTO object_deletion_queue VALUES (?, ?)").run("evidence/deleted", "now");
       expect(() => database.prepare("INSERT INTO attachments VALUES (?, ?)").run("replacement", "evidence/deleted"))
         .toThrow(/attachment_object_key_unavailable/);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("reinstalls member validation after a legacy table rebuild drops its triggers", () => {
+    const database = fixture();
+    try {
+      database.exec(`
+        DROP TRIGGER IF EXISTS people_restrict_delete;
+        DROP TRIGGER IF EXISTS members_validate_person_insert;
+        DROP TRIGGER IF EXISTS members_validate_person_update;
+        CREATE TABLE members_next (email TEXT PRIMARY KEY, person_id TEXT);
+        INSERT INTO members_next SELECT email, person_id FROM members;
+        DROP TABLE members;
+        ALTER TABLE members_next RENAME TO members;
+      `);
+      expect(() => database.prepare("INSERT INTO members VALUES (?, ?)").run("unguarded@example.com", "missing"))
+        .not.toThrow();
+      database.prepare("DELETE FROM members WHERE email = ?").run("unguarded@example.com");
+      database.exec(RUNTIME_INTEGRITY_SCHEMA.join(";\n"));
+      expect(() => database.prepare("INSERT INTO members VALUES (?, ?)").run("guarded@example.com", "missing"))
+        .toThrow(/member_person_missing/);
     } finally {
       database.close();
     }
