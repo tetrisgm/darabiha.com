@@ -12,13 +12,50 @@ Last updated: 2026-08-30
 - Production exposes its uncached identity at `/api/version` and as visible version text at the lower-left edge.
 - **The Worker CPU limit is tight** (behaves like the Workers Free plan's 10 ms): server-rendering or serializing the 410-person tree per request produced intermittent Cloudflare 1102/503s under sustained load. The root page therefore ships a light shell and fetches `/api/tree` client-side, the canvas renders after hydration, and `readTree()` keeps a 10-second serialized-JSON cache that every mutation refreshes. Under a 60-request hammer the root now returns 200 every time. Re-introducing per-request tree serialization or SSR of the canvas will bring the 503s back; alternatively a paid Workers plan removes the constraint.
 
-## Continuation point: deep review paused for handoff (2026-08-30)
+## Deep review closure (2026-08-30)
 
-The owner asked for a complete code, bloat, and performance review followed by
-small, regularly committed refactors. This review was deliberately stopped when
-the owner asked for this handoff. **No source change, refactor, commit, build, or
-deployment was made during the review.** `main` was clean and matched
-`origin/main` at `58bc1ff` when this section was written.
+The review/refactor body is complete locally through `62c892e`. It hardened
+private caching and signed-token boundaries; bounded uploads, ZIP extraction,
+model requests, proposal fan-out, and reconciliation work; made schema setup,
+deletion, direct mutations, attachment compensation, and integrity checks more
+reliable; and reduced render/layout work through convergence checks, indexes,
+memoization, deferred generation work, lazy-loaded archive views/profile UI,
+dead-code/CSS removal, and removal of the unused Three.js dependency stack.
+
+Final local verification:
+
+- `npm test`: **160 tests passed in 33 files**.
+- `npx tsc --noEmit --incremental false`: passed.
+- `npm run lint`: passed with **six warnings and no errors**; all six are the
+  existing raw `<img>` performance warnings.
+- `npm run build`: passed all Vinext build phases.
+- `npm run check:data`: all **20 live D1 integrity checks passed** on the full
+  retry after one isolated transient Wrangler query failure.
+- `npm run legacy:validate` remains unavailable without first regenerating the
+  intentionally untracked `public/legacy-family-tree-data.json` fixture.
+- Real Safari/macOS interaction behavior was not re-verified in this local
+  close, so no new cursor, hover, pan, zoom, or trackpad claim is made.
+
+Deliberately deferred follow-ups:
+
+- A bounded model-evidence projection for uploaded archives was prototyped but
+  not shipped because changing which private family-file contents are sent to
+  OpenAI needs an explicit privacy decision. Existing upload behavior is
+  unchanged.
+- Public AI/password rate limiting still needs an infrastructure/binding
+  decision. `/api/agent` and `/api/ingest` still duplicate some model/evidence
+  policy, and queued ingestion still has avoidable repeated tree reads.
+- Some store grouping/filter paths can still be indexed more aggressively;
+  `public/og.png` is still about 1 MB; and the six raw-image lint warnings remain.
+- No deployment was performed. Production remains Version 186. The verified
+  local commit stack is ready to push once the owner explicitly authorizes the
+  configured GitHub destination.
+
+## Historical review snapshot (superseded by the closure above)
+
+The following section preserves the original baseline at `58bc1ff`. Its
+phrases such as “not yet fixed” describe that historical checkout and must not
+be treated as the current status; the closure above is authoritative.
 
 Baseline checks on that exact checkout:
 
@@ -561,7 +598,8 @@ Asked to check the record panel on a phone. The panel itself was drawing correct
 
 ## Important files
 
-- `app/components/FamilyTreeApp.tsx`: shell, chat, auto-apply loop, add-person flow, person drawer, relationship controls.
+- `app/components/FamilyTreeApp.tsx`: shell, chat, auto-apply loop, add-person flow, selection, and relationship controls.
+- `app/components/PersonProfilePanel.tsx`: lazy-loaded person profile, editing, relationships, comments, photos, and deletion UI.
 - `app/components/FamilyTreeCanvas.tsx`: generation rendering, connectors, pan/zoom, animated focus, Safari cursor layer.
 - `app/components/ArchiveViews.tsx`: timeline and map UI.
 - `app/api/agent/route.ts`: file limits, archive ingestion, OpenAI tools and instructions.
@@ -629,6 +667,6 @@ The current Worker has D1, R2, public-origin, and Apple identifier bindings in `
 - Re-enable Apple enforcement only after the owner confirms Nasser’s lockout is cleared and all invited accounts can complete the real flow.
 - The current map coordinate dictionary is intentionally finite; new locations can appear in the unmapped list until coordinates are added or a geocoding design is chosen.
 - The live tree has no stories yet, so story CRUD is implemented and unit/build validated but has little production content exercising its presentation.
-- The five lint warnings listed under “Live state” are non-blocking technical debt; the unused legacy `PersonModal` can be removed separately without changing the active `PersonModalV2` drawer.
+- The six raw `<img>` lint warnings are non-blocking performance debt.
 - A real Safari/macOS pass remains the final authority for visible cursor and physical gesture behavior after future canvas changes.
 - Direct database deletion was not used for duplicate cleanup. The supported UI and agent deletion paths preserve auditability and relationship cleanup.
