@@ -1,5 +1,10 @@
 # Darabiha handoff
 
+## Release candidate 192
+
+- Version 192 identifies the launch-readiness body ending at `5e3c5e5`: provenance/adjudication, reversible audited CRUD and duplicate merge/split, deterministic GEDCOM/GEDZip parsing, abuse limits, living-person public redaction, import retry/cancel, the synthetic `/demo`, and the launch packet.
+- Deployment and cross-browser results must be appended below after the exact production version is verified; physical Safari/macOS remains a human-pointer requirement under the repository contract.
+
 > Launch-readiness work is tracked in [`docs/LAUNCH_READINESS.md`](./LAUNCH_READINESS.md). The production interaction baseline is version 190; the user confirmed that version fixed the repeated branch-expand/hide click failure.
 
 ## Launch-readiness implementation (2026-09-01)
