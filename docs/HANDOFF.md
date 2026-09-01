@@ -8,6 +8,7 @@
 - `1a76309` added audited claim adjudication: a disputed claim can become the preferred value (which updates the record) or be rejected.
 - Reversible mutation work stores inverse operations for person additions/updates/deletions, relationship additions/removals, story additions/updates/removals, and duplicate-person merges. Eligible history rows expose Undo. Person deletion snapshots and restores its complete dependent D1 graph; attachment deletion remains deliberately non-undoable until R2 retention/restoration is implemented.
 - GEDCOM 5.5.1/7 is parsed deterministically before model inference, including GEDCOM files nested anywhere inside ZIP/GEDZip archives. The parser reports people, families, relationships, warnings, and format version; direct queued GEDCOM import applies the structured proposals without requiring an OpenAI key. Round-trip tests cover the supported event, note, residence, parent, and spouse subset.
+- Public AI requests are limited to 30 per address per hour and archive-password attempts to 10 per address per 15 minutes. Only a SHA-256 request fingerprint is stored in D1; the limiter never persists the raw address and returns `429` with `Retry-After`.
 - These changes are additive runtime migrations in `db/store.ts`; no manual D1 migration is required on deployment. Existing records remain readable and correctly say that no claim-level source was recorded yet.
 
 Last updated: 2026-08-30

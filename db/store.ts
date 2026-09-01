@@ -102,6 +102,7 @@ const schemaStatements = [
     change_id TEXT PRIMARY KEY, person_id TEXT NOT NULL, snapshot_json TEXT NOT NULL,
     deleted_at TEXT NOT NULL, restored_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at TEXT NOT NULL)`,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -420,6 +421,23 @@ export async function removeMember(email: string, actorEmail: string) {
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), actorEmail, "member_remove", `Removed ${normalized} from the member list`, JSON.stringify({ email: normalized }), now),
   ]);
+}
+
+/** Atomic fixed-window limiter. The caller supplies an irreversible request
+ * fingerprint, never a raw IP address. */
+export async function consumeRateLimit(bucket: string, limit: number, windowSeconds: number): Promise<{ allowed: boolean; retryAfter: number }> {
+  await ensureSchema();
+  const now = Date.now();
+  const expiresAt = new Date(now + windowSeconds * 1000).toISOString();
+  const row = await env.DB.prepare(`INSERT INTO rate_limits (bucket, count, expires_at) VALUES (?, 1, ?)
+    ON CONFLICT(bucket) DO UPDATE SET
+      count = CASE WHEN expires_at <= ? THEN 1 ELSE count + 1 END,
+      expires_at = CASE WHEN expires_at <= ? THEN excluded.expires_at ELSE expires_at END
+    RETURNING count, expires_at AS expiresAt`)
+    .bind(bucket, expiresAt, new Date(now).toISOString(), new Date(now).toISOString())
+    .first<{ count: number; expiresAt: string }>();
+  if (!row) throw new Error("rate_limit_unavailable");
+  return { allowed: row.count <= limit, retryAfter: Math.max(1, Math.ceil((Date.parse(row.expiresAt) - now) / 1000)) };
 }
 
 // Serialized-tree cache: the public tree endpoint is hit constantly and the

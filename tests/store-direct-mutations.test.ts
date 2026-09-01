@@ -11,6 +11,7 @@ import {
   addComment,
   applyProposal,
   attachPersonPhoto,
+  consumeRateLimit,
   linkPersonPhoto,
   removeComment,
   removePersonPhoto,
@@ -260,5 +261,15 @@ describe("person deletion restoration", () => {
     expect(sqlite.prepare("SELECT person_id FROM members WHERE email = 'delete-undo@example.com'").get()).toEqual({ person_id: "delete-undo-person" });
     expect(sqlite.prepare("SELECT status, answer_note, answered_by, answered_at FROM open_questions WHERE id = 'delete-undo-question'").get())
       .toEqual({ status: "open", answer_note: null, answered_by: null, answered_at: null });
+  });
+});
+
+describe("abuse rate limiting", () => {
+  it("allows the configured count and rejects the next request atomically", async () => {
+    expect((await consumeRateLimit("test-bucket", 2, 60)).allowed).toBe(true);
+    expect((await consumeRateLimit("test-bucket", 2, 60)).allowed).toBe(true);
+    const rejected = await consumeRateLimit("test-bucket", 2, 60);
+    expect(rejected.allowed).toBe(false);
+    expect(rejected.retryAfter).toBeGreaterThan(0);
   });
 });

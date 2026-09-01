@@ -2,6 +2,7 @@ import { signToken } from "../../apple-auth";
 import { getSiteVisibility, accessPasswordDigest, shareToken } from "../../../db/store";
 import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, verifyAccessPassword } from "../../../lib/access";
 import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
+import { limitRequest } from "../../../lib/rate-limit";
 
 export const runtime = "edge";
 
@@ -26,6 +27,8 @@ export async function POST(request: Request) {
   if ((await getSiteVisibility(true)) !== "password") {
     return privateJsonResponse({ error: "not_password_protected" }, { status: 400 });
   }
+  const limited = await limitRequest(request, "archive-password", 10, 15 * 60);
+  if (limited) return limited;
   const body = await request.json().catch(() => null) as { password?: unknown } | null;
   const password = typeof body?.password === "string" ? body.password : "";
   if (!password) return privateJsonResponse({ error: "password_required" }, { status: 400 });

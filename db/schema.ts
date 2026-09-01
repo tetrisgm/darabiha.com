@@ -52,6 +52,9 @@ export const personDeletionSnapshots = sqliteTable("person_deletion_snapshots", 
   changeId: text("change_id").primaryKey(), personId: text("person_id").notNull(),
   snapshotJson: text("snapshot_json").notNull(), deletedAt: text("deleted_at").notNull(), restoredAt: text("restored_at"),
 });
+export const rateLimits = sqliteTable("rate_limits", {
+  bucket: text("bucket").primaryKey(), count: integer("count").notNull(), expiresAt: text("expires_at").notNull(),
+});
 export const storyAttachments = sqliteTable("story_attachments", { storyId: text("story_id").notNull(), attachmentId: text("attachment_id").notNull() },
   (table) => [uniqueIndex("idx_story_attachments_unique").on(table.storyId, table.attachmentId)]);
 export const changeLog = sqliteTable("change_log", {

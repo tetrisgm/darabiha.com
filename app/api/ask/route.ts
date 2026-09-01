@@ -5,6 +5,7 @@ import { archiveQueryRelationships } from "../../../lib/archive-query-context";
 import { requireVisitor } from "../../authz";
 import { cookies } from "next/headers";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
+import { limitRequest } from "../../../lib/rate-limit";
 
 export const runtime = "edge";
 
@@ -27,6 +28,8 @@ function context(tree: Awaited<ReturnType<typeof readTree>>, message: string): s
 export async function POST(request: Request) {
   const access = await requireVisitor();
   if (!access.ok) return access.response;
+  const limited = await limitRequest(request, "public-ai", 30, 60 * 60);
+  if (limited) return limited;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "openai_not_configured" }, { status: 503 });
   const body = await request.json() as { message?: unknown };
