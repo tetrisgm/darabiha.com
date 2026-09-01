@@ -1,12 +1,21 @@
 "use client";
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import type { MutableRefObject } from "react";
 import type { FamilyTree, Person } from "../../lib/types";
 import { buildFamilyLayout } from "../../lib/tree-layout";
 import { Silhouette } from "./TreePrimitives";
 
 const cardDateFormat = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 const noHighlightedIds: string[] = [];
+function rememberHeldCard(ref: MutableRefObject<{ id: string; at: DOMRect } | null>, value: { id: string; at: DOMRect }) {
+  ref.current = value;
+}
+function takeHeldCard(ref: MutableRefObject<{ id: string; at: DOMRect } | null>) {
+  const value = ref.current;
+  ref.current = null;
+  return value;
+}
 function cardDate(value: string | null) {
   if (!value) return null;
   const [year, month, day] = value.split("-").map(Number);
@@ -168,7 +177,8 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
   const [collapsedState, setCollapsedState] = useState<Set<string> | null>(null);
   const collapsed = collapsedState ?? defaultCollapsed;
   const collapsedRef = useRef(collapsed);
-  collapsedRef.current = collapsed;
+  useLayoutEffect(() => { collapsedRef.current = collapsed; }, [collapsed]);
+  const holdInPlace = useRef<{ id: string; at: DOMRect } | null>(null);
   const openBranch = useCallback((person: Person, at: DOMRect) => {
     if (!fullLayout) return;
     // Always derive from React's latest stored value. Two quick clicks on
@@ -178,7 +188,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
       const current = stored ?? defaultCollapsed;
       const next = openCollapsedPath(current, person.id, fullLayout.primaryParent, primaryChildren);
       if (next.size === current.size) return stored;
-      holdInPlace.current = { id: person.id, at };
+      rememberHeldCard(holdInPlace, { id: person.id, at });
       return next;
     });
   }, [defaultCollapsed, fullLayout, primaryChildren]);
@@ -432,7 +442,6 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
    *  branch does not slide it out from under the pointer. Measured from the
    *  DOM rather than the layout model: `translate(x,y) scale(s)` puts the
    *  translation in screen pixels, so a screen delta is what the view wants. */
-  const holdInPlace = useRef<{ id: string; at: DOMRect } | null>(null);
   useEffect(() => {
     const person = focusPersonId ? tree.people.find((candidate) => candidate.id === focusPersonId) : undefined;
     if (!person || !positions.has(person.id) || lastCentered.current === person.id) return;
@@ -458,9 +467,8 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
      apart to make room. The card that was clicked should not be one of them:
      the view shifts by exactly what that card's own position changed. */
   useLayoutEffect(() => {
-    const hold = holdInPlace.current;
+    const hold = takeHeldCard(holdInPlace);
     if (!hold) return;
-    holdInPlace.current = null;
     const card = cursorRef.current?.parentElement?.querySelector(`[data-person-id="${hold.id}"]`);
     if (!card) return;
     const now = card.getBoundingClientRect();

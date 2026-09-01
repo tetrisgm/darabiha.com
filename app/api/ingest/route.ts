@@ -83,7 +83,16 @@ export async function POST() {
     // people before the links between them, or a link has nobody to attach to
     let applied = 0;
     for (const proposal of [...proposals].sort((left, right) => proposalRank(left) - proposalRank(right))) {
-      try { await applyProposal(proposal, item.uploadedBy); applied += 1; } catch { /* one bad row must not lose the rest */ }
+      try {
+        await applyProposal(proposal, item.uploadedBy, {
+          sourceType: "attachment",
+          sourceLabel: item.filename,
+          attachmentId: item.attachmentId,
+          sourceLocator: item.filename,
+          confidence: 85,
+        });
+        applied += 1;
+      } catch { /* one bad row must not lose the rest */ }
     }
     await recordAgentQuestions(conflicts, item.uploadedBy);
 

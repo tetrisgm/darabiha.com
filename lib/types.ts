@@ -69,6 +69,24 @@ export type Attachment = {
   size: number;
 };
 
+export type EvidenceClaim = {
+  id: string;
+  subjectType: "person" | "relationship";
+  subjectId: string;
+  predicate: string;
+  value: string | null;
+  status: "preferred" | "disputed" | "rejected";
+  confidence: number;
+  sourceType: "manual" | "family_assertion" | "attachment" | "agent" | "import";
+  attachmentId: string | null;
+  sourceLabel: string;
+  sourceLocator: string | null;
+  sourceExcerpt: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FamilyTree = {
   people: Person[];
   relationships: Relationship[];

@@ -1,5 +1,5 @@
 import { env, waitUntil } from "cloudflare:workers";
-import type { Attachment, ChangeProposal, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
+import type { Attachment, ChangeProposal, EvidenceClaim, FamilyTree, OpenQuestion, Person, Relationship, Story } from "../lib/types";
 import { safeAttachmentContentType } from "../lib/attachment-types";
 import { isChangeProposal } from "../lib/change-proposal";
 import { runRecordChecks } from "../lib/record-checks";
@@ -78,6 +78,17 @@ const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS site_settings (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS evidence_claims (
+    id TEXT PRIMARY KEY, subject_type TEXT NOT NULL CHECK(subject_type IN ('person', 'relationship')),
+    subject_id TEXT NOT NULL, predicate TEXT NOT NULL, value TEXT,
+    status TEXT NOT NULL DEFAULT 'preferred' CHECK(status IN ('preferred', 'disputed', 'rejected')),
+    confidence INTEGER NOT NULL DEFAULT 100 CHECK(confidence BETWEEN 0 AND 100),
+    source_type TEXT NOT NULL CHECK(source_type IN ('manual', 'family_assertion', 'attachment', 'agent', 'import')),
+    attachment_id TEXT, source_label TEXT NOT NULL, source_locator TEXT, source_excerpt TEXT,
+    created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_evidence_claims_subject ON evidence_claims(subject_type, subject_id, predicate, status)`,
+  `CREATE INDEX IF NOT EXISTS idx_evidence_claims_attachment ON evidence_claims(attachment_id)`,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -642,6 +653,62 @@ function personValues(input: Record<string, unknown>): Omit<Person, "id"> {
   };
 }
 
+export type ClaimSource = {
+  sourceType: EvidenceClaim["sourceType"];
+  sourceLabel: string;
+  attachmentId?: string | null;
+  sourceLocator?: string | null;
+  sourceExcerpt?: string | null;
+  confidence?: number;
+};
+
+const defaultClaimSource = (actorEmail: string): ClaimSource => ({
+  sourceType: "manual",
+  sourceLabel: `Edited by ${actorEmail}`,
+  confidence: 100,
+});
+
+const personClaimEntries = (person: Omit<Person, "id">) => Object.entries(person)
+  .filter(([key, value]) => key !== "photoIds" && value !== undefined)
+  .map(([predicate, value]) => [predicate, value === null ? null : String(value)] as const);
+
+function claimStatements(
+  subjectType: EvidenceClaim["subjectType"],
+  subjectId: string,
+  entries: readonly (readonly [string, string | null])[],
+  actorEmail: string,
+  now: string,
+  source: ClaimSource,
+): D1PreparedStatement[] {
+  const confidence = Math.max(0, Math.min(100, Math.round(source.confidence ?? 100)));
+  return entries.flatMap(([predicate, value]) => [
+    env.DB.prepare(`UPDATE evidence_claims SET status = 'disputed', updated_at = ?
+      WHERE subject_type = ? AND subject_id = ? AND predicate = ? AND status = 'preferred' AND value IS NOT ?`)
+      .bind(now, subjectType, subjectId, predicate, value),
+    env.DB.prepare(`INSERT INTO evidence_claims
+      (id, subject_type, subject_id, predicate, value, status, confidence, source_type, attachment_id,
+       source_label, source_locator, source_excerpt, created_by, created_at, updated_at)
+      SELECT ?, ?, ?, ?, ?, 'preferred', ?, ?, ?, ?, ?, ?, ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM evidence_claims
+        WHERE subject_type = ? AND subject_id = ? AND predicate = ? AND status = 'preferred' AND value IS ?)`)
+      .bind(crypto.randomUUID(), subjectType, subjectId, predicate, value, confidence, source.sourceType,
+        source.attachmentId ?? null, source.sourceLabel, source.sourceLocator ?? null, source.sourceExcerpt ?? null,
+        actorEmail, now, now, subjectType, subjectId, predicate, value),
+  ]);
+}
+
+export async function listEvidenceClaims(subjectType: EvidenceClaim["subjectType"], subjectId: string): Promise<EvidenceClaim[]> {
+  await ensureSchema();
+  const result = await env.DB.prepare(`SELECT id, subject_type AS subjectType, subject_id AS subjectId, predicate, value,
+    status, confidence, source_type AS sourceType, attachment_id AS attachmentId, source_label AS sourceLabel,
+    source_locator AS sourceLocator, source_excerpt AS sourceExcerpt, created_by AS createdBy,
+    created_at AS createdAt, updated_at AS updatedAt FROM evidence_claims
+    WHERE subject_type = ? AND subject_id = ?
+    ORDER BY CASE status WHEN 'preferred' THEN 0 WHEN 'disputed' THEN 1 ELSE 2 END, predicate, created_at DESC`)
+    .bind(subjectType, subjectId).all<EvidenceClaim>();
+  return result.results;
+}
+
 async function readMutationInvariants(includeAttachments = false) {
   // readTree already fans out to D1's six per-invocation connections, so the
   // optional seventh query runs afterward rather than competing with it.
@@ -652,7 +719,7 @@ async function readMutationInvariants(includeAttachments = false) {
   return new MutationInvariants(tree, attachmentRows.results.map(({ id }) => id));
 }
 
-export async function applyProposal(proposal: ChangeProposal, actorEmail: string): Promise<FamilyTree> {
+export async function applyProposal(proposal: ChangeProposal, actorEmail: string, claimSource: ClaimSource = defaultClaimSource(actorEmail)): Promise<FamilyTree> {
   if (!isChangeProposal(proposal)) throw new Error("Invalid change proposal.");
   await ensureSchema();
   const now = new Date().toISOString();
@@ -666,6 +733,7 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .bind(personId, person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate,
         person.deathDate, person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.residence, person.biography, person.photoAttachmentId, now, now));
+    statements.push(...claimStatements("person", personId, personClaimEntries(person).filter(([, value]) => value !== null), actorEmail, now, claimSource));
     if (proposal.relationshipHints?.length) {
       const invariants = await readMutationInvariants();
       invariants.addPerson(personId);
@@ -681,11 +749,14 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     }
   } else if (proposal.kind === "update_person") {
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
-    (await readMutationInvariants()).person(proposal.personId);
+    const before = (await readTree()).people.find((candidate) => candidate.id === proposal.personId);
+    if (!before) throw new Error("That person is no longer in the tree.");
     statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, maiden_name = ?, birth_date = ?,
       death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, burial_place = ?, residence = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
       .bind(person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate, person.deathDate,
         person.birthPlace, person.deathPlace, person.birthCity, person.birthCountry, person.deathCity, person.deathCountry, person.burialPlace, person.residence, person.biography, person.photoAttachmentId, now, proposal.personId));
+    const changedClaims = personClaimEntries(person).filter(([predicate, value]) => String(before[predicate as keyof Person] ?? "") !== String(value ?? ""));
+    statements.push(...claimStatements("person", proposal.personId, changedClaims, actorEmail, now, claimSource));
   } else if (proposal.kind === "delete_person") {
     (await readMutationInvariants()).person(proposal.personId);
     statements.push(...preparePersonDeletion(env.DB, { personId: proposal.personId, actorEmail, deletedAt: now }));
@@ -705,12 +776,19 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     const toPersonId = await resolvePersonId(proposal.toPersonId, proposal.toPersonName);
     if (!(["parent", "spouse"] as const).includes(proposal.relationshipType)) throw new Error("Unsupported relationship.");
     new MutationInvariants(await readTree()).addRelationship(fromPersonId, toPersonId, proposal.relationshipType);
+    const relationshipId = crypto.randomUUID();
     statements.push(env.DB.prepare(`INSERT INTO relationships
       (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)`)
-      .bind(crypto.randomUUID(), fromPersonId, toPersonId, proposal.relationshipType, now));
+      .bind(relationshipId, fromPersonId, toPersonId, proposal.relationshipType, now));
+    statements.push(...claimStatements("relationship", relationshipId, [
+      ["fromPersonId", fromPersonId], ["toPersonId", toPersonId], ["type", proposal.relationshipType],
+    ], actorEmail, now, claimSource));
   } else if (proposal.kind === "delete_relationship") {
     new MutationInvariants(await readTree()).relationship(proposal.relationshipId);
-    statements.push(env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(proposal.relationshipId));
+    statements.push(
+      env.DB.prepare("DELETE FROM evidence_claims WHERE subject_type = 'relationship' AND subject_id = ?").bind(proposal.relationshipId),
+      env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(proposal.relationshipId),
+    );
   } else if (proposal.kind === "add_story") {
     if (!proposal.title.trim() || !proposal.body.trim()) throw new Error("A story needs a title and text.");
     const invariants = await readMutationInvariants(true);

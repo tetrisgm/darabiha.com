@@ -1,7 +1,7 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentConflict, ChangeProposal, FamilyTree, Person } from "../../lib/types";
+import type { AgentConflict, Attachment, ChangeProposal, FamilyTree, Person } from "../../lib/types";
 import IdentifyMe from "./IdentifyMe";
 import type { MappedPlace } from "../../lib/archive-views";
 import { Silhouette, TreeSearch } from "./TreePrimitives";
@@ -264,7 +264,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     files.forEach((file) => form.append("files", file));
     try {
       const response = await fetch("/api/agent", { method: "POST", body: form });
-      const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; conflicts?: AgentConflict[]; error?: string };
+      const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; conflicts?: AgentConflict[]; attachments?: Attachment[]; error?: string };
       if (!response.ok) throw new Error(data.error || "request_failed");
       let latestTree = tree;
       let appliedCount = 0;
@@ -272,7 +272,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
       if (data.proposals?.length) {
         const imported = [...data.proposals].sort((left, right) => proposalRank(left) - proposalRank(right));
         for (const proposal of imported) {
-          const result = await applyChange(proposal);
+          const result = await applyChange(proposal, data.attachments ?? [], text);
           if (result.tree) { latestTree = result.tree; appliedCount += 1; }
           else failures.push(result.error || proposal.summary);
         }
@@ -299,10 +299,10 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     } finally { setBusy(false); }
   }
 
-  async function applyChange(proposal: ChangeProposal): Promise<{ tree?: FamilyTree; error?: string }> {
+  async function applyChange(proposal: ChangeProposal, evidenceAttachments: Attachment[] = [], assertion = ""): Promise<{ tree?: FamilyTree; error?: string }> {
     try {
       const response = await fetch("/api/changes", {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(proposal),
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ proposal, evidenceAttachments, assertion }),
       });
       const data = await response.json() as { tree?: FamilyTree; error?: string };
       if (!response.ok || !data.tree) throw new Error(data.error || "change_failed");

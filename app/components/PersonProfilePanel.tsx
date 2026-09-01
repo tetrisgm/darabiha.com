@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FamilyTree, Person } from "../../lib/types";
+import type { EvidenceClaim, FamilyTree, Person } from "../../lib/types";
 import { relatedPeople } from "../../lib/relationships";
 import { familyGenerations, lifeStatus } from "../../lib/life-status";
 import { useLanguage } from "./LanguageContext";
@@ -100,6 +100,35 @@ function PersonComments({ personId }: { personId: string }) {
         onChange={(event) => setDraft(event.target.value)} aria-label="Add a note about this person" />
       <button type="button" className="fill-save" disabled={busy || !draft.trim()} onClick={async () => { await send({ personId, body: draft }); setDraft(""); }}>{t("person.postNote")}</button>
     </div>
+  </div>;
+}
+
+const claimFieldLabel = (predicate: string) => predicate
+  .replace(/([a-z])([A-Z])/g, "$1 $2")
+  .replace(/^./, (letter) => letter.toUpperCase());
+
+function PersonSources({ personId }: { personId: string }) {
+  const [claims, setClaims] = useState<EvidenceClaim[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/claims?subjectType=person&subjectId=${encodeURIComponent(personId)}`)
+      .then((response) => response.ok ? response.json() as Promise<{ claims: EvidenceClaim[] }> : null)
+      .then((data) => { if (!cancelled && data) setClaims(data.claims); })
+      .catch(() => { if (!cancelled) setClaims([]); });
+    return () => { cancelled = true; };
+  }, [personId]);
+  if (claims === null) return <div className="person-sources"><p className="eyebrow">Sources</p><p className="source-empty">Loading sources…</p></div>;
+  const disputed = claims.filter((claim) => claim.status === "disputed");
+  return <div className="person-sources">
+    <div className="relationship-heading"><p className="eyebrow">Sources</p>{disputed.length > 0 && <span className="source-review">{disputed.length} need review</span>}</div>
+    {claims.length === 0
+      ? <p className="source-empty">No claim-level sources have been recorded for this legacy record yet.</p>
+      : <div className="source-list">{claims.map((claim) => <article className={`source-claim is-${claim.status}`} key={claim.id}>
+        <div><strong>{claimFieldLabel(claim.predicate)}</strong><span>{claim.value || "Removed"}</span></div>
+        <p>{claim.sourceLabel} · {claim.confidence}% confidence{claim.status !== "preferred" ? ` · ${claim.status}` : ""}</p>
+        {claim.sourceExcerpt && <blockquote>{claim.sourceExcerpt}</blockquote>}
+        {claim.attachmentId && <a href={`/api/files/${claim.attachmentId}`} target="_blank" rel="noreferrer">Open evidence</a>}
+      </article>)}</div>}
   </div>;
 }
 
@@ -260,6 +289,7 @@ export default function PersonProfilePanel({ person, tree, canEdit, canComment, 
     {/* the hover card is a glance, not a visit: PersonComments fetches the
         whole comment list on mount, and remounting it for every card the
         pointer crosses is a request each time */}
+    {!preview && canEdit && <PersonSources personId={person.id} />}
     {!preview && canComment && <PersonComments personId={person.id} />}
     {notice && <p className="modal-notice" role="status">{notice}</p>}
     {canEdit && <div className="person-delete-footer">{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>{t("person.removePortrait")}</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>{t("person.delete")}</button></div>}

@@ -18,6 +18,7 @@ function fixture() {
       id TEXT PRIMARY KEY, proposal_json TEXT, status TEXT NOT NULL, answer_note TEXT,
       answered_by TEXT, answered_at TEXT
     );
+    CREATE TABLE evidence_claims (id TEXT PRIMARY KEY, subject_type TEXT NOT NULL, subject_id TEXT NOT NULL);
 
     INSERT INTO attachments VALUES ('shared-photo'), ('private-evidence');
     INSERT INTO stories VALUES ('story-1');

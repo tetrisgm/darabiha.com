@@ -7,6 +7,7 @@
  * evidence shared independently of the person. Only their person links go.
  */
 export const PERSON_DELETION_QUERIES = [
+  { sql: "DELETE FROM evidence_claims WHERE (subject_type = 'person' AND subject_id = ?) OR (subject_type = 'relationship' AND subject_id IN (SELECT id FROM relationships WHERE from_person_id = ? OR to_person_id = ?))", values: ({ personId }: PersonDeletionContext) => [personId, personId, personId] },
   { sql: "DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?", values: ({ personId }: PersonDeletionContext) => [personId, personId] },
   { sql: "DELETE FROM story_people WHERE person_id = ?", values: ({ personId }: PersonDeletionContext) => [personId] },
   { sql: "DELETE FROM person_photos WHERE person_id = ?", values: ({ personId }: PersonDeletionContext) => [personId] },

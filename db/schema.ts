@@ -30,6 +30,19 @@ export const objectDeletionQueue = sqliteTable("object_deletion_queue", {
 export const questionAnswerClaims = sqliteTable("question_answer_claims", {
   questionId: text("question_id").primaryKey(), claimedAt: text("claimed_at").notNull(),
 });
+export const evidenceClaims = sqliteTable("evidence_claims", {
+  id: text("id").primaryKey(),
+  subjectType: text("subject_type", { enum: ["person", "relationship"] }).notNull(),
+  subjectId: text("subject_id").notNull(),
+  predicate: text("predicate").notNull(),
+  value: text("value"),
+  status: text("status", { enum: ["preferred", "disputed", "rejected"] }).notNull(),
+  confidence: integer("confidence").notNull(),
+  sourceType: text("source_type", { enum: ["manual", "family_assertion", "attachment", "agent", "import"] }).notNull(),
+  attachmentId: text("attachment_id"), sourceLabel: text("source_label").notNull(),
+  sourceLocator: text("source_locator"), sourceExcerpt: text("source_excerpt"),
+  createdBy: text("created_by").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+});
 export const storyAttachments = sqliteTable("story_attachments", { storyId: text("story_id").notNull(), attachmentId: text("attachment_id").notNull() },
   (table) => [uniqueIndex("idx_story_attachments_unique").on(table.storyId, table.attachmentId)]);
 export const changeLog = sqliteTable("change_log", {

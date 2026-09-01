@@ -36,6 +36,33 @@ describe("change proposal route", () => {
     }));
 
     expect(response.status).toBe(200);
-    expect(store.applyProposal).toHaveBeenCalledWith(proposal, "editor@example.com");
+    expect(store.applyProposal).toHaveBeenCalledWith(proposal, "editor@example.com", {
+      sourceType: "family_assertion",
+      sourceLabel: "Family member editor@example.com",
+      sourceExcerpt: null,
+      confidence: 100,
+    });
+  });
+
+  it("carries uploaded evidence into the claim source", async () => {
+    const proposal = { kind: "delete_person", summary: "Delete a duplicate", personId: "person-1" };
+    const response = await POST(new Request("https://darabiha.com/api/changes", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        proposal,
+        assertion: "This is the duplicate record from the uploaded tree.",
+        evidenceAttachments: [{ id: "attachment-1", filename: "family.ged" }],
+      }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(store.applyProposal).toHaveBeenCalledWith(proposal, "editor@example.com", {
+      sourceType: "attachment",
+      sourceLabel: "family.ged",
+      attachmentId: "attachment-1",
+      sourceExcerpt: "This is the duplicate record from the uploaded tree.",
+      confidence: 85,
+    });
   });
 });
