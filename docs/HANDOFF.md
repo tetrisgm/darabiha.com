@@ -1,5 +1,7 @@
 # Darabiha handoff
 
+> Launch-readiness work is tracked in [`docs/LAUNCH_READINESS.md`](./LAUNCH_READINESS.md). The production interaction baseline is version 190; the user confirmed that version fixed the repeated branch-expand/hide click failure.
+
 Last updated: 2026-08-30
 
 ## Read this first
