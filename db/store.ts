@@ -709,6 +709,44 @@ export async function listEvidenceClaims(subjectType: EvidenceClaim["subjectType
   return result.results;
 }
 
+export async function setEvidenceClaimStatus(
+  claimId: string,
+  status: "preferred" | "rejected",
+  actorEmail: string,
+): Promise<EvidenceClaim[]> {
+  await ensureSchema();
+  const claim = await env.DB.prepare(`SELECT id, subject_type AS subjectType, subject_id AS subjectId, predicate, value
+    FROM evidence_claims WHERE id = ?`).bind(claimId).first<Pick<EvidenceClaim, "id" | "subjectType" | "subjectId" | "predicate" | "value">>();
+  if (!claim) throw new Error("That evidence claim no longer exists.");
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  if (status === "preferred") {
+    statements.push(env.DB.prepare(`UPDATE evidence_claims SET status = 'disputed', updated_at = ?
+      WHERE subject_type = ? AND subject_id = ? AND predicate = ? AND status = 'preferred' AND id != ?`)
+      .bind(now, claim.subjectType, claim.subjectId, claim.predicate, claim.id));
+    const personColumns: Record<string, string> = {
+      displayName: "display_name", gender: "gender", givenName: "given_name", familyName: "family_name",
+      maidenName: "maiden_name", birthDate: "birth_date", deathDate: "death_date", birthPlace: "birth_place",
+      deathPlace: "death_place", birthCity: "birth_city", birthCountry: "birth_country", deathCity: "death_city",
+      deathCountry: "death_country", burialPlace: "burial_place", residence: "residence", biography: "biography",
+      photoAttachmentId: "photo_attachment_id",
+    };
+    const column = claim.subjectType === "person" ? personColumns[claim.predicate] : null;
+    if (column) statements.push(env.DB.prepare(`UPDATE people SET ${column} = ?, updated_at = ? WHERE id = ?`).bind(claim.value, now, claim.subjectId));
+  }
+  statements.push(
+    env.DB.prepare("UPDATE evidence_claims SET status = ?, updated_at = ? WHERE id = ?").bind(status, now, claim.id),
+    env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
+      VALUES (?, ?, 'adjudicate_claim', ?, ?, ?)`)
+      .bind(crypto.randomUUID(), actorEmail,
+        status === "preferred" ? `Preferred evidence for ${claim.predicate}` : `Rejected evidence for ${claim.predicate}`,
+        JSON.stringify({ claimId: claim.id, subjectType: claim.subjectType, subjectId: claim.subjectId, predicate: claim.predicate, status }), now),
+  );
+  await env.DB.batch(statements);
+  treeJsonCache = null;
+  return listEvidenceClaims(claim.subjectType, claim.subjectId);
+}
+
 async function readMutationInvariants(includeAttachments = false) {
   // readTree already fans out to D1's six per-invocation connections, so the
   // optional seventh query runs afterward rather than competing with it.
@@ -743,8 +781,12 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
         const from = hint.relationshipType === "parent" ? relatedPersonId : personId;
         const to = hint.relationshipType === "parent" ? personId : relatedPersonId;
         invariants.addRelationship(from, to, hint.relationshipType);
+        const relationshipId = crypto.randomUUID();
         statements.push(env.DB.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)")
-          .bind(crypto.randomUUID(), from, to, hint.relationshipType, now));
+          .bind(relationshipId, from, to, hint.relationshipType, now));
+        statements.push(...claimStatements("relationship", relationshipId, [
+          ["fromPersonId", from], ["toPersonId", to], ["type", hint.relationshipType],
+        ], actorEmail, now, claimSource));
       }
     }
   } else if (proposal.kind === "update_person") {
@@ -870,6 +912,7 @@ export async function setRelationshipStatus(relationshipId: string, status: stri
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("UPDATE relationships SET status = ? WHERE id = ? AND type = 'spouse'").bind(status, relationshipId),
+    ...claimStatements("relationship", relationshipId, [["status", status]], actorEmail, now, defaultClaimSource(actorEmail)),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), actorEmail, "set_relationship_status", status ? `Marked a marriage as ${status}` : "Cleared a marriage status", JSON.stringify({ relationshipId, status }), now),
   ]);
@@ -880,6 +923,7 @@ export async function removeRelationship(relationshipId: string, actorEmail: str
   new MutationInvariants(await readTree()).relationship(relationshipId);
   const now = new Date().toISOString();
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM evidence_claims WHERE subject_type = 'relationship' AND subject_id = ?").bind(relationshipId),
     env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(relationshipId),
     env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "remove_relationship", "Removed a family relationship", JSON.stringify({ relationshipId }), now),
   ]);
@@ -891,6 +935,8 @@ export async function attachPersonPhoto(personId: string, file: File, actorEmail
   // Validate before the R2 write. The insert trigger remains the concurrent
   // backstop if the person is removed between this read and the D1 batch.
   await requirePersonTarget(personId);
+  const current = await env.DB.prepare("SELECT photo_attachment_id AS photoAttachmentId FROM people WHERE id = ?")
+    .bind(personId).first<{ photoAttachmentId: string | null }>();
   const attachment = await saveAttachment(file, actorEmail);
   const now = new Date().toISOString();
   try {
@@ -898,6 +944,9 @@ export async function attachPersonPhoto(personId: string, file: File, actorEmail
       env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)").bind(personId, attachment.id, now),
       // the first photograph of someone becomes their portrait; later ones join the gallery
       env.DB.prepare("UPDATE people SET photo_attachment_id = COALESCE(photo_attachment_id, ?), updated_at = ? WHERE id = ?").bind(attachment.id, now, personId),
+      ...(current?.photoAttachmentId ? [] : claimStatements("person", personId, [["photoAttachmentId", attachment.id]], actorEmail, now, {
+        sourceType: "attachment", sourceLabel: file.name, attachmentId: attachment.id, confidence: 100,
+      })),
       env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), actorEmail, "attach_person_photo", "Added a family photograph", JSON.stringify({ personId, attachmentId: attachment.id }), now),
     ]);
   } catch (linkError) {
@@ -920,12 +969,16 @@ export async function attachPersonPhoto(personId: string, file: File, actorEmail
 export async function removePersonPhoto(personId: string, actorEmail: string) {
   await ensureSchema();
   await requirePersonTarget(personId);
+  const current = await env.DB.prepare("SELECT photo_attachment_id AS photoAttachmentId FROM people WHERE id = ?")
+    .bind(personId).first<{ photoAttachmentId: string | null }>();
+  if (!current?.photoAttachmentId) return readTree();
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("UPDATE people SET photo_attachment_id = NULL, updated_at = ? WHERE id = ? AND photo_attachment_id IS NOT NULL").bind(now, personId),
     env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
       SELECT ?, ?, ?, ?, ?, ? WHERE changes() > 0`)
       .bind(crypto.randomUUID(), actorEmail, "remove_person_photo", "Removed a family portrait", JSON.stringify({ personId }), now),
+    ...claimStatements("person", personId, [["photoAttachmentId", null]], actorEmail, now, defaultClaimSource(actorEmail)),
   ]);
   return readTree();
 }
@@ -1119,8 +1172,12 @@ export async function answerQuestion(id: string, verdict: "confirm" | "deny", no
     for (const action of actions) {
       if (action.type === "add_parent") {
         invariants.addRelationship(action.parentId, action.childId, "parent");
+        const relationshipId = crypto.randomUUID();
         statements.push(env.DB.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, 'parent', ?)")
-          .bind(crypto.randomUUID(), action.parentId, action.childId, now));
+          .bind(relationshipId, action.parentId, action.childId, now));
+        statements.push(...claimStatements("relationship", relationshipId, [
+          ["fromPersonId", action.parentId], ["toPersonId", action.childId], ["type", "parent"],
+        ], actorEmail, now, { sourceType: "family_assertion", sourceLabel: `Answer from ${actorEmail}`, sourceExcerpt: note }));
         applied.push("parent link added");
       } else if (action.type === "append_biography") {
         invariants.person(action.personId);
@@ -1130,18 +1187,25 @@ export async function answerQuestion(id: string, verdict: "confirm" | "deny", no
         if (!current.includes(action.text.slice(0, 40))) {
           const next = current ? `${current}${current.endsWith(".") ? "" : "."} ${action.text}` : action.text;
           statements.push(env.DB.prepare("UPDATE people SET biography = ?, updated_at = ? WHERE id = ?").bind(next, now, action.personId));
+          statements.push(...claimStatements("person", action.personId, [["biography", next]], actorEmail, now,
+            { sourceType: "family_assertion", sourceLabel: `Answer from ${actorEmail}`, sourceExcerpt: note }));
           applied.push("biography updated");
         }
       } else if (action.type === "create_spouse") {
         const name = note?.trim();
         if (!name) throw new Error("answer_name_required");
         const personId = crypto.randomUUID();
+        const relationshipId = crypto.randomUUID();
         invariants.addPerson(personId);
         invariants.addRelationship(action.ofId, personId, "spouse");
         statements.push(env.DB.prepare("INSERT INTO people (id, display_name, gender, biography, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
           .bind(personId, name, action.gender, action.biography, now, now));
+        statements.push(...claimStatements("person", personId, [["displayName", name], ["gender", action.gender], ["biography", action.biography]], actorEmail, now,
+          { sourceType: "family_assertion", sourceLabel: `Answer from ${actorEmail}`, sourceExcerpt: note }));
         statements.push(env.DB.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, 'spouse', ?)")
-          .bind(crypto.randomUUID(), action.ofId, personId, now));
+          .bind(relationshipId, action.ofId, personId, now));
+        statements.push(...claimStatements("relationship", relationshipId, [["fromPersonId", action.ofId], ["toPersonId", personId], ["type", "spouse"]], actorEmail, now,
+          { sourceType: "family_assertion", sourceLabel: `Answer from ${actorEmail}`, sourceExcerpt: note }));
         applied.push(`added ${name} as spouse`);
       }
     }
@@ -1164,8 +1228,16 @@ export async function answerQuestion(id: string, verdict: "confirm" | "deny", no
  * person's photo_attachment_id points at. */
 export async function setPersonPortrait(personId: string, attachmentId: string | null, actorEmail: string) {
   await ensureSchema();
-  if (attachmentId) requirePhotoTargets(await photoTargetState(personId, attachmentId));
-  else await requirePersonTarget(personId);
+  if (attachmentId) {
+    const target = await photoTargetState(personId, attachmentId);
+    requirePhotoTargets(target);
+    if (target.portraitMatches) return readTree();
+  } else {
+    await requirePersonTarget(personId);
+    const current = await env.DB.prepare("SELECT photo_attachment_id AS photoAttachmentId FROM people WHERE id = ?")
+      .bind(personId).first<{ photoAttachmentId: string | null }>();
+    if (!current?.photoAttachmentId) return readTree();
+  }
   const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare("UPDATE people SET photo_attachment_id = ?, updated_at = ? WHERE id = ? AND photo_attachment_id IS NOT ?")
@@ -1173,6 +1245,7 @@ export async function setPersonPortrait(personId: string, attachmentId: string |
     env.DB.prepare(`INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at)
       SELECT ?, ?, ?, ?, ?, ? WHERE changes() > 0`)
       .bind(crypto.randomUUID(), actorEmail, "set_person_portrait", attachmentId ? "Chose a portrait" : "Cleared a portrait", JSON.stringify({ personId, attachmentId }), now),
+    ...claimStatements("person", personId, [["photoAttachmentId", attachmentId]], actorEmail, now, defaultClaimSource(actorEmail)),
   ]);
   treeJsonCache = null;
   return readTree();

@@ -109,6 +109,7 @@ const claimFieldLabel = (predicate: string) => predicate
 
 function PersonSources({ personId }: { personId: string }) {
   const [claims, setClaims] = useState<EvidenceClaim[] | null>(null);
+  const [busyClaim, setBusyClaim] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/claims?subjectType=person&subjectId=${encodeURIComponent(personId)}`)
@@ -119,6 +120,14 @@ function PersonSources({ personId }: { personId: string }) {
   }, [personId]);
   if (claims === null) return <div className="person-sources"><p className="eyebrow">Sources</p><p className="source-empty">Loading sources…</p></div>;
   const disputed = claims.filter((claim) => claim.status === "disputed");
+  const adjudicate = async (claimId: string, status: "preferred" | "rejected") => {
+    setBusyClaim(claimId);
+    try {
+      const response = await fetch("/api/claims", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ claimId, status }) });
+      const data = await response.json() as { claims?: EvidenceClaim[] };
+      if (response.ok && data.claims) setClaims(data.claims);
+    } finally { setBusyClaim(null); }
+  };
   return <div className="person-sources">
     <div className="relationship-heading"><p className="eyebrow">Sources</p>{disputed.length > 0 && <span className="source-review">{disputed.length} need review</span>}</div>
     {claims.length === 0
@@ -128,6 +137,7 @@ function PersonSources({ personId }: { personId: string }) {
         <p>{claim.sourceLabel} · {claim.confidence}% confidence{claim.status !== "preferred" ? ` · ${claim.status}` : ""}</p>
         {claim.sourceExcerpt && <blockquote>{claim.sourceExcerpt}</blockquote>}
         {claim.attachmentId && <a href={`/api/files/${claim.attachmentId}`} target="_blank" rel="noreferrer">Open evidence</a>}
+        {claim.status === "disputed" && <div className="source-actions"><button type="button" disabled={busyClaim === claim.id} onClick={() => void adjudicate(claim.id, "preferred")}>Use this value</button><button type="button" disabled={busyClaim === claim.id} onClick={() => void adjudicate(claim.id, "rejected")}>Reject</button></div>}
       </article>)}</div>}
   </div>;
 }

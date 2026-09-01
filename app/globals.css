@@ -1289,6 +1289,10 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .source-claim p { margin:.3rem 0 0; color:var(--muted); font-size:.68rem; line-height:1.4; }
 .source-claim blockquote { margin:.45rem 0 0; border-left:2px solid var(--line); padding-left:.55rem; color:var(--muted); font-size:.72rem; }
 .source-claim a { display:inline-block; margin-top:.45rem; color:var(--accent); font-size:.72rem; font-weight:650; }
+.source-actions { justify-content:flex-start !important; margin-top:.5rem; }
+.source-actions button { border:1px solid var(--line); border-radius:999px; background:transparent; padding:.25rem .55rem;
+  color:var(--ink); font-size:.68rem; font-weight:650; cursor:pointer; }
+.source-actions button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
 
 /* --- Apple's compact and regular widths, applied ---------------------------
    Below 768pt is compact: a phone, or an iPad in Slide Over. One column, the
