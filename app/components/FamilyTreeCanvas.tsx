@@ -114,7 +114,7 @@ const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, 
     {branchIds.map((id) => {
       const p = positions.get(id)!;
       const isFolded = collapsed.has(id);
-      return <button key={`chip-${id}`} type="button" className="branch-chip" style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} hidden family members` : "Hide this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onToggleBranch(id); }}>{isFolded ? `Show ${hiddenCounts.get(id) ?? 0} more` : "Hide branch"}</button>;
+      return <button key={`chip-${id}`} type="button" className="branch-chip" data-branch-person-id={id} style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} hidden family members` : "Hide this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onToggleBranch(id); }}>{isFolded ? `Show ${hiddenCounts.get(id) ?? 0} more` : "Hide branch"}</button>;
     })}
   </>;
 });

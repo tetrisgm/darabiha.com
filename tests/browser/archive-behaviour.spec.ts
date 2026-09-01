@@ -114,6 +114,15 @@ test("clicking a tree card opens its branch and leaves the card where it is", as
   const after = await page.evaluate((id) => { const r = document.querySelector(`[data-person-id="${id}"]`)!.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y) }; }, target!.id);
   expect(Math.abs(after.x - target!.x)).toBeLessThan(4);
   expect(Math.abs(after.y - target!.y)).toBeLessThan(4);
+
+  const branch = page.locator(`[data-branch-person-id="${target!.id}"]`);
+  await expect(branch).toHaveText("Hide branch");
+  await branch.click();
+  await expect(branch).toContainText("Show");
+  await expect.poll(() => page.locator(".tree-card").count()).toBeLessThan(before + 1);
+  await branch.click();
+  await expect(branch).toHaveText("Hide branch");
+  await expect.poll(() => page.locator(".tree-card").count()).toBeGreaterThan(before);
 });
 
 test("the map zooms on open ground, not on a city, and names both", async ({ page }) => {
