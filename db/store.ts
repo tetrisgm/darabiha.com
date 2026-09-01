@@ -98,6 +98,10 @@ const schemaStatements = [
     change_id TEXT PRIMARY KEY, source_person_id TEXT NOT NULL, target_person_id TEXT NOT NULL,
     snapshot_json TEXT NOT NULL, merged_at TEXT NOT NULL, restored_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS person_deletion_snapshots (
+    change_id TEXT PRIMARY KEY, person_id TEXT NOT NULL, snapshot_json TEXT NOT NULL,
+    deleted_at TEXT NOT NULL, restored_at TEXT
+  )`,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -744,7 +748,7 @@ async function mergeSnapshot(sourcePersonId: string, targetPersonId: string): Pr
     (subject_type = 'person' AND subject_id IN (?, ?)) OR
     (subject_type = 'relationship' AND subject_id IN (SELECT id FROM relationships WHERE from_person_id IN (?, ?) OR to_person_id IN (?, ?)))`)
     .bind(...ids, ...ids, ...ids).all<Record<string, unknown>>();
-  const questions = await env.DB.prepare("SELECT id, proposal_json FROM open_questions WHERE proposal_json IS NOT NULL AND instr(proposal_json, ?) > 0")
+  const questions = await env.DB.prepare("SELECT * FROM open_questions WHERE proposal_json IS NOT NULL AND instr(proposal_json, ?) > 0")
     .bind(JSON.stringify(sourcePersonId)).all<Record<string, unknown>>();
   return {
     sourcePersonId, targetPersonId, people: people.results, relationships: relationships.results,
@@ -899,6 +903,7 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
   if (proposal.kind === "merge_people") return mergePeople(proposal.sourcePersonId, proposal.targetPersonId, proposal.summary, actorEmail, claimSource);
   await ensureSchema();
   const now = new Date().toISOString();
+  const auditId = crypto.randomUUID();
   const statements: D1PreparedStatement[] = [];
   let inverse: ChangeProposal | null = null;
   let deletedObjectKey: string | null = null;
@@ -942,6 +947,14 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     statements.push(...claimStatements("person", proposal.personId, changedClaims, actorEmail, now, claimSource));
   } else if (proposal.kind === "delete_person") {
     (await readMutationInvariants()).person(proposal.personId);
+    const snapshot = await mergeSnapshot(proposal.personId, proposal.personId);
+    inverse = null;
+    statements.push(
+      env.DB.prepare("INSERT INTO person_deletion_snapshots (change_id, person_id, snapshot_json, deleted_at) VALUES (?, ?, ?, ?)")
+        .bind(auditId, proposal.personId, JSON.stringify(snapshot), now),
+      env.DB.prepare("INSERT INTO undo_entries (change_id, inverse_json, status) VALUES (?, ?, 'active')")
+        .bind(auditId, JSON.stringify({ kind: "undo_delete_person", changeId: auditId })),
+    );
     statements.push(...preparePersonDeletion(env.DB, { personId: proposal.personId, actorEmail, deletedAt: now }));
   } else if (proposal.kind === "add_relationship") {
     const resolvePersonId = async (id: string, name?: string | null) => {
@@ -1020,7 +1033,6 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       deletedAt: now,
     }));
   }
-  const auditId = crypto.randomUUID();
   statements.push(env.DB.prepare(`INSERT INTO change_log
     (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
     .bind(auditId, actorEmail, proposal.kind, proposal.summary, JSON.stringify(proposal), now));
@@ -1535,6 +1547,62 @@ async function restoreMerge(changeId: string, actorEmail: string): Promise<Famil
   return readTree();
 }
 
+async function restoreDeletedPerson(changeId: string, actorEmail: string): Promise<FamilyTree> {
+  const stored = await env.DB.prepare(`SELECT person_id AS personId, snapshot_json AS snapshotJson,
+    deleted_at AS deletedAt, restored_at AS restoredAt FROM person_deletion_snapshots WHERE change_id = ?`)
+    .bind(changeId).first<{ personId: string; snapshotJson: string; deletedAt: string; restoredAt: string | null }>();
+  if (!stored || stored.restoredAt) throw new Error("That deletion can no longer be restored.");
+  if (await env.DB.prepare("SELECT id FROM people WHERE id = ?").bind(stored.personId).first<{ id: string }>()) {
+    throw new Error("A person already occupies the deleted record's identity.");
+  }
+  const snapshot = JSON.parse(stored.snapshotJson) as MergeSnapshot;
+  const currentTree = await readTree();
+  const currentSignatures = new Set(currentTree.relationships.map(relationshipSignature));
+  for (const row of snapshot.relationships) {
+    const signature = relationshipSignature({
+      fromPersonId: String(row.from_person_id), toPersonId: String(row.to_person_id), type: row.type as Relationship["type"],
+    });
+    if (currentSignatures.has(signature)) throw new Error("A matching family relationship was added after deletion. Remove it before restoring this record.");
+  }
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  for (const row of snapshot.people) statements.push(env.DB.prepare(`INSERT INTO people
+    (id, display_name, gender, given_name, family_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country,
+     death_city, death_country, biography, photo_attachment_id, created_at, updated_at, maiden_name, burial_place, residence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "display_name", "gender", "given_name", "family_name", "birth_date", "death_date", "birth_place", "death_place",
+      "birth_city", "birth_country", "death_city", "death_country", "biography", "photo_attachment_id", "created_at", "updated_at",
+      "maiden_name", "burial_place", "residence"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.relationships) statements.push(env.DB.prepare(`INSERT INTO relationships
+    (id, from_person_id, to_person_id, type, created_at, status) VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "from_person_id", "to_person_id", "type", "created_at", "status"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.storyPeople) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)")
+    .bind(rowValue(row, "story_id"), rowValue(row, "person_id")));
+  for (const row of snapshot.personPhotos) statements.push(env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)")
+    .bind(rowValue(row, "person_id"), rowValue(row, "attachment_id"), rowValue(row, "created_at")));
+  for (const row of snapshot.comments) statements.push(env.DB.prepare(`INSERT INTO person_comments
+    (id, person_id, author_email, author_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "person_id", "author_email", "author_name", "body", "created_at"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.members) statements.push(env.DB.prepare(`UPDATE members SET role = ?, person_id = ?, added_by = ?, created_at = ?, updated_at = ? WHERE email = ?`)
+    .bind(...["role", "person_id", "added_by", "created_at", "updated_at", "email"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.claims) statements.push(env.DB.prepare(`INSERT INTO evidence_claims
+    (id, subject_type, subject_id, predicate, value, status, confidence, source_type, attachment_id, source_label,
+     source_locator, source_excerpt, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "subject_type", "subject_id", "predicate", "value", "status", "confidence", "source_type", "attachment_id",
+      "source_label", "source_locator", "source_excerpt", "created_by", "created_at", "updated_at"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.questions) statements.push(env.DB.prepare(`UPDATE open_questions SET question = ?, evidence = ?, action_summary = ?,
+    proposal_json = ?, status = ?, answer_note = ?, answered_by = ?, answered_at = ?, created_at = ? WHERE id = ?`)
+    .bind(...["question", "evidence", "action_summary", "proposal_json", "status", "answer_note", "answered_by", "answered_at", "created_at", "id"].map((key) => rowValue(row, key))));
+  statements.push(
+    env.DB.prepare("UPDATE person_deletion_snapshots SET restored_at = ? WHERE change_id = ? AND restored_at IS NULL").bind(now, changeId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, 'restore_person', ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "Restored a deleted person", JSON.stringify({ deletionChangeId: changeId, personId: stored.personId }), now),
+  );
+  await env.DB.batch(statements);
+  treeJsonCache = null;
+  return readTree();
+}
+
 export async function undoChange(changeId: string, actorEmail: string): Promise<FamilyTree> {
   await ensureSchema();
   const claimed = await env.DB.prepare("UPDATE undo_entries SET status = 'undoing' WHERE change_id = ? AND status = 'active'")
@@ -1547,6 +1615,8 @@ export async function undoChange(changeId: string, actorEmail: string): Promise<
     const internal = inverse && typeof inverse === "object" ? inverse as { kind?: unknown; changeId?: unknown } : null;
     const tree = internal?.kind === "undo_merge" && typeof internal.changeId === "string"
       ? await restoreMerge(internal.changeId, actorEmail)
+      : internal?.kind === "undo_delete_person" && typeof internal.changeId === "string"
+        ? await restoreDeletedPerson(internal.changeId, actorEmail)
       : isChangeProposal(inverse)
         ? await applyProposal(inverse, actorEmail, { sourceType: "manual", sourceLabel: `Undo by ${actorEmail}`, confidence: 100 })
         : (() => { throw new Error("The saved undo operation is invalid."); })();

@@ -234,3 +234,31 @@ describe("duplicate merge and split", () => {
     expect(sqlite.prepare("SELECT status FROM undo_entries WHERE change_id = ?").get(change.id)).toEqual({ status: "undone" });
   });
 });
+
+describe("person deletion restoration", () => {
+  it("restores the person and every dependent database row", async () => {
+    insertPerson("delete-undo-person");
+    insertPerson("delete-undo-child");
+    sqlite.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES ('delete-undo-link', 'delete-undo-person', 'delete-undo-child', 'parent', 'now')").run();
+    sqlite.prepare("INSERT INTO stories (id, title, body, created_at) VALUES ('delete-undo-story', 'Story', 'Body', 'now')").run();
+    sqlite.prepare("INSERT INTO story_people VALUES ('delete-undo-story', 'delete-undo-person')").run();
+    sqlite.prepare("INSERT INTO person_comments VALUES ('delete-undo-comment', 'delete-undo-person', 'member@example.com', 'Member', 'Note', 'now')").run();
+    sqlite.prepare("INSERT INTO members (email, role, person_id, added_by, created_at, updated_at) VALUES ('delete-undo@example.com', 'canEdit', 'delete-undo-person', 'seed', 'now', 'now')").run();
+    sqlite.prepare(`INSERT INTO open_questions (id, question, proposal_json, status, created_at)
+      VALUES ('delete-undo-question', 'Confirm?', '{"actions":[{"personId":"delete-undo-person"}]}', 'open', 'now')`).run();
+
+    await applyProposal({ kind: "delete_person", summary: "Remove mistaken person", personId: "delete-undo-person" }, "editor@example.com");
+    expect(sqlite.prepare("SELECT id FROM people WHERE id = 'delete-undo-person'").get()).toBeUndefined();
+    expect(sqlite.prepare("SELECT status FROM open_questions WHERE id = 'delete-undo-question'").get()).toEqual({ status: "denied" });
+    const change = sqlite.prepare("SELECT id FROM change_log WHERE kind = 'delete_person' AND json_extract(payload_json, '$.personId') = 'delete-undo-person'").get() as { id: string };
+
+    await undoChange(change.id, "editor@example.com");
+    expect(sqlite.prepare("SELECT id FROM people WHERE id = 'delete-undo-person'").get()).toEqual({ id: "delete-undo-person" });
+    expect(sqlite.prepare("SELECT id FROM relationships WHERE id = 'delete-undo-link'").get()).toEqual({ id: "delete-undo-link" });
+    expect(sqlite.prepare("SELECT * FROM story_people WHERE story_id = 'delete-undo-story'").all()).toEqual([{ story_id: "delete-undo-story", person_id: "delete-undo-person" }]);
+    expect(sqlite.prepare("SELECT person_id FROM person_comments WHERE id = 'delete-undo-comment'").get()).toEqual({ person_id: "delete-undo-person" });
+    expect(sqlite.prepare("SELECT person_id FROM members WHERE email = 'delete-undo@example.com'").get()).toEqual({ person_id: "delete-undo-person" });
+    expect(sqlite.prepare("SELECT status, answer_note, answered_by, answered_at FROM open_questions WHERE id = 'delete-undo-question'").get())
+      .toEqual({ status: "open", answer_note: null, answered_by: null, answered_at: null });
+  });
+});

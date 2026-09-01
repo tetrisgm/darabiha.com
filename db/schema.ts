@@ -48,6 +48,10 @@ export const mergeSnapshots = sqliteTable("merge_snapshots", {
   targetPersonId: text("target_person_id").notNull(), snapshotJson: text("snapshot_json").notNull(),
   mergedAt: text("merged_at").notNull(), restoredAt: text("restored_at"),
 });
+export const personDeletionSnapshots = sqliteTable("person_deletion_snapshots", {
+  changeId: text("change_id").primaryKey(), personId: text("person_id").notNull(),
+  snapshotJson: text("snapshot_json").notNull(), deletedAt: text("deleted_at").notNull(), restoredAt: text("restored_at"),
+});
 export const storyAttachments = sqliteTable("story_attachments", { storyId: text("story_id").notNull(), attachmentId: text("attachment_id").notNull() },
   (table) => [uniqueIndex("idx_story_attachments_unique").on(table.storyId, table.attachmentId)]);
 export const changeLog = sqliteTable("change_log", {
