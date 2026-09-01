@@ -19,6 +19,11 @@ export function isD1DailyReadLimitError(error: unknown): boolean {
   return false;
 }
 
+export function nextUtcMidnight(timestamp = Date.now()): number {
+  const now = new Date(timestamp);
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+}
+
 export function parseMemberAccessSnapshot(value: string): MemberAccessSnapshot | null {
   try {
     const parsed = JSON.parse(value) as Partial<MemberAccessSnapshot>;

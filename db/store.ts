@@ -19,7 +19,7 @@ import { CLAIM_QUESTION_ANSWER_SQL, RUNTIME_INTEGRITY_SCHEMA } from "./runtime-i
 import { createSingleFlightInitializer, ensureColumns } from "./schema-initialization";
 import {
   isD1DailyReadLimitError, MEMBERS_SNAPSHOT_OBJECT_KEY, parseMemberAccessSnapshot,
-  parseTreeSnapshot, TREE_SNAPSHOT_OBJECT_KEY, VISIBILITY_SNAPSHOT_OBJECT_KEY,
+  nextUtcMidnight, parseTreeSnapshot, TREE_SNAPSHOT_OBJECT_KEY, VISIBILITY_SNAPSHOT_OBJECT_KEY,
 } from "../lib/tree-snapshot";
 
 const schemaStatements = [
@@ -183,6 +183,15 @@ export type MemberRole = "admin" | "canEdit" | "canView";
 
 export type SiteVisibility = "public" | "members" | "password";
 let visibilityCache: { value: SiteVisibility; time: number } | null = null;
+let d1ReadBlockedUntil = 0;
+
+function d1ReadCircuitOpen() {
+  return Date.now() < d1ReadBlockedUntil;
+}
+
+function openD1ReadCircuit() {
+  d1ReadBlockedUntil = nextUtcMidnight();
+}
 
 /** "public": anyone can visit. "members": visitors must sign in (every first
  * sign-in auto-registers someone who can view, so the member list is the
@@ -196,6 +205,13 @@ export async function getSiteVisibility(fresh = false): Promise<SiteVisibility> 
   // who can see the archive, so those ask for a fresh read.
   if (!fresh && visibilityCache && Date.now() - visibilityCache.time < 10_000) return visibilityCache.value;
   let value: SiteVisibility;
+  if (d1ReadCircuitOpen()) {
+    const object = await env.FILES.get(VISIBILITY_SNAPSHOT_OBJECT_KEY);
+    const snapshot = object ? await object.text() : "";
+    if (snapshot !== "public" && snapshot !== "members" && snapshot !== "password") throw new Error("site_visibility_snapshot_unavailable");
+    visibilityCache = { value: snapshot, time: Date.now() };
+    return snapshot;
+  }
   try {
     await ensureSchema();
     const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key = 'visibility'").first<{ value: string }>();
@@ -203,6 +219,7 @@ export async function getSiteVisibility(fresh = false): Promise<SiteVisibility> 
     waitUntil(env.FILES.put(VISIBILITY_SNAPSHOT_OBJECT_KEY, value, { httpMetadata: { contentType: "text/plain" } }));
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    openD1ReadCircuit();
     console.warn("d1_quota_fallback_site_visibility");
     const object = await env.FILES.get(VISIBILITY_SNAPSHOT_OBJECT_KEY);
     const snapshot = object ? await object.text() : "";
@@ -291,6 +308,11 @@ export type MemberIdentity = { email: string; provider: string | null };
 export type Member = { email: string; role: MemberRole; addedBy: string; createdAt: string; links: MemberIdentity[] };
 
 export async function listMembers(): Promise<Member[]> {
+  if (d1ReadCircuitOpen()) {
+    const snapshot = await memberAccessSnapshot();
+    if (!snapshot) throw new Error("member_access_snapshot_unavailable");
+    return snapshot.members.map((member) => ({ email: member.email, role: member.role, addedBy: "snapshot", createdAt: "", links: snapshot.links.filter((link) => link.memberEmail === member.email && link.email !== member.email).map(({ email, provider }) => ({ email, provider })) }));
+  }
   try {
     await ensureSchema();
     const [members, links, accessMembers] = await Promise.all([
@@ -305,6 +327,7 @@ export async function listMembers(): Promise<Member[]> {
     }));
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    openD1ReadCircuit();
     console.warn("d1_quota_fallback_member_list");
     const snapshot = await memberAccessSnapshot();
     if (!snapshot) throw error;
@@ -321,12 +344,14 @@ async function memberAccessSnapshot() {
  * email — one person, several providers, one member row. */
 export async function resolveMemberEmail(email: string): Promise<string> {
   const normalized = email.toLowerCase();
+  if (d1ReadCircuitOpen()) return (await memberAccessSnapshot())?.links.find((link) => link.email === normalized)?.memberEmail ?? normalized;
   try {
     await ensureSchema();
     const row = await env.DB.prepare("SELECT member_email AS memberEmail FROM member_links WHERE email = ?").bind(normalized).first<{ memberEmail: string }>();
     return row?.memberEmail ?? normalized;
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    openD1ReadCircuit();
     console.warn("d1_quota_fallback_member_resolution");
     return (await memberAccessSnapshot())?.links.find((link) => link.email === normalized)?.memberEmail ?? normalized;
   }
@@ -360,12 +385,14 @@ export async function recordSignInProvider(email: string, provider: string) {
 /** Who a signed-in account is in the tree. Null until they say so. */
 export async function getMemberPerson(email: string): Promise<string | null> {
   const canonical = await resolveMemberEmail(email);
+  if (d1ReadCircuitOpen()) return (await memberAccessSnapshot())?.members.find((member) => member.email === canonical)?.personId ?? null;
   try {
     await ensureSchema();
     const row = await env.DB.prepare("SELECT person_id AS personId FROM members WHERE email = ?").bind(canonical).first<{ personId: string | null }>();
     return row?.personId ?? null;
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    openD1ReadCircuit();
     console.warn("d1_quota_fallback_member_person");
     return (await memberAccessSnapshot())?.members.find((member) => member.email === canonical)?.personId ?? null;
   }
@@ -395,11 +422,13 @@ export async function claimMemberPerson(email: string, personId: string | null):
 
 export async function getMemberRole(email: string): Promise<MemberRole | null> {
   const canonical = await resolveMemberEmail(email);
+  if (d1ReadCircuitOpen()) return (await memberAccessSnapshot())?.members.find((member) => member.email === canonical)?.role ?? null;
   try {
     const row = await env.DB.prepare("SELECT role FROM members WHERE email = ?").bind(canonical).first<{ role: MemberRole }>();
     return row?.role ?? null;
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    openD1ReadCircuit();
     console.warn("d1_quota_fallback_member_role");
     return (await memberAccessSnapshot())?.members.find((member) => member.email === canonical)?.role ?? null;
   }
@@ -497,10 +526,18 @@ export function cachedTreeJson(): string | null {
 }
 
 export async function readTree(): Promise<FamilyTree> {
+  if (d1ReadCircuitOpen()) {
+    const object = await env.FILES.get(TREE_SNAPSHOT_OBJECT_KEY);
+    const snapshot = object ? parseTreeSnapshot(await object.text()) : null;
+    if (!snapshot) throw new Error("tree_snapshot_unavailable");
+    treeJsonCache = { body: JSON.stringify(snapshot), time: Date.now() };
+    return snapshot;
+  }
   try {
     return await readTreeFromDatabase();
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    openD1ReadCircuit();
     const object = await env.FILES.get(TREE_SNAPSHOT_OBJECT_KEY);
     const snapshot = object ? parseTreeSnapshot(await object.text()) : null;
     if (!snapshot) throw error;

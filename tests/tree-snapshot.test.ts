@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isD1DailyReadLimitError, parseMemberAccessSnapshot, parseTreeSnapshot } from "../lib/tree-snapshot";
+import { isD1DailyReadLimitError, nextUtcMidnight, parseMemberAccessSnapshot, parseTreeSnapshot } from "../lib/tree-snapshot";
 
 describe("tree snapshot fallback", () => {
   it("recognizes only the Cloudflare daily row-read quota failure", () => {
@@ -19,5 +19,9 @@ describe("tree snapshot fallback", () => {
     const snapshot = { members: [{ email: "viewer@example.com", role: "canView", personId: null }], links: [] };
     expect(parseMemberAccessSnapshot(JSON.stringify(snapshot))).toEqual(snapshot);
     expect(parseMemberAccessSnapshot('{"members":[]}')).toBeNull();
+  });
+
+  it("closes the quota circuit at the next UTC midnight", () => {
+    expect(new Date(nextUtcMidnight(Date.parse("2026-09-01T23:59:00Z"))).toISOString()).toBe("2026-09-02T00:00:00.000Z");
   });
 });
