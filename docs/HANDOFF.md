@@ -2,6 +2,7 @@
 
 ## Production data-route incident and Version 193 diagnostics
 
+- Diagnostic implementation commit `13b3d5e` is pushed on `main`; the release identity follow-up binds visible Version 193 to that commit.
 - After Version 192 deployed, `/api/version` and the synthetic `/demo` remained healthy, but authenticated production requests to `/api/tree` and `/api/site` returned empty `500` responses. The root consequently rendered its data-preservation error boundary before the live archive could hydrate. A single-worker WebKit reproduction proves this is not only test concurrency.
 - The shared runtime-schema initializer previously rethrew D1 setup failures without logging them, so Cloudflare's live tail showed the request as handled but contained no exception detail. Version 193 adds a tested `schema_initialization_failed` diagnostic boundary while preserving retry-after-failure behavior. It logs no query bindings, user data, session material, or credentials.
 - Immediate next step after deploying 193: reproduce one authenticated `/api/tree` request under `wrangler tail`, repair the revealed D1 failure, then rerun focused Chromium/WebKit interactions before the full production suite. Version 192 must not be called browser-verified.
