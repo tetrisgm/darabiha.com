@@ -26,6 +26,18 @@ export function panView(view: CanvasView, delta: { x: number; y: number }): Canv
   return { ...view, x: view.x + delta.x, y: view.y + delta.y };
 }
 
+export function openCollapsedPath(collapsed: Set<string>, personId: string, primaryParent: Map<string, string>) {
+  const next = new Set(collapsed);
+  let current: string | undefined = personId;
+  let guard = 0;
+  while (current && guard < 60) {
+    next.delete(current);
+    current = primaryParent.get(current);
+    guard += 1;
+  }
+  return next;
+}
+
 export function centerViewOn(
   view: CanvasView,
   worldPoint: { x: number; y: number },
@@ -64,7 +76,7 @@ type ParentHook = {
 /** The graph scene is independent from the camera. React.memo keeps pointer,
  * wheel, and focus-animation camera commits from rebuilding every card and
  * connector; it rerenders only when graph/selection inputs actually change. */
-const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, spouseLines, hooks, highlighted, branchIds, collapsed, hiddenCounts, holdInPlace, onSelect, setCollapsedState }: {
+const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, spouseLines, hooks, highlighted, branchIds, collapsed, hiddenCounts, onSelect, onOpenBranch, setCollapsedState }: {
   visibleTree: FamilyTree;
   positions: Map<string, CanvasPosition>;
   spouseLines: SpouseLine[];
@@ -73,8 +85,8 @@ const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, 
   branchIds: string[];
   collapsed: Set<string>;
   hiddenCounts: Map<string, number>;
-  holdInPlace: React.MutableRefObject<{ id: string; at: DOMRect } | null>;
   onSelect: (person: Person) => void;
+  onOpenBranch: (person: Person, at: DOMRect) => void;
   setCollapsedState: React.Dispatch<React.SetStateAction<Set<string> | null>>;
 }) {
   return <>
@@ -90,7 +102,7 @@ const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, 
     {visibleTree.people.map((person) => {
       const p = positions.get(person.id) ?? { x: 0, y: 90 };
       const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", ");
-      return <button className={`tree-card ${highlighted.has(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} data-person-id={person.id} onClick={(event) => { if (collapsed.has(person.id)) holdInPlace.current = { id: person.id, at: event.currentTarget.getBoundingClientRect() }; onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>;
+      return <button className={`tree-card ${highlighted.has(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} data-person-id={person.id} onClick={(event) => { onOpenBranch(person, event.currentTarget.getBoundingClientRect()); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>;
     })}
     {branchIds.map((id) => {
       const p = positions.get(id)!;
@@ -127,6 +139,13 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
   }, [fullLayout, primaryChildren]);
   const [collapsedState, setCollapsedState] = useState<Set<string> | null>(null);
   const collapsed = collapsedState ?? defaultCollapsed;
+  const openBranch = useCallback((person: Person, at: DOMRect) => {
+    if (!fullLayout) return;
+    const next = openCollapsedPath(collapsed, person.id, fullLayout.primaryParent);
+    if (next.size === collapsed.size) return;
+    holdInPlace.current = { id: person.id, at };
+    setCollapsedState(next);
+  }, [collapsed, fullLayout]);
   const { visibleTree, hiddenCounts, visibleSet } = useMemo(() => {
     if (!fullLayout || collapsed.size === 0) {
       const counts = new Map<string, number>();
@@ -362,10 +381,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
   useEffect(() => {
     if (!focusPersonId || !fullLayout) return;
     const frame = requestAnimationFrame(() => {
-      const next = new Set(collapsed);
-      let current: string | undefined = focusPersonId;
-      let guard = 0;
-      while (current && guard < 60) { next.delete(current); current = fullLayout.primaryParent.get(current); guard += 1; }
+      const next = openCollapsedPath(collapsed, focusPersonId, fullLayout.primaryParent);
       if (next.size !== collapsed.size) setCollapsedState(next);
     });
     return () => cancelAnimationFrame(frame);
@@ -515,7 +531,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(1.1)} aria-label="Zoom in" title="Zoom in">＋</button>
     </div>
     <div ref={viewportRef} className="tree-viewport" style={{ transform: `translate(${committedView.x}px, ${committedView.y}px) scale(${committedView.scale})`, "--tree-scale": String(committedView.scale) } as React.CSSProperties}>
-      <FamilyTreeScene visibleTree={visibleTree} positions={positions} spouseLines={spouseLines} hooks={hooks} highlighted={highlighted} branchIds={branchIds} collapsed={collapsed} hiddenCounts={hiddenCounts} holdInPlace={holdInPlace} onSelect={onSelect} setCollapsedState={setCollapsedState} />
+      <FamilyTreeScene visibleTree={visibleTree} positions={positions} spouseLines={spouseLines} hooks={hooks} highlighted={highlighted} branchIds={branchIds} collapsed={collapsed} hiddenCounts={hiddenCounts} onSelect={onSelect} onOpenBranch={openBranch} setCollapsedState={setCollapsedState} />
     </div>
     <CanvasCursor mode={cursorMode} cursorRef={cursorRef} />
   </div>;
