@@ -30,7 +30,7 @@ The launch story is not “another family-tree drawing tool.” The differentiat
 | General onboarding | Missing | Production is one Darabiha archive. There is no create-a-family flow, workspace boundary, invitation journey, or sample-to-own-tree conversion. |
 | Collaboration | Partial | Members, roles, comments, fill-in questions, digest, and mobile UI exist. The contribution flow needs a simpler share/invite prompt and notification preferences. |
 | Safe public demo | Verified | `/demo` is a no-login, in-memory sandbox with invented people. Visitors can pan/zoom, inspect cards, import a sample GEDCOM result, undo, and reset; it cannot mutate or query the production archive. |
-| Launch assets | Partial | A Remotion tour exists. HN technical post, PH listing, architecture diagram, benchmark, screenshots, maker notes, privacy explanation, and support/runbook need final versions. |
+| Launch assets | Ready for final capture | `docs/LAUNCH_ASSETS.md` contains the HN draft, PH listing and maker comment, architecture/trust diagram, measured verification record, distinct gallery sequence, 15-second Remotion script, launch checklist, and limitations. Final production screenshots/video and physical Safari sign-off must be captured from the deployed release. |
 
 ## Definition of launch-ready
 
