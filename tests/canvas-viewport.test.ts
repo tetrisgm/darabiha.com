@@ -33,12 +33,16 @@ describe("family canvas viewport math", () => {
     expect(view.y + 80 * view.scale).toBe(300);
   });
 
-  it("opens the clicked branch and every folded ancestor in one pass", () => {
-    const collapsed = new Set(["grandparent", "parent", "child", "other"]);
+  it("opens the entire clicked branch and every folded ancestor in one pass", () => {
+    const collapsed = new Set(["grandparent", "parent", "child", "grandchild", "great-grandchild", "other"]);
     const parents = new Map([["child", "parent"], ["parent", "grandparent"]]);
+    const children = new Map([
+      ["child", ["grandchild"]],
+      ["grandchild", ["great-grandchild"]],
+    ]);
 
-    expect([...openCollapsedPath(collapsed, "child", parents)]).toEqual(["other"]);
-    expect([...collapsed]).toEqual(["grandparent", "parent", "child", "other"]);
+    expect([...openCollapsedPath(collapsed, "child", parents, children)]).toEqual(["other"]);
+    expect([...collapsed]).toEqual(["grandparent", "parent", "child", "grandchild", "great-grandchild", "other"]);
   });
 
   it("is safe to run again when selection state has not changed", () => {

@@ -26,8 +26,25 @@ export function panView(view: CanvasView, delta: { x: number; y: number }): Canv
   return { ...view, x: view.x + delta.x, y: view.y + delta.y };
 }
 
-export function openCollapsedPath(collapsed: Set<string>, personId: string, primaryParent: Map<string, string>) {
+export function openCollapsedPath(
+  collapsed: Set<string>,
+  personId: string,
+  primaryParent: Map<string, string>,
+  primaryChildren: Map<string, string[]> = new Map(),
+) {
   const next = new Set(collapsed);
+  // A card represents a person's branch, not just one generation. Clear every
+  // nested fold in that branch so one click cannot reveal only the next layer
+  // and make the user click the same name repeatedly.
+  const pending = [personId];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    next.delete(current);
+    pending.push(...(primaryChildren.get(current) ?? []));
+  }
   let current: string | undefined = personId;
   let guard = 0;
   while (current && guard < 60) {
@@ -150,11 +167,11 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
   collapsedRef.current = collapsed;
   const openBranch = useCallback((person: Person, at: DOMRect) => {
     if (!fullLayout) return;
-    const next = openCollapsedPath(collapsed, person.id, fullLayout.primaryParent);
+    const next = openCollapsedPath(collapsed, person.id, fullLayout.primaryParent, primaryChildren);
     if (next.size === collapsed.size) return;
     holdInPlace.current = { id: person.id, at };
     setCollapsedState(next);
-  }, [collapsed, fullLayout]);
+  }, [collapsed, fullLayout, primaryChildren]);
   const toggleBranch = useCallback((personId: string) => {
     setCollapsedState((stored) => toggleCollapsedBranch(stored ?? defaultCollapsed, personId));
   }, [defaultCollapsed]);
@@ -394,11 +411,11 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
     if (!focusPersonId || !fullLayout) return;
     const frame = requestAnimationFrame(() => {
       const current = collapsedRef.current;
-      const next = openCollapsedPath(current, focusPersonId, fullLayout.primaryParent);
+      const next = openCollapsedPath(current, focusPersonId, fullLayout.primaryParent, primaryChildren);
       if (next.size !== current.size) setCollapsedState(next);
     });
     return () => cancelAnimationFrame(frame);
-  }, [focusPersonId, fullLayout]);
+  }, [focusPersonId, fullLayout, primaryChildren]);
   const lastCentered = useRef<string | null>(null);
   const enteredView = useRef(false);
   /** The screen rectangle a card occupied when it was clicked, so opening its
