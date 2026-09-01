@@ -4,6 +4,7 @@ import { isD1DailyReadLimitError, parseMemberAccessSnapshot, parseTreeSnapshot }
 describe("tree snapshot fallback", () => {
   it("recognizes only the Cloudflare daily row-read quota failure", () => {
     expect(isD1DailyReadLimitError(new Error("D1_ERROR: Your account has exceeded D1's free tier daily row read limit."))).toBe(true);
+    expect(isD1DailyReadLimitError(new Error("request failed", { cause: new Error("D1_ERROR: DAILY ROW READ LIMIT reached") }))).toBe(true);
     expect(isD1DailyReadLimitError(new Error("D1_ERROR: database unavailable"))).toBe(false);
   });
 

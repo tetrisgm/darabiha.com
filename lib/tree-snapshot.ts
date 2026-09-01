@@ -10,8 +10,13 @@ export type MemberAccessSnapshot = {
 };
 
 export function isD1DailyReadLimitError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes("exceeded D1's free tier daily row read limit");
+  let candidate: unknown = error;
+  for (let depth = 0; depth < 4 && candidate; depth += 1) {
+    const message = (candidate instanceof Error ? candidate.message : String(candidate)).toLowerCase();
+    if (message.includes("d1") && message.includes("daily row read limit")) return true;
+    candidate = candidate instanceof Error ? candidate.cause : null;
+  }
+  return false;
 }
 
 export function parseMemberAccessSnapshot(value: string): MemberAccessSnapshot | null {
