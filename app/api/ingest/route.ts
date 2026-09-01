@@ -12,6 +12,7 @@ import { conflictFromCall, proposalFromCall } from "../../../lib/agent-calls";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
 import type { ChangeProposal } from "../../../lib/types";
 import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
+import { parseGedcom } from "../../../lib/gedcom-import";
 
 export const runtime = "edge";
 
@@ -41,8 +42,6 @@ export async function GET() {
 export async function POST() {
   const auth = await requireEditor();
   if (!auth.ok) return auth.response;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return Response.json({ error: "openai_not_configured" }, { status: 503 });
 
   const item = await claimNextDocument();
   if (!item) return Response.json({ done: true, read: null, pending: 0 });
@@ -51,6 +50,29 @@ export async function POST() {
     const file = await readAttachmentBytes(item.attachmentId);
     if (!file) throw new Error("the uploaded file is no longer in storage");
     const tree = await readTree();
+    const isGedcom = /\.(?:ged|gedcom)$/i.test(file.filename) || /(?:gedcom|genealogy)/i.test(file.contentType);
+    if (isGedcom) {
+      const report = parseGedcom(new TextDecoder().decode(file.bytes));
+      if (!report.people) throw new Error("No GEDCOM individual records were found.");
+      const reconciled = reconcileProposals(tree, report.proposals);
+      let applied = 0;
+      for (const proposal of [...reconciled.proposals].sort((left, right) => proposalRank(left) - proposalRank(right))) {
+        try {
+          await applyProposal(proposal, item.uploadedBy, {
+            sourceType: "import", sourceLabel: item.filename, attachmentId: item.attachmentId,
+            sourceLocator: item.filename, confidence: 100,
+          });
+          applied += 1;
+        } catch { /* a malformed link must not discard valid people */ }
+      }
+      await recordAgentQuestions(reconciled.conflicts, item.uploadedBy);
+      const summary = `GEDCOM ${report.version ?? "unknown"}: ${report.people} people, ${report.families} families, ${applied} changes applied, ${reconciled.conflicts.length} questions, ${report.warnings.length} warnings`;
+      await finishDocument(item.id, "read", summary);
+      const queue = await listDocumentQueue();
+      return Response.json({ done: false, read: { filename: item.filename, applied, questions: reconciled.conflicts.length, report: { ...report, proposals: undefined }, summary }, pending: queue.filter((entry) => entry.status === "pending").length });
+    }
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OpenAI is not configured for unstructured document reading.");
     const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
     const dataUrl = `data:${file.contentType};base64,${Buffer.from(file.bytes).toString("base64")}`;
     const isImage = file.contentType.startsWith("image/");

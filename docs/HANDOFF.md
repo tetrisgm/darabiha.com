@@ -7,6 +7,7 @@
 - `cbe7491` introduced claim-level evidence for new person facts, relationships, portraits, chat assertions, uploaded-document ingestion, and fill-in answers. Conflicting preferred values become durable disputed claims instead of disappearing. Editors see claim sources and can open authorized evidence.
 - `1a76309` added audited claim adjudication: a disputed claim can become the preferred value (which updates the record) or be rejected.
 - Reversible mutation work stores inverse operations for person additions/updates/deletions, relationship additions/removals, story additions/updates/removals, and duplicate-person merges. Eligible history rows expose Undo. Person deletion snapshots and restores its complete dependent D1 graph; attachment deletion remains deliberately non-undoable until R2 retention/restoration is implemented.
+- GEDCOM 5.5.1/7 is parsed deterministically before model inference, including GEDCOM files nested anywhere inside ZIP/GEDZip archives. The parser reports people, families, relationships, warnings, and format version; direct queued GEDCOM import applies the structured proposals without requiring an OpenAI key. Round-trip tests cover the supported event, note, residence, parent, and spouse subset.
 - These changes are additive runtime migrations in `db/store.ts`; no manual D1 migration is required on deployment. Existing records remain readable and correctly say that no claim-level source was recorded yet.
 
 Last updated: 2026-08-30

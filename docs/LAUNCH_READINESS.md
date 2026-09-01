@@ -25,7 +25,7 @@ The launch story is not “another family-tree drawing tool.” The differentiat
 | Provenance | Missing at claim level | Files and story attachments survive as evidence, but a name/date/place/relationship cannot identify the source passage or person who asserted it. |
 | Confidence and contradictions | Partial | Import-time conflicts become open questions. Confidence is not persisted per claim, and competing claims cannot coexist without overwriting the person row. |
 | Audit history | Verified, not reversible | Every mutation writes `change_log`; history is editor-only. Payloads are not a complete before/after transaction and cannot reliably undo a change. |
-| GEDCOM portability | Export only | Deterministic GEDCOM 5.5.1 export exists and is tested. There is no deterministic GEDCOM/GEDZip parser/import report or round-trip test. |
+| GEDCOM portability | Verified core | Deterministic GEDCOM 5.5.1/7 parsing runs before the model for direct files and nested ZIP/GEDZip entries, emits an import report, and has round-trip coverage for supported people, events, notes, residences, parent links, and spouse links. Rich GEDCOM source/media extensions remain a documented limitation. |
 | Privacy and ownership | Partial | Public/member/password visibility, roles, private cache controls, export, and record deletion exist. Living-person redaction, whole-archive deletion, explicit ownership copy, and public AI/password rate limiting remain. |
 | General onboarding | Missing | Production is one Darabiha archive. There is no create-a-family flow, workspace boundary, invitation journey, or sample-to-own-tree conversion. |
 | Collaboration | Partial | Members, roles, comments, fill-in questions, digest, and mobile UI exist. The contribution flow needs a simpler share/invite prompt and notification preferences. |
@@ -90,4 +90,3 @@ The launch story is not “another family-tree drawing tool.” The differentiat
 - Novelty photo animation.
 - Native WhatsApp/iMessage bots before the web contribution loop is reliable.
 - Genealogical research presented as fact without inspectable evidence.
-

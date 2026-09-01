@@ -14,6 +14,7 @@ import { archivistInstructions, archivistTools } from "../../../lib/archivist";
 import { conflictFromCall, proposalFromCall } from "../../../lib/agent-calls";
 import { MAX_UPLOAD_MANIFEST_CHARS, requestExceedsUploadEnvelope, validateUploadBatch } from "../../../lib/upload-policy";
 import type { AgentConflict, Attachment, ChangeProposal, FamilyTree } from "../../../lib/types";
+import { parseGedcom } from "../../../lib/gedcom-import";
 
 export const runtime = "edge";
 
@@ -65,6 +66,7 @@ export async function POST(request: Request) {
   // the archive is multilingual and so is the reader
   const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
   const stored: Attachment[] = [];
+  const deterministicProposals: ChangeProposal[] = [];
   for (const file of files) stored.push(await saveAttachment(file, auth.user.email));
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
@@ -84,6 +86,12 @@ export async function POST(request: Request) {
             const remaining = MAX_ARCHIVE_TEXT_CHARS - textChars;
             if (remaining <= 0) { omittedTextEntries += 1; continue; }
             const decoded = strFromU8(bytes);
+            if (/\.(?:ged|gedcom)$/i.test(path)) {
+              const gedcom = parseGedcom(decoded);
+              deterministicProposals.push(...gedcom.proposals);
+              content.push({ type: "input_text", text: `Deterministic GEDCOM report for ${file.name}/${path}: ${gedcom.people} people, ${gedcom.families} families, ${gedcom.relationships} relationships, ${gedcom.warnings.length} warnings. These structured records are already queued as proposals; do not emit duplicate person or relationship tools for them.` });
+              continue;
+            }
             const allowed = Math.min(120_000, remaining);
             const extracted = decoded.slice(0, allowed);
             if (decoded.length > allowed) omittedTextEntries += 1;
@@ -108,6 +116,12 @@ export async function POST(request: Request) {
           });
         }
       } catch { content.push({ type: "input_text", text: `The uploaded ZIP ${file.name} could not be unpacked; use its filename as evidence only.` }); }
+      continue;
+    }
+    if (/\.(?:ged|gedcom)$/i.test(file.name)) {
+      const gedcom = parseGedcom(new TextDecoder().decode(await file.arrayBuffer()));
+      deterministicProposals.push(...gedcom.proposals);
+      content.push({ type: "input_text", text: `Deterministic GEDCOM report for ${file.name}: ${gedcom.people} people, ${gedcom.families} families, ${gedcom.relationships} relationships, ${gedcom.warnings.length} warnings. These structured records are already queued as proposals; do not emit duplicate person or relationship tools for them.` });
       continue;
     }
     const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
@@ -136,7 +150,7 @@ export async function POST(request: Request) {
       .map((item) => proposalFromCall(item))
       .filter((item): item is ChangeProposal => item !== null);
     const explicitConflicts = calls.map((item) => conflictFromCall(item)).filter((item): item is AgentConflict => item !== null);
-    const reconciled = reconcileProposals(tree, rawProposals);
+    const reconciled = reconcileProposals(tree, [...deterministicProposals, ...rawProposals]);
     const conflicts = [...explicitConflicts, ...reconciled.conflicts];
     // What reading the material raised but could not settle belongs in the
     // Fill-in tab, where the family can answer it, rather than only in a chat
