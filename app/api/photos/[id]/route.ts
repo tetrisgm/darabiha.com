@@ -1,7 +1,8 @@
-import { readAttachment } from "../../../../db/store";
+import { readAttachment, readTree } from "../../../../db/store";
 import { archiveCacheHeaders, preventSharedCaching, privateArchiveCacheHeaders } from "../../../../lib/archive-cache";
 import { isPublicRasterContentType } from "../../../../lib/attachment-types";
-import { requireEditor, requireVisitor } from "../../../authz";
+import { isArchiveMember, requireEditor, requireVisitor } from "../../../authz";
+import { attachmentBelongsToLivingPerson } from "../../../../lib/living-privacy";
 
 export const runtime = "edge";
 
@@ -14,6 +15,10 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
   // photographs are part of the archive anyone may see; source documents are
   // private evidence and need an editor
   const isPublicRaster = isPublicRasterContentType(attachment.metadata.contentType);
+  const member = await isArchiveMember();
+  if (isPublicRaster && access.visibility === "public" && !member && attachmentBelongsToLivingPerson(await readTree(), id)) {
+    return preventSharedCaching(new Response("Not found", { status: 404 }));
+  }
   if (!isPublicRaster && !(await requireEditor()).ok) {
     return preventSharedCaching(new Response("Not found", { status: 404 }));
   }

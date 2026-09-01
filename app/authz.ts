@@ -18,6 +18,10 @@ export async function getViewerRole(user: AppleUser | null): Promise<ViewerRole>
   return getMemberRole(user.email);
 }
 
+export async function isArchiveMember(): Promise<boolean> {
+  return Boolean(await getViewerRole(await getAppleUser()));
+}
+
 export async function requireEditor(): Promise<
   { ok: true; user: AppleUser } | { ok: false; response: Response }
 > {

@@ -2,10 +2,11 @@ import OpenAI from "openai";
 import { readTree } from "../../../db/store";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
 import { archiveQueryRelationships } from "../../../lib/archive-query-context";
-import { requireVisitor } from "../../authz";
+import { isArchiveMember, requireVisitor } from "../../authz";
 import { cookies } from "next/headers";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
 import { limitRequest } from "../../../lib/rate-limit";
+import { redactLivingDetails } from "../../../lib/living-privacy";
 
 export const runtime = "edge";
 
@@ -35,7 +36,8 @@ export async function POST(request: Request) {
   const body = await request.json() as { message?: unknown };
   const message = typeof body.message === "string" ? body.message.trim().slice(0, 4000) : "";
   if (!message) return Response.json({ error: "empty_message" }, { status: 400 });
-  const tree = await readTree();
+  const fullTree = await readTree();
+  const tree = access.visibility === "public" && !(await isArchiveMember()) ? redactLivingDetails(fullTree) : fullTree;
   const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
   try {
     const response = await new OpenAI({ apiKey }).responses.create({

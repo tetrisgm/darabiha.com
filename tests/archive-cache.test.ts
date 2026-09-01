@@ -7,6 +7,7 @@ const store = vi.hoisted(() => ({
   readTree: vi.fn(),
 }));
 const authz = vi.hoisted(() => ({
+  isArchiveMember: vi.fn(),
   requireEditor: vi.fn(),
   requireVisitor: vi.fn(),
 }));
@@ -24,6 +25,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   authz.requireVisitor.mockResolvedValue({ ok: true, visibility: "public" });
   authz.requireEditor.mockResolvedValue({ ok: true });
+  authz.isArchiveMember.mockResolvedValue(true);
   store.cachedTreeJson.mockReturnValue('{"people":[]}');
   store.readTree.mockResolvedValue({ people: [] });
   store.readAttachment.mockResolvedValue({
