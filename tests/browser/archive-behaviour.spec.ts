@@ -125,6 +125,28 @@ test("clicking a tree card opens its branch and leaves the card where it is", as
   await expect.poll(() => page.locator(".tree-card").count()).toBeGreaterThan(before);
 });
 
+test("a selected person's branch stays hidden until the user shows it again", async ({ page }) => {
+  await ready(page);
+  await page.locator(".tree-card").first().waitFor();
+  const branchId = await page.evaluate(() => {
+    const visible = (element: Element) => {
+      const r = element.getBoundingClientRect();
+      return r.left > 0 && r.right < window.innerWidth && r.top > 80 && r.bottom < window.innerHeight;
+    };
+    const chip = [...document.querySelectorAll(".branch-chip")].find((candidate) => candidate.textContent === "Hide branch" && visible(candidate));
+    return (chip as HTMLElement | undefined)?.dataset.branchPersonId ?? null;
+  });
+  test.skip(!branchId, "no expanded branch is on camera at this size");
+  await page.locator(`[data-person-id="${branchId}"]`).click();
+  const branch = page.locator(`[data-branch-person-id="${branchId}"]`);
+  await branch.click();
+  await expect(branch).toContainText("Show");
+  await page.waitForTimeout(500);
+  await expect(branch).toContainText("Show");
+  await branch.click();
+  await expect(branch).toHaveText("Hide branch");
+});
+
 test("the map zooms on open ground, not on a city, and names both", async ({ page }) => {
   await ready(page);
   await openView(page, "Map");
