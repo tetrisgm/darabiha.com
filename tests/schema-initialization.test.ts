@@ -22,16 +22,19 @@ describe("schema initialization", () => {
     expect(initialize).toHaveBeenCalledTimes(1);
   });
 
-  it("retries initialization after a failure", async () => {
+  it("reports and retries initialization after a failure", async () => {
     const failure = new Error("database unavailable");
+    const report = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const initialize = vi.fn()
       .mockRejectedValueOnce(failure)
       .mockResolvedValueOnce(undefined);
     const ensureInitialized = createSingleFlightInitializer(initialize);
 
     await expect(ensureInitialized()).rejects.toBe(failure);
+    expect(report).toHaveBeenCalledWith("schema_initialization_failed", failure);
     await expect(ensureInitialized()).resolves.toBeUndefined();
     expect(initialize).toHaveBeenCalledTimes(2);
+    report.mockRestore();
   });
 
   it("adds only missing compatibility columns", async () => {

@@ -38,6 +38,13 @@ export function createSingleFlightInitializer(initialize: () => Promise<void>) {
       inFlight = Promise.resolve()
         .then(initialize)
         .then(() => { initialized = true; })
+        .catch((error) => {
+          // Schema setup runs before almost every data-backed route. Without
+          // this boundary a D1 failure is reduced to an empty 500 response,
+          // leaving a production outage invisible in the Worker tail.
+          console.error("schema_initialization_failed", error);
+          throw error;
+        })
         .finally(() => { inFlight = undefined; });
     }
     return inFlight;
