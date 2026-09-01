@@ -1,5 +1,6 @@
-import { listAttachments } from "../../db/store";
+import { listAttachments, listDocumentQueue } from "../../db/store";
 import { requireEditor } from "../authz";
+import DocumentQueue from "./DocumentQueue";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents · Darabiha" };
@@ -31,7 +32,7 @@ export default async function DocumentsPage() {
       </main>
     );
   }
-  const documents = await listAttachments();
+  const [documents, queue] = await Promise.all([listAttachments(), listDocumentQueue()]);
   const images = documents.filter((document) => document.contentType.startsWith("image/"));
   const files = documents.filter((document) => !document.contentType.startsWith("image/"));
   return (
@@ -42,6 +43,7 @@ export default async function DocumentsPage() {
       </header>
       <section className="settings-panel">
         <h1>Documents</h1>
+        <DocumentQueue initial={queue} />
         <div className="settings-card">
           <p className="settings-hint">The material the archive was built from — the family biography, the histories, the source archive itself. Private to editors, and kept whole: the records elsewhere on this site are what was read out of these.</p>
           {files.length > 0 && <ul className="document-list">

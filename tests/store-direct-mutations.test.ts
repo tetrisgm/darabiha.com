@@ -12,10 +12,12 @@ import {
   applyProposal,
   attachPersonPhoto,
   consumeRateLimit,
+  cancelDocument,
   linkPersonPhoto,
   removeComment,
   removePersonPhoto,
   setPersonPortrait,
+  retryDocument,
   unlinkPersonPhoto,
   undoChange,
 } from "../db/store";
@@ -271,5 +273,19 @@ describe("abuse rate limiting", () => {
     const rejected = await consumeRateLimit("test-bucket", 2, 60);
     expect(rejected.allowed).toBe(false);
     expect(rejected.retryAfter).toBeGreaterThan(0);
+  });
+});
+
+describe("document retry and cancel", () => {
+  it("retries failed work and cancels queued work without deleting its evidence", async () => {
+    insertAttachment("retry-attachment"); insertAttachment("cancel-attachment");
+    sqlite.prepare(`INSERT INTO document_queue (id, attachment_id, filename, uploaded_by, status, result, created_at)
+      VALUES ('retry-doc', 'retry-attachment', 'retry.txt', 'editor', 'failed', 'timeout', 'now'),
+             ('cancel-doc', 'cancel-attachment', 'cancel.txt', 'editor', 'pending', NULL, 'now')`).run();
+    expect(await retryDocument("retry-doc", "editor@example.com")).toBe(true);
+    expect(sqlite.prepare("SELECT status, result FROM document_queue WHERE id = 'retry-doc'").get()).toEqual({ status: "pending", result: null });
+    expect(await cancelDocument("cancel-doc", "editor@example.com")).toBe(true);
+    expect(sqlite.prepare("SELECT id FROM document_queue WHERE id = 'cancel-doc'").get()).toBeUndefined();
+    expect(sqlite.prepare("SELECT id FROM attachments WHERE id = 'cancel-attachment'").get()).toEqual({ id: "cancel-attachment" });
   });
 });

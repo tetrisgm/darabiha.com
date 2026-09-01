@@ -1256,6 +1256,27 @@ export async function finishDocument(id: string, status: "read" | "failed", resu
     .bind(status, result.slice(0, 2000), new Date().toISOString(), id).run();
 }
 
+export async function retryDocument(id: string, actorEmail: string): Promise<boolean> {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  const changed = await env.DB.prepare(`UPDATE document_queue SET status = 'pending', result = NULL, processed_at = NULL
+    WHERE id = ? AND status = 'failed'`).bind(id).run();
+  if (!changed.meta.changes) return false;
+  await env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, 'retry_document', 'Retried document reading', ?, ?)")
+    .bind(crypto.randomUUID(), actorEmail, JSON.stringify({ documentId: id }), now).run();
+  return true;
+}
+
+export async function cancelDocument(id: string, actorEmail: string): Promise<boolean> {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  const changed = await env.DB.prepare("DELETE FROM document_queue WHERE id = ? AND status IN ('pending', 'failed')").bind(id).run();
+  if (!changed.meta.changes) return false;
+  await env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, 'cancel_document', 'Cancelled document reading', ?, ?)")
+    .bind(crypto.randomUUID(), actorEmail, JSON.stringify({ documentId: id }), now).run();
+  return true;
+}
+
 export async function readAttachmentBytes(attachmentId: string): Promise<{ bytes: Uint8Array; contentType: string; filename: string } | null> {
   await ensureSchema();
   const row = await env.DB.prepare("SELECT object_key AS objectKey, content_type AS contentType, filename FROM attachments WHERE id = ?")

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { requireEditor } from "../../authz";
 import {
   applyProposal, claimNextDocument, finishDocument, listDocumentQueue,
-  readAttachmentBytes, readTree, recordAgentQuestions,
+  readAttachmentBytes, readTree, recordAgentQuestions, retryDocument, cancelDocument,
 } from "../../../db/store";
 import { archivistInstructions, archivistTools } from "../../../lib/archivist";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
@@ -37,6 +37,18 @@ export async function GET() {
   if (!auth.ok) return preventSharedCaching(auth.response);
   const queue = await listDocumentQueue();
   return privateJsonResponse({ queue, pending: queue.filter((item) => item.status === "pending").length });
+}
+
+export async function PATCH(request: Request) {
+  const auth = await requireEditor();
+  if (!auth.ok) return auth.response;
+  const body = await request.json().catch(() => null) as { id?: unknown; action?: unknown } | null;
+  const id = typeof body?.id === "string" ? body.id : "";
+  const action = body?.action;
+  if (!id || (action !== "retry" && action !== "cancel")) return Response.json({ error: "invalid_action" }, { status: 400 });
+  const changed = action === "retry" ? await retryDocument(id, auth.user.email) : await cancelDocument(id, auth.user.email);
+  if (!changed) return Response.json({ error: "document_state_changed" }, { status: 409 });
+  return privateJsonResponse({ queue: await listDocumentQueue() });
 }
 
 export async function POST() {

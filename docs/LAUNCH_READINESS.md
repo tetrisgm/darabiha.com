@@ -21,7 +21,7 @@ The launch story is not “another family-tree drawing tool.” The differentiat
 | Agent CRUD | Verified | The agent can propose create, update, delete, relationship, story, and attachment operations. Mutations cross validation and invariant boundaries and write the audit log. |
 | Duplicate handling | Partial | `lib/agent-reconcile.ts` merges one compatible same-name record and surfaces ambiguous collisions. There is no explicit user-facing merge/split operation or durable adjudication record. |
 | Recursive uploads | Verified | Folder structure and ZIP paths are preserved; supported extracted formats include HTML, CSS, JS, JSON, text, Markdown, CSV, XML, GEDCOM, and common raster images. |
-| Ingestion reliability | Partial | Queue statuses and visible failures exist. Large work is bounded, but ingestion is not resumable from a durable per-item checkpoint and lacks user-triggered retry/cancel controls. |
+| Ingestion reliability | Partial | Durable queue statuses, stale-reader recovery, visible results, and editor-triggered retry/cancel controls exist. Large work is bounded; sub-file resumable checkpoints for exceptionally large archives remain a later enhancement. |
 | Provenance | Missing at claim level | Files and story attachments survive as evidence, but a name/date/place/relationship cannot identify the source passage or person who asserted it. |
 | Confidence and contradictions | Partial | Import-time conflicts become open questions. Confidence is not persisted per claim, and competing claims cannot coexist without overwriting the person row. |
 | Audit history | Verified, not reversible | Every mutation writes `change_log`; history is editor-only. Payloads are not a complete before/after transaction and cannot reliably undo a change. |
