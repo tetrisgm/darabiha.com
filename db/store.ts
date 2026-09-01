@@ -19,7 +19,7 @@ import { CLAIM_QUESTION_ANSWER_SQL, RUNTIME_INTEGRITY_SCHEMA } from "./runtime-i
 import { createSingleFlightInitializer, ensureColumns } from "./schema-initialization";
 import {
   isD1DailyReadLimitError, MEMBERS_SNAPSHOT_OBJECT_KEY, parseMemberAccessSnapshot,
-  nextUtcMidnight, parseTreeSnapshot, TREE_SNAPSHOT_OBJECT_KEY, VISIBILITY_SNAPSHOT_OBJECT_KEY,
+  nextUtcMidnight, parseTreeSnapshot, parseVisibilitySnapshot, TREE_SNAPSHOT_OBJECT_KEY, VISIBILITY_SNAPSHOT_OBJECT_KEY,
 } from "../lib/tree-snapshot";
 
 const schemaStatements = [
@@ -207,8 +207,8 @@ export async function getSiteVisibility(fresh = false): Promise<SiteVisibility> 
   let value: SiteVisibility;
   if (d1ReadCircuitOpen()) {
     const object = await env.FILES.get(VISIBILITY_SNAPSHOT_OBJECT_KEY);
-    const snapshot = object ? await object.text() : "";
-    if (snapshot !== "public" && snapshot !== "members" && snapshot !== "password") throw new Error("site_visibility_snapshot_unavailable");
+    const snapshot = parseVisibilitySnapshot(object ? await object.text() : "");
+    if (!snapshot) throw new Error("site_visibility_snapshot_unavailable");
     visibilityCache = { value: snapshot, time: Date.now() };
     return snapshot;
   }
@@ -222,8 +222,8 @@ export async function getSiteVisibility(fresh = false): Promise<SiteVisibility> 
     openD1ReadCircuit();
     console.warn("d1_quota_fallback_site_visibility");
     const object = await env.FILES.get(VISIBILITY_SNAPSHOT_OBJECT_KEY);
-    const snapshot = object ? await object.text() : "";
-    if (snapshot !== "public" && snapshot !== "members" && snapshot !== "password") throw error;
+    const snapshot = parseVisibilitySnapshot(object ? await object.text() : "");
+    if (!snapshot) throw error;
     value = snapshot;
   }
   visibilityCache = { value, time: Date.now() };

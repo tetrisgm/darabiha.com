@@ -24,6 +24,13 @@ export function nextUtcMidnight(timestamp = Date.now()): number {
   return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
 }
 
+/** Tolerates surrounding whitespace: the object may be seeded by hand, and a
+ * shell-added trailing newline once made every quota-fallback read throw. */
+export function parseVisibilitySnapshot(value: string): "public" | "members" | "password" | null {
+  const trimmed = value.trim();
+  return trimmed === "public" || trimmed === "members" || trimmed === "password" ? trimmed : null;
+}
+
 export function parseMemberAccessSnapshot(value: string): MemberAccessSnapshot | null {
   try {
     const parsed = JSON.parse(value) as Partial<MemberAccessSnapshot>;

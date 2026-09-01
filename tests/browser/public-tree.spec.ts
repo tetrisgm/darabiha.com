@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
+import { VERSION } from "../../lib/build";
 
 // The live site is members-only, so every UI test carries a minted session
 // for the dedicated browser-suite viewer member. The session secret's
@@ -123,7 +124,9 @@ test("live page exposes an uncached deployment identity", async ({ page }) => {
   const build = await page.locator("main[data-build-id]").getAttribute("data-build-id");
   const version = await page.locator("main[data-version]").getAttribute("data-version");
   expect(build).toMatch(/^[0-9a-f]{7,}$/);
-  expect(version).toBe("187");
+  // The suite verifies the deployed site, so the expected identity is the
+  // checkout's own: deploy before running, or the mismatch is the finding.
+  expect(version).toBe(String(VERSION));
   const response = await page.request.get("/api/version");
   expect(response.ok()).toBeTruthy();
   expect((await response.json()).build).toBe(build);
