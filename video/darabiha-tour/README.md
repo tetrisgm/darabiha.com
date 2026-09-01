@@ -4,7 +4,7 @@ A 14-second, 1920×1080 Remotion tour of the family archive, centered on live
 tree panning and zooming.
 
 The source captures contain private family information and are intentionally
-excluded from Git. Place `tree-motion.mov` and `profile.png` in
+excluded from Git. Place `family.png`, `tree-motion.mov`, and `profile.png` in
 `public/captures/` before rendering.
 
 ```sh

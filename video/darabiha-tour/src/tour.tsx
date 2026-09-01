@@ -28,12 +28,8 @@ const Still: React.FC<{file: string; eyebrow: string; title: string; duration: n
 
 const Motion: React.FC = () => {
   const frame = useCurrentFrame();
-  const duration = 292;
-  const scale = interpolate(frame, [0, duration], [1.015, 1.105], {extrapolateRight: 'clamp'});
-  const x = interpolate(frame, [0, duration], [0, -34], {extrapolateRight: 'clamp'});
-  const y = interpolate(frame, [0, duration], [0, 10], {extrapolateRight: 'clamp'});
-  return <AbsoluteFill style={{background: '#070a08', opacity: ease(frame, duration), overflow: 'hidden'}}>
-    <OffthreadVideo src={staticFile('captures/tree-motion.mov')} muted style={{width: '100%', height: '100%', objectFit: 'cover', transform: `translate(${x}px, ${y}px) scale(${scale})`}} />
+  return <AbsoluteFill style={{background: '#070a08', opacity: ease(frame, 218), overflow: 'hidden'}}>
+    <OffthreadVideo src={staticFile('captures/tree-motion.mov')} muted style={{width: '100%', height: '100%', objectFit: 'cover'}} />
     <div style={{position: 'absolute', right: 58, top: 48, padding: '13px 18px', borderRadius: 999, background: 'rgba(248,250,249,.9)', color: '#20352a', fontFamily: 'Arial, sans-serif', fontSize: 19, fontWeight: 650, boxShadow: '0 12px 38px rgba(0,0,0,.18)'}}>Pan · zoom · explore</div>
   </AbsoluteFill>;
 };
@@ -47,8 +43,9 @@ const Outro: React.FC = () => {
 };
 
 export const DarabihaTour: React.FC = () => <AbsoluteFill style={{background: '#0c100e'}}>
-  <Sequence durationInFrames={36}><Intro /></Sequence>
-  <Sequence from={28} durationInFrames={292} premountFor={30}><Motion /></Sequence>
-  <Sequence from={308} durationInFrames={72} premountFor={30}><Still file="profile.png" eyebrow="A LIVING RECORD" title="Open any person to see their story" duration={72} anchor="right" /></Sequence>
-  <Sequence from={368} durationInFrames={52}><Outro /></Sequence>
+  <Sequence durationInFrames={48}><Intro /></Sequence>
+  <Sequence from={40} durationInFrames={74} premountFor={30}><Still file="family.png" eyebrow="FAMILY VIEW" title="Start with the people closest to you" duration={74} /></Sequence>
+  <Sequence from={104} durationInFrames={218} premountFor={30}><Motion /></Sequence>
+  <Sequence from={312} durationInFrames={70} premountFor={30}><Still file="profile.png" eyebrow="A LIVING RECORD" title="Open any person to see their story" duration={70} anchor="right" /></Sequence>
+  <Sequence from={372} durationInFrames={48}><Outro /></Sequence>
 </AbsoluteFill>;
