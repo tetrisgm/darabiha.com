@@ -154,6 +154,9 @@ export default function PersonProfilePanel({ person, tree, canEdit, canComment, 
   // "record a death" opens the field; it does not fill it in
   const [recordingDeath, setRecordingDeath] = useState(false);
   const [shareQuery, setShareQuery] = useState("");
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeQuery, setMergeQuery] = useState("");
+  const [mergeChoice, setMergeChoice] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -302,7 +305,8 @@ export default function PersonProfilePanel({ person, tree, canEdit, canComment, 
     {!preview && canEdit && <PersonSources personId={person.id} />}
     {!preview && canComment && <PersonComments personId={person.id} />}
     {notice && <p className="modal-notice" role="status">{notice}</p>}
-    {canEdit && <div className="person-delete-footer">{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>{t("person.removePortrait")}</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>{t("person.delete")}</button></div>}
+    {canEdit && mergeOpen && <div className="merge-person-box"><p className="eyebrow">Merge duplicate</p><p className="source-empty">Choose the canonical record. Everything linked to {person.displayName} will move there, and the merge can be undone from History.</p><input className="modal-input" autoFocus value={mergeQuery} placeholder="Find the person to keep" onChange={(event) => { setMergeQuery(event.target.value); setMergeChoice(""); }} />{mergeQuery.trim() && <div className="relative-suggestions">{tree.people.filter((candidate) => candidate.id !== person.id && candidate.displayName.toLocaleLowerCase().includes(mergeQuery.trim().toLocaleLowerCase())).slice(0, 6).map((candidate) => <button type="button" key={candidate.id} onClick={() => { setMergeChoice(candidate.id); setMergeQuery(candidate.displayName); }}><strong>{candidate.displayName}</strong><span>{candidate.birthDate?.slice(0, 4) || "Year unknown"}{locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace) ? ` · ${locationLine(candidate.birthCity, candidate.birthCountry, candidate.birthPlace)}` : ""}</span></button>)}</div>}<div className="fill-actions"><button type="button" className="fill-save" disabled={!mergeChoice || saving} onClick={async () => { const target = tree.people.find((candidate) => candidate.id === mergeChoice); if (!target || !window.confirm(`Merge ${person.displayName} into ${target.displayName}?`)) return; setSaving(true); try { await post({ action: "merge", sourcePersonId: person.id, targetPersonId: target.id, summary: `Merged duplicate ${person.displayName} into ${target.displayName}` }); onSelect(target); } catch (error) { setNotice(error instanceof Error ? error.message : "Could not merge records"); } finally { setSaving(false); } }}>Merge records</button><button type="button" className="fill-skip" onClick={() => setMergeOpen(false)}>Cancel</button></div></div>}
+    {canEdit && <div className="person-delete-footer"><button className="photo-remove-button" onClick={() => { setMergeOpen((open) => !open); setMergeQuery(""); setMergeChoice(""); }}>Merge duplicate</button>{person.photoAttachmentId && <button className="photo-remove-button" onClick={async () => { try { await post({ action: "remove_photo", personId: person.id }); setNotice("Photo removed"); } catch { setNotice("Could not remove photo"); } }}>{t("person.removePortrait")}</button>}<button className="person-delete-button" disabled={saving} onClick={deletePerson}>{t("person.delete")}</button></div>}
   </section>;
 }
 

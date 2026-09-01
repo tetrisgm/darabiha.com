@@ -28,6 +28,10 @@ export async function POST(request: Request) {
       return Response.json({ ok: true, tree: await updatePerson(String(body.personId ?? ""), (body.patch ?? {}) as Record<string, unknown>, auth.user.email) });
     }
     if (action === "remove") return Response.json({ ok: true, tree: await removePerson(String(body.personId ?? ""), auth.user.email) });
+    if (action === "merge") return Response.json({ ok: true, tree: await applyProposal({
+      kind: "merge_people", summary: String(body.summary ?? "Merged duplicate family records"),
+      sourcePersonId: String(body.sourcePersonId ?? ""), targetPersonId: String(body.targetPersonId ?? ""),
+    }, auth.user.email) });
     if (action === "remove_relationship") return Response.json({ ok: true, tree: await removeRelationship(String(body.relationshipId ?? ""), auth.user.email) });
     if (action === "relationship_status") {
       const status = typeof body.status === "string" && ["divorced", "widowed"].includes(body.status) ? body.status : null;

@@ -108,6 +108,7 @@ export function isChangeProposal(value: unknown): value is ChangeProposal {
   if (value.kind === "update_person") return isId(value.personId) && isPersonPayload(value.patch);
   if (value.kind === "delete_person") return isId(value.personId);
   if (value.kind === "delete_relationship") return isId(value.relationshipId);
+  if (value.kind === "merge_people") return isId(value.sourcePersonId) && isId(value.targetPersonId) && value.sourcePersonId !== value.targetPersonId;
   if (value.kind === "delete_story") return isId(value.storyId);
   if (value.kind === "delete_attachment") return isId(value.attachmentId);
 

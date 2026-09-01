@@ -94,6 +94,10 @@ const schemaStatements = [
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'undoing', 'undone')),
     undone_by TEXT, undone_at TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS merge_snapshots (
+    change_id TEXT PRIMARY KEY, source_person_id TEXT NOT NULL, target_person_id TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL, merged_at TEXT NOT NULL, restored_at TEXT
+  )`,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -714,6 +718,134 @@ export async function listEvidenceClaims(subjectType: EvidenceClaim["subjectType
   return result.results;
 }
 
+type MergeSnapshot = {
+  sourcePersonId: string;
+  targetPersonId: string;
+  people: Record<string, unknown>[];
+  relationships: Record<string, unknown>[];
+  storyPeople: Record<string, unknown>[];
+  personPhotos: Record<string, unknown>[];
+  comments: Record<string, unknown>[];
+  members: Record<string, unknown>[];
+  claims: Record<string, unknown>[];
+  questions: Record<string, unknown>[];
+};
+
+async function mergeSnapshot(sourcePersonId: string, targetPersonId: string): Promise<MergeSnapshot> {
+  const ids = [sourcePersonId, targetPersonId] as const;
+  const people = await env.DB.prepare("SELECT * FROM people WHERE id IN (?, ?)").bind(...ids).all<Record<string, unknown>>();
+  const relationships = await env.DB.prepare("SELECT * FROM relationships WHERE from_person_id IN (?, ?) OR to_person_id IN (?, ?)")
+    .bind(...ids, ...ids).all<Record<string, unknown>>();
+  const storyPeople = await env.DB.prepare("SELECT * FROM story_people WHERE person_id IN (?, ?)").bind(...ids).all<Record<string, unknown>>();
+  const personPhotos = await env.DB.prepare("SELECT * FROM person_photos WHERE person_id IN (?, ?)").bind(...ids).all<Record<string, unknown>>();
+  const comments = await env.DB.prepare("SELECT * FROM person_comments WHERE person_id IN (?, ?)").bind(...ids).all<Record<string, unknown>>();
+  const members = await env.DB.prepare("SELECT * FROM members WHERE person_id IN (?, ?)").bind(...ids).all<Record<string, unknown>>();
+  const claims = await env.DB.prepare(`SELECT * FROM evidence_claims WHERE
+    (subject_type = 'person' AND subject_id IN (?, ?)) OR
+    (subject_type = 'relationship' AND subject_id IN (SELECT id FROM relationships WHERE from_person_id IN (?, ?) OR to_person_id IN (?, ?)))`)
+    .bind(...ids, ...ids, ...ids).all<Record<string, unknown>>();
+  const questions = await env.DB.prepare("SELECT id, proposal_json FROM open_questions WHERE proposal_json IS NOT NULL AND instr(proposal_json, ?) > 0")
+    .bind(JSON.stringify(sourcePersonId)).all<Record<string, unknown>>();
+  return {
+    sourcePersonId, targetPersonId, people: people.results, relationships: relationships.results,
+    storyPeople: storyPeople.results, personPhotos: personPhotos.results, comments: comments.results,
+    members: members.results, claims: claims.results, questions: questions.results,
+  };
+}
+
+function mergedPerson(source: Person, target: Person): Omit<Person, "id"> {
+  const choose = <K extends keyof Omit<Person, "id">>(key: K) => target[key] ?? source[key];
+  const sourceBio = source.biography?.trim() ?? "";
+  const targetBio = target.biography?.trim() ?? "";
+  const biography = !sourceBio || targetBio.includes(sourceBio) ? target.biography
+    : !targetBio || sourceBio.includes(targetBio) ? source.biography
+      : `${targetBio}${targetBio.endsWith(".") ? "" : "."} ${sourceBio}`;
+  return {
+    displayName: target.displayName || source.displayName, gender: choose("gender"), givenName: choose("givenName"),
+    familyName: choose("familyName"), maidenName: choose("maidenName"), birthDate: choose("birthDate"),
+    deathDate: choose("deathDate"), birthPlace: choose("birthPlace"), deathPlace: choose("deathPlace"),
+    birthCity: choose("birthCity"), birthCountry: choose("birthCountry"), deathCity: choose("deathCity"),
+    deathCountry: choose("deathCountry"), burialPlace: choose("burialPlace"), residence: choose("residence"),
+    biography, photoAttachmentId: choose("photoAttachmentId"), photoIds: target.photoIds ?? source.photoIds,
+  };
+}
+
+const relationshipSignature = (relationship: Pick<Relationship, "fromPersonId" | "toPersonId" | "type">) => relationship.type === "spouse"
+  ? `spouse:${[relationship.fromPersonId, relationship.toPersonId].sort().join(":")}`
+  : `parent:${relationship.fromPersonId}:${relationship.toPersonId}`;
+
+async function mergePeople(sourcePersonId: string, targetPersonId: string, summary: string, actorEmail: string, source: ClaimSource): Promise<FamilyTree> {
+  await ensureSchema();
+  if (!sourcePersonId || !targetPersonId || sourcePersonId === targetPersonId) throw new Error("A merge needs two different people.");
+  const tree = await readTree();
+  const sourcePerson = tree.people.find((person) => person.id === sourcePersonId);
+  const targetPerson = tree.people.find((person) => person.id === targetPersonId);
+  if (!sourcePerson || !targetPerson) throw new Error("One of those people is no longer in the tree.");
+  const snapshot = await mergeSnapshot(sourcePersonId, targetPersonId);
+  const merged = mergedPerson(sourcePerson, targetPerson);
+  const now = new Date().toISOString();
+  const changeId = crypto.randomUUID();
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, maiden_name = ?, birth_date = ?,
+      death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, burial_place = ?,
+      residence = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
+      .bind(merged.displayName, merged.gender, merged.givenName, merged.familyName, merged.maidenName, merged.birthDate,
+        merged.deathDate, merged.birthPlace, merged.deathPlace, merged.birthCity, merged.birthCountry, merged.deathCity,
+        merged.deathCountry, merged.burialPlace, merged.residence, merged.biography, merged.photoAttachmentId, now, targetPersonId),
+    ...claimStatements("person", targetPersonId, personClaimEntries(merged)
+      .filter(([predicate, value]) => String(targetPerson[predicate as keyof Person] ?? "") !== String(value ?? "")), actorEmail, now, source),
+  ];
+
+  const occupied = new Set(tree.relationships.filter((relationship) => relationship.fromPersonId !== sourcePersonId && relationship.toPersonId !== sourcePersonId).map(relationshipSignature));
+  for (const relationship of tree.relationships.filter((candidate) => candidate.fromPersonId === sourcePersonId || candidate.toPersonId === sourcePersonId)) {
+    const next = {
+      ...relationship,
+      fromPersonId: relationship.fromPersonId === sourcePersonId ? targetPersonId : relationship.fromPersonId,
+      toPersonId: relationship.toPersonId === sourcePersonId ? targetPersonId : relationship.toPersonId,
+    };
+    const signature = relationshipSignature(next);
+    if (next.fromPersonId === next.toPersonId || occupied.has(signature)) {
+      statements.push(
+        env.DB.prepare("DELETE FROM evidence_claims WHERE subject_type = 'relationship' AND subject_id = ?").bind(relationship.id),
+        env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(relationship.id),
+      );
+      continue;
+    }
+    occupied.add(signature);
+    statements.push(
+      env.DB.prepare("UPDATE relationships SET from_person_id = ?, to_person_id = ? WHERE id = ?").bind(next.fromPersonId, next.toPersonId, relationship.id),
+      env.DB.prepare("UPDATE evidence_claims SET value = ?, updated_at = ? WHERE subject_type = 'relationship' AND subject_id = ? AND predicate = 'fromPersonId'").bind(next.fromPersonId, now, relationship.id),
+      env.DB.prepare("UPDATE evidence_claims SET value = ?, updated_at = ? WHERE subject_type = 'relationship' AND subject_id = ? AND predicate = 'toPersonId'").bind(next.toPersonId, now, relationship.id),
+    );
+  }
+
+  statements.push(
+    env.DB.prepare("INSERT OR IGNORE INTO story_people (story_id, person_id) SELECT story_id, ? FROM story_people WHERE person_id = ?").bind(targetPersonId, sourcePersonId),
+    env.DB.prepare("DELETE FROM story_people WHERE person_id = ?").bind(sourcePersonId),
+    env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) SELECT ?, attachment_id, created_at FROM person_photos WHERE person_id = ?").bind(targetPersonId, sourcePersonId),
+    env.DB.prepare("DELETE FROM person_photos WHERE person_id = ?").bind(sourcePersonId),
+    env.DB.prepare("UPDATE person_comments SET person_id = ? WHERE person_id = ?").bind(targetPersonId, sourcePersonId),
+    env.DB.prepare("UPDATE members SET person_id = NULL, updated_at = ? WHERE person_id = ? AND EXISTS (SELECT 1 FROM members WHERE person_id = ?)").bind(now, sourcePersonId, targetPersonId),
+    env.DB.prepare("UPDATE members SET person_id = ?, updated_at = ? WHERE person_id = ?").bind(targetPersonId, now, sourcePersonId),
+    env.DB.prepare(`UPDATE evidence_claims SET status = 'disputed', updated_at = ? WHERE subject_type = 'person' AND subject_id = ? AND status = 'preferred'
+      AND EXISTS (SELECT 1 FROM evidence_claims target WHERE target.subject_type = 'person' AND target.subject_id = ?
+        AND target.predicate = evidence_claims.predicate AND target.status = 'preferred' AND target.value IS NOT evidence_claims.value)`).bind(now, sourcePersonId, targetPersonId),
+    env.DB.prepare("UPDATE evidence_claims SET subject_id = ?, updated_at = ? WHERE subject_type = 'person' AND subject_id = ?").bind(targetPersonId, now, sourcePersonId),
+    env.DB.prepare("UPDATE open_questions SET proposal_json = replace(proposal_json, ?, ?) WHERE proposal_json IS NOT NULL AND instr(proposal_json, ?) > 0")
+      .bind(sourcePersonId, targetPersonId, JSON.stringify(sourcePersonId)),
+    env.DB.prepare("DELETE FROM people WHERE id = ?").bind(sourcePersonId),
+    env.DB.prepare("INSERT INTO merge_snapshots (change_id, source_person_id, target_person_id, snapshot_json, merged_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(changeId, sourcePersonId, targetPersonId, JSON.stringify(snapshot), now),
+    env.DB.prepare("INSERT INTO undo_entries (change_id, inverse_json, status) VALUES (?, ?, 'active')")
+      .bind(changeId, JSON.stringify({ kind: "undo_merge", changeId })),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, 'merge_people', ?, ?, ?)")
+      .bind(changeId, actorEmail, summary, JSON.stringify({ sourcePersonId, targetPersonId }), now),
+  );
+  await env.DB.batch(statements);
+  treeJsonCache = null;
+  return readTree();
+}
+
 export async function setEvidenceClaimStatus(
   claimId: string,
   status: "preferred" | "rejected",
@@ -764,6 +896,7 @@ async function readMutationInvariants(includeAttachments = false) {
 
 export async function applyProposal(proposal: ChangeProposal, actorEmail: string, claimSource: ClaimSource = defaultClaimSource(actorEmail)): Promise<FamilyTree> {
   if (!isChangeProposal(proposal)) throw new Error("Invalid change proposal.");
+  if (proposal.kind === "merge_people") return mergePeople(proposal.sourcePersonId, proposal.targetPersonId, proposal.summary, actorEmail, claimSource);
   await ensureSchema();
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
@@ -1338,6 +1471,70 @@ export async function listChangeLog(before?: string | null, limit = 60): Promise
   return { entries, nextBefore: rows.results.length > limit ? entries[entries.length - 1]?.createdAt ?? null : null };
 }
 
+const rowValue = (row: Record<string, unknown>, key: string) => (row[key] ?? null) as string | number | null;
+
+async function restoreMerge(changeId: string, actorEmail: string): Promise<FamilyTree> {
+  const stored = await env.DB.prepare(`SELECT source_person_id AS sourcePersonId, target_person_id AS targetPersonId,
+    snapshot_json AS snapshotJson, merged_at AS mergedAt, restored_at AS restoredAt FROM merge_snapshots WHERE change_id = ?`)
+    .bind(changeId).first<{ sourcePersonId: string; targetPersonId: string; snapshotJson: string; mergedAt: string; restoredAt: string | null }>();
+  if (!stored || stored.restoredAt) throw new Error("That merge can no longer be split.");
+  const later = await env.DB.prepare(`SELECT COUNT(*) AS count FROM change_log WHERE created_at > ? AND id != ?
+    AND (instr(payload_json, ?) > 0 OR instr(payload_json, ?) > 0)`)
+    .bind(stored.mergedAt, changeId, stored.sourcePersonId, stored.targetPersonId).first<{ count: number }>();
+  if (later?.count) throw new Error("This person changed after the merge. Undo those later changes before splitting the records.");
+  const snapshot = JSON.parse(stored.snapshotJson) as MergeSnapshot;
+  const sourceExists = await env.DB.prepare("SELECT id FROM people WHERE id = ?").bind(stored.sourcePersonId).first<{ id: string }>();
+  const targetExists = await env.DB.prepare("SELECT id FROM people WHERE id = ?").bind(stored.targetPersonId).first<{ id: string }>();
+  if (sourceExists || !targetExists) throw new Error("The merged records are no longer in the expected state.");
+  const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [
+    env.DB.prepare(`DELETE FROM evidence_claims WHERE subject_type = 'relationship' AND subject_id IN
+      (SELECT id FROM relationships WHERE from_person_id = ? OR to_person_id = ?)`)
+      .bind(stored.targetPersonId, stored.targetPersonId),
+    env.DB.prepare("DELETE FROM relationships WHERE from_person_id = ? OR to_person_id = ?").bind(stored.targetPersonId, stored.targetPersonId),
+    env.DB.prepare("DELETE FROM story_people WHERE person_id IN (?, ?)").bind(stored.sourcePersonId, stored.targetPersonId),
+    env.DB.prepare("DELETE FROM person_photos WHERE person_id IN (?, ?)").bind(stored.sourcePersonId, stored.targetPersonId),
+    env.DB.prepare("DELETE FROM person_comments WHERE person_id IN (?, ?)").bind(stored.sourcePersonId, stored.targetPersonId),
+    env.DB.prepare("UPDATE members SET person_id = NULL, updated_at = ? WHERE person_id IN (?, ?)").bind(now, stored.sourcePersonId, stored.targetPersonId),
+    env.DB.prepare("DELETE FROM evidence_claims WHERE subject_type = 'person' AND subject_id IN (?, ?)").bind(stored.sourcePersonId, stored.targetPersonId),
+    env.DB.prepare("DELETE FROM people WHERE id IN (?, ?)").bind(stored.sourcePersonId, stored.targetPersonId),
+  ];
+  for (const row of snapshot.people) statements.push(env.DB.prepare(`INSERT INTO people
+    (id, display_name, gender, given_name, family_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country,
+     death_city, death_country, biography, photo_attachment_id, created_at, updated_at, maiden_name, burial_place, residence)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "display_name", "gender", "given_name", "family_name", "birth_date", "death_date", "birth_place", "death_place",
+      "birth_city", "birth_country", "death_city", "death_country", "biography", "photo_attachment_id", "created_at", "updated_at",
+      "maiden_name", "burial_place", "residence"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.relationships) statements.push(env.DB.prepare(`INSERT INTO relationships
+    (id, from_person_id, to_person_id, type, created_at, status) VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "from_person_id", "to_person_id", "type", "created_at", "status"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.storyPeople) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)")
+    .bind(rowValue(row, "story_id"), rowValue(row, "person_id")));
+  for (const row of snapshot.personPhotos) statements.push(env.DB.prepare("INSERT OR IGNORE INTO person_photos (person_id, attachment_id, created_at) VALUES (?, ?, ?)")
+    .bind(rowValue(row, "person_id"), rowValue(row, "attachment_id"), rowValue(row, "created_at")));
+  for (const row of snapshot.comments) statements.push(env.DB.prepare(`INSERT INTO person_comments
+    (id, person_id, author_email, author_name, body, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "person_id", "author_email", "author_name", "body", "created_at"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.members) statements.push(env.DB.prepare(`UPDATE members SET role = ?, person_id = ?, added_by = ?, created_at = ?, updated_at = ? WHERE email = ?`)
+    .bind(...["role", "person_id", "added_by", "created_at", "updated_at", "email"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.claims) statements.push(env.DB.prepare(`INSERT INTO evidence_claims
+    (id, subject_type, subject_id, predicate, value, status, confidence, source_type, attachment_id, source_label,
+     source_locator, source_excerpt, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(...["id", "subject_type", "subject_id", "predicate", "value", "status", "confidence", "source_type", "attachment_id",
+      "source_label", "source_locator", "source_excerpt", "created_by", "created_at", "updated_at"].map((key) => rowValue(row, key))));
+  for (const row of snapshot.questions) statements.push(env.DB.prepare("UPDATE open_questions SET proposal_json = ? WHERE id = ?")
+    .bind(rowValue(row, "proposal_json"), rowValue(row, "id")));
+  statements.push(
+    env.DB.prepare("UPDATE merge_snapshots SET restored_at = ? WHERE change_id = ? AND restored_at IS NULL").bind(now, changeId),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, 'split_people', ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "Undid a duplicate-person merge", JSON.stringify({ mergeChangeId: changeId, sourcePersonId: stored.sourcePersonId, targetPersonId: stored.targetPersonId }), now),
+  );
+  await env.DB.batch(statements);
+  treeJsonCache = null;
+  return readTree();
+}
+
 export async function undoChange(changeId: string, actorEmail: string): Promise<FamilyTree> {
   await ensureSchema();
   const claimed = await env.DB.prepare("UPDATE undo_entries SET status = 'undoing' WHERE change_id = ? AND status = 'active'")
@@ -1347,10 +1544,12 @@ export async function undoChange(changeId: string, actorEmail: string): Promise<
     const row = await env.DB.prepare("SELECT inverse_json AS inverseJson FROM undo_entries WHERE change_id = ?")
       .bind(changeId).first<{ inverseJson: string }>();
     const inverse = row ? JSON.parse(row.inverseJson) as unknown : null;
-    if (!isChangeProposal(inverse)) throw new Error("The saved undo operation is invalid.");
-    const tree = await applyProposal(inverse, actorEmail, {
-      sourceType: "manual", sourceLabel: `Undo by ${actorEmail}`, confidence: 100,
-    });
+    const internal = inverse && typeof inverse === "object" ? inverse as { kind?: unknown; changeId?: unknown } : null;
+    const tree = internal?.kind === "undo_merge" && typeof internal.changeId === "string"
+      ? await restoreMerge(internal.changeId, actorEmail)
+      : isChangeProposal(inverse)
+        ? await applyProposal(inverse, actorEmail, { sourceType: "manual", sourceLabel: `Undo by ${actorEmail}`, confidence: 100 })
+        : (() => { throw new Error("The saved undo operation is invalid."); })();
     await env.DB.prepare("UPDATE undo_entries SET status = 'undone', undone_by = ?, undone_at = ? WHERE change_id = ? AND status = 'undoing'")
       .bind(actorEmail, new Date().toISOString(), changeId).run();
     return tree;

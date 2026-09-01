@@ -129,6 +129,15 @@ export type DeleteRelationshipProposal = {
   relationshipId: string;
 };
 
+export type MergePeopleProposal = {
+  kind: "merge_people";
+  summary: string;
+  /** duplicate record whose useful data and links move into the target */
+  sourcePersonId: string;
+  /** canonical record that survives */
+  targetPersonId: string;
+};
+
 export type AddStoryProposal = {
   kind: "add_story";
   summary: string;
@@ -177,6 +186,7 @@ export type ChangeProposal =
   | DeletePersonProposal
   | AddRelationshipProposal
   | DeleteRelationshipProposal
+  | MergePeopleProposal
   | AddStoryProposal
   | UpdateStoryProposal
   | DeleteStoryProposal

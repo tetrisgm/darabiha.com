@@ -1298,6 +1298,8 @@ html[lang="fa"] { font-variant-numeric: normal; }
   font-size:.72rem; font-weight:650; cursor:pointer; }
 .history-undo:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
 .history-undo-wrap span, .history-undone { color:var(--muted); font-size:.7rem; }
+.merge-person-box { margin-top:1.2rem; border:1px solid var(--line); border-radius:.9rem; background:var(--card); padding:.85rem; }
+.merge-person-box .modal-input { width:100%; margin-top:.65rem; }
 
 /* --- Apple's compact and regular widths, applied ---------------------------
    Below 768pt is compact: a phone, or an iPad in Slide Over. One column, the

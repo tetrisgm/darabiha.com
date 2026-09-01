@@ -51,6 +51,7 @@ export function proposalFromCall(call: ToolCall): ChangeProposal | null {
     attachmentIds: Array.isArray(args.attachment_ids) ? args.attachment_ids.map(String) : [],
   };
   if (call.name === "propose_delete_person") return { kind: "delete_person", summary, personId: String(args.person_id ?? "") };
+  if (call.name === "propose_merge_people") return { kind: "merge_people", summary, sourcePersonId: String(args.source_person_id ?? ""), targetPersonId: String(args.target_person_id ?? "") };
   if (call.name === "propose_delete_relationship") return { kind: "delete_relationship", summary, relationshipId: String(args.relationship_id ?? "") };
   if (call.name === "propose_update_story") return {
     kind: "update_story", summary, storyId: String(args.story_id ?? ""), title: String(args.title ?? "Family story"), body: String(args.body ?? ""),

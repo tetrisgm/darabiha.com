@@ -43,6 +43,11 @@ export const evidenceClaims = sqliteTable("evidence_claims", {
   sourceLocator: text("source_locator"), sourceExcerpt: text("source_excerpt"),
   createdBy: text("created_by").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 });
+export const mergeSnapshots = sqliteTable("merge_snapshots", {
+  changeId: text("change_id").primaryKey(), sourcePersonId: text("source_person_id").notNull(),
+  targetPersonId: text("target_person_id").notNull(), snapshotJson: text("snapshot_json").notNull(),
+  mergedAt: text("merged_at").notNull(), restoredAt: text("restored_at"),
+});
 export const storyAttachments = sqliteTable("story_attachments", { storyId: text("story_id").notNull(), attachmentId: text("attachment_id").notNull() },
   (table) => [uniqueIndex("idx_story_attachments_unique").on(table.storyId, table.attachmentId)]);
 export const changeLog = sqliteTable("change_log", {

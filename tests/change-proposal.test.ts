@@ -30,6 +30,7 @@ describe("change proposal validation", () => {
       { kind: "add_relationship", summary: "Add parent", fromPersonId: "person-1", toPersonId: "person-2", relationshipType: "parent" },
       { kind: "add_relationship", summary: "Resolve new people", fromPersonId: "", toPersonId: "", fromPersonName: "Nasser", toPersonName: "Ramine", relationshipType: "parent" },
       { kind: "delete_relationship", summary: "Remove an incorrect link", relationshipId: "relationship-1" },
+      { kind: "merge_people", summary: "Merge a duplicate", sourcePersonId: "person-duplicate", targetPersonId: "person-canonical" },
       { kind: "add_story", summary: "Add a story", title: "A memory", body: "Story text", date: null, place: null, personIds: ["person-1"], attachmentIds: [] },
       { kind: "update_story", summary: "Update a story", storyId: "story-1", title: "A memory", body: "Story text", date: "1983", place: "Paris", personIds: [], attachmentIds: ["attachment-1"] },
       { kind: "delete_story", summary: "Delete a duplicate story", storyId: "story-1" },
@@ -46,6 +47,7 @@ describe("change proposal validation", () => {
     expect(isChangeProposal({ kind: "add_relationship", summary: "Bad", fromPersonId: "", toPersonId: "person-2", relationshipType: "parent" })).toBe(false);
     expect(isChangeProposal({ kind: "add_relationship", summary: "Bad", fromPersonId: "person-1", toPersonId: "person-2", relationshipType: "sibling" })).toBe(false);
     expect(isChangeProposal({ kind: "delete_person", summary: "Bad", personId: "" })).toBe(false);
+    expect(isChangeProposal({ kind: "merge_people", summary: "Bad", sourcePersonId: "same", targetPersonId: "same" })).toBe(false);
     expect(isChangeProposal({ kind: "add_story", summary: "Bad", title: "Story", body: "Text", date: null, place: null, personIds: [null], attachmentIds: [] })).toBe(false);
   });
 

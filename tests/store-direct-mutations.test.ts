@@ -9,12 +9,14 @@ vi.mock("cloudflare:workers", () => worker);
 
 import {
   addComment,
+  applyProposal,
   attachPersonPhoto,
   linkPersonPhoto,
   removeComment,
   removePersonPhoto,
   setPersonPortrait,
   unlinkPersonPhoto,
+  undoChange,
 } from "../db/store";
 
 type BindValue = string | number | null;
@@ -190,5 +192,45 @@ describe("direct comment target and audit integrity", () => {
     };
     await expect(removeComment(comment.id, "reader@example.com", false)).rejects.toThrow("comment_not_found");
     expect(auditCount("remove_comment")).toBe(before);
+  });
+});
+
+describe("duplicate merge and split", () => {
+  it("rewires every dependent record and restores the exact pre-merge rows", async () => {
+    insertPerson("merge-source");
+    insertPerson("merge-target");
+    insertPerson("merge-child");
+    insertAttachment("merge-photo");
+    sqlite.prepare("UPDATE people SET biography = 'Source biography' WHERE id = 'merge-source'").run();
+    sqlite.prepare("UPDATE people SET birth_city = 'Paris' WHERE id = 'merge-target'").run();
+    sqlite.prepare("INSERT INTO relationships (id, from_person_id, to_person_id, type, created_at) VALUES ('merge-link', 'merge-source', 'merge-child', 'parent', 'now')").run();
+    sqlite.prepare("INSERT INTO stories (id, title, body, created_at) VALUES ('merge-story', 'Story', 'Body', 'now')").run();
+    sqlite.prepare("INSERT INTO story_people VALUES ('merge-story', 'merge-source')").run();
+    sqlite.prepare("INSERT INTO person_photos VALUES ('merge-source', 'merge-photo', 'now')").run();
+    sqlite.prepare("INSERT INTO person_comments VALUES ('merge-comment', 'merge-source', 'member@example.com', 'Member', 'Note', 'now')").run();
+    sqlite.prepare("INSERT INTO members (email, role, person_id, added_by, created_at, updated_at) VALUES ('merge-member@example.com', 'canEdit', 'merge-source', 'seed', 'now', 'now')").run();
+    sqlite.prepare(`INSERT INTO evidence_claims
+      (id, subject_type, subject_id, predicate, value, status, confidence, source_type, source_label, created_by, created_at, updated_at)
+      VALUES ('merge-claim', 'person', 'merge-source', 'biography', 'Source biography', 'preferred', 100, 'manual', 'Seed', 'seed', 'now', 'now')`).run();
+
+    await applyProposal({ kind: "merge_people", summary: "Merge duplicate", sourcePersonId: "merge-source", targetPersonId: "merge-target" }, "editor@example.com");
+    expect(sqlite.prepare("SELECT id FROM people WHERE id = 'merge-source'").get()).toBeUndefined();
+    expect(sqlite.prepare("SELECT from_person_id, to_person_id FROM relationships WHERE id = 'merge-link'").get())
+      .toEqual({ from_person_id: "merge-target", to_person_id: "merge-child" });
+    expect(sqlite.prepare("SELECT * FROM story_people WHERE story_id = 'merge-story'").all())
+      .toEqual([{ story_id: "merge-story", person_id: "merge-target" }]);
+    expect(sqlite.prepare("SELECT person_id FROM person_comments WHERE id = 'merge-comment'").get()).toEqual({ person_id: "merge-target" });
+    expect(sqlite.prepare("SELECT subject_id FROM evidence_claims WHERE id = 'merge-claim'").get()).toEqual({ subject_id: "merge-target" });
+
+    const change = sqlite.prepare("SELECT id FROM change_log WHERE kind = 'merge_people' AND json_extract(payload_json, '$.sourcePersonId') = 'merge-source'").get() as { id: string };
+    await undoChange(change.id, "editor@example.com");
+    expect(sqlite.prepare("SELECT id, biography FROM people WHERE id = 'merge-source'").get()).toEqual({ id: "merge-source", biography: "Source biography" });
+    expect(sqlite.prepare("SELECT from_person_id, to_person_id FROM relationships WHERE id = 'merge-link'").get())
+      .toEqual({ from_person_id: "merge-source", to_person_id: "merge-child" });
+    expect(sqlite.prepare("SELECT * FROM story_people WHERE story_id = 'merge-story'").all())
+      .toEqual([{ story_id: "merge-story", person_id: "merge-source" }]);
+    expect(sqlite.prepare("SELECT person_id FROM person_comments WHERE id = 'merge-comment'").get()).toEqual({ person_id: "merge-source" });
+    expect(sqlite.prepare("SELECT subject_id FROM evidence_claims WHERE id = 'merge-claim'").get()).toEqual({ subject_id: "merge-source" });
+    expect(sqlite.prepare("SELECT status FROM undo_entries WHERE change_id = ?").get(change.id)).toEqual({ status: "undone" });
   });
 });

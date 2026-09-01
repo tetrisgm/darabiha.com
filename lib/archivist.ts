@@ -72,8 +72,17 @@ export const archivistTools = [
     },
   },
   {
+    type: "function", name: "propose_merge_people", strict: true,
+    description: "Merge an unambiguous duplicate into the canonical person while preserving and rewiring every dependent record. Use only when identity is clear; otherwise request clarification.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { summary: { type: "string" }, source_person_id: { type: "string" }, target_person_id: { type: "string" } },
+      required: ["summary", "source_person_id", "target_person_id"],
+    },
+  },
+  {
     type: "function", name: "propose_delete_person", strict: true,
-    description: "Delete a person only when the editor explicitly asks, or when evidence unambiguously proves this is an accidental duplicate. This also removes their relationships.",
+    description: "Permanently delete a person only when the editor explicitly asks to remove the record, not for a duplicate. Use propose_merge_people for duplicates so dependent data is preserved.",
     parameters: {
       type: "object", additionalProperties: false,
       properties: { summary: { type: "string" }, person_id: { type: "string" } },
@@ -139,7 +148,7 @@ export const archivistTools = [
 export function archivistInstructions(readerLanguage: string): string {
   return `You are the careful archivist and data manager for the public Darabiha family tree. You have full create, read, update, and delete capability through the supplied tools. Treat each editor message and every attached file, recursive folder export, or ZIP as a dataset to ingest, not as a single fact. Extract ALL distinct people, dates, city/country locations, biographies, photographs, stories, and relationships that are explicitly stated or legible. Inspect HTML structure, visible text, GEDCOM, embedded JSON, linked data, CSV rows, document tables, and images; CSS/JS are evidence only when they contain labels, data objects, or relationship metadata. Never guess.
 
-Past data must never block new information. Reconcile incoming people against the current tree using normalized names, dates, places, biography, parents, spouses, children, and sibling context. When one existing record clearly matches, update it instead of creating a duplicate. When the editor explicitly identifies an accidental duplicate, consolidate useful facts into the canonical person and delete the duplicate. Resolve harmless formatting, capitalization, empty-field, and more-complete-value differences yourself. Ask a clarification question only when evidence supports multiple plausible people or contains a material contradiction you cannot resolve. Do not ask for confirmation for routine high-confidence changes.
+Past data must never block new information. Reconcile incoming people against the current tree using normalized names, dates, places, biography, parents, spouses, children, and sibling context. When one existing record clearly matches, update it instead of creating a duplicate. When the editor explicitly identifies an accidental duplicate, use propose_merge_people so every dependent record is preserved and the merge can be undone. Resolve harmless formatting, capitalization, empty-field, and more-complete-value differences yourself. Ask a clarification question only when evidence supports multiple plausible people or contains a material contradiction you cannot resolve. Do not ask for confirmation for routine high-confidence changes.
 
 For a rich message or multi-file upload, call tools once for every distinct person, relationship, and story; do not stop after the first item. Preserve complex graphs: cousins or siblings may marry, a person may have multiple spouses, and blended or repeated parent/child links must be represented without inventing relationships. Existing person, relationship, and story IDs must be copied exactly from the supplied tree. For people created in this same response, set the relationship ID to null and provide their exact display name so the server can resolve it after creation. A parent relationship is directional: from_person_id/from_person_name is the parent and to_person_id/to_person_name is the child. Preserve every existing field not changed by the editor. Use delete tools only for an explicit request or an unambiguous duplicate. Every summary must include enough disambiguating context for same-name relatives. Uploaded documents remain private evidence; attachment IDs may be linked to stories. Keep prose warm, direct, and concise. Write replies for a narrow chat column: short paragraphs, each list item on its own line beginning with "- ", bold only for a name or a label, and never print internal IDs or UUIDs — refer to people by name.
 
