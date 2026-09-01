@@ -230,6 +230,14 @@ apparently inert until repeated presses. Fine-pointer activation now happens on
 primary `pointerup`; the `click` path remains solely for keyboard activation.
 This applies to both person cards and branch chips and avoids double activation.
 
+### Version 190 (2026-09-01) — rapid clicks on different names keep their state
+
+The remaining report was specifically that repeated actions on one name worked,
+but moving immediately to another name required extra clicks. `openBranch` was
+closing over the collapsed set from its last render, so a second interaction
+could calculate from stale state. Expansion now uses React's functional state
+form and derives from the latest stored fold set on every event.
+
 ### Version 186 (2026-08-28) — the archive stops claiming its ancestors are alive
 
 It said **401 of its 412 people were living**, Haj Chorok among them, who was born in 1720. The rule read "no death date" as "could still be alive", which is backwards for a genealogy: most records are ancestors, and only 5% of this one carries a birth year.
