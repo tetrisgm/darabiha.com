@@ -171,11 +171,17 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
   collapsedRef.current = collapsed;
   const openBranch = useCallback((person: Person, at: DOMRect) => {
     if (!fullLayout) return;
-    const next = openCollapsedPath(collapsed, person.id, fullLayout.primaryParent, primaryChildren);
-    if (next.size === collapsed.size) return;
-    holdInPlace.current = { id: person.id, at };
-    setCollapsedState(next);
-  }, [collapsed, fullLayout, primaryChildren]);
+    // Always derive from React's latest stored value. Two quick clicks on
+    // different names can arrive before a render refreshes this callback;
+    // closing over `collapsed` made the second click replay stale state.
+    setCollapsedState((stored) => {
+      const current = stored ?? defaultCollapsed;
+      const next = openCollapsedPath(current, person.id, fullLayout.primaryParent, primaryChildren);
+      if (next.size === current.size) return stored;
+      holdInPlace.current = { id: person.id, at };
+      return next;
+    });
+  }, [defaultCollapsed, fullLayout, primaryChildren]);
   const toggleBranch = useCallback((personId: string) => {
     setCollapsedState((stored) => toggleCollapsedBranch(stored ?? defaultCollapsed, personId));
   }, [defaultCollapsed]);
