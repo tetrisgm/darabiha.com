@@ -222,6 +222,14 @@ could appear not to respond until the same name was clicked several times.
 subtree and their ancestor path atomically, while preserving unrelated folded
 branches. The viewport unit suite covers nested descendants explicitly.
 
+### Version 189 (2026-09-01) — Safari controls use physical pointer release
+
+Real Safari could deliver pointer down/up on transformed tree controls without
+reliably synthesizing the final `click`, leaving cards and Hide/Show controls
+apparently inert until repeated presses. Fine-pointer activation now happens on
+primary `pointerup`; the `click` path remains solely for keyboard activation.
+This applies to both person cards and branch chips and avoids double activation.
+
 ### Version 186 (2026-08-28) — the archive stops claiming its ancestors are alive
 
 It said **401 of its 412 people were living**, Haj Chorok among them, who was born in 1720. The rule read "no death date" as "could still be alive", which is backwards for a genealogy: most records are ancestors, and only 5% of this one carries a birth year.
