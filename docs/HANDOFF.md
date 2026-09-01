@@ -2,6 +2,7 @@
 
 ## Production data-route incident and Version 193 diagnostics
 
+- Quota-resilience implementation commit `ddbdbce` is pushed on `main`; visible Version 194 binds production to that exact body of work.
 - The diagnostic revealed the exact incident: Cloudflare rejected reads because the account had exhausted D1's free-tier daily row-read allowance. This is an availability/cost-design failure, not lost family data and not a Safari interaction regression.
 - The in-progress recovery adds private tree, visibility, and member-access snapshots in the existing R2 bucket. Successful authoritative reads refresh them; the store uses them only for Cloudflare's specific daily-read-limit error and rethrows every other database failure. Keeping visibility and role snapshots prevents a quota outage from weakening a password/member gate. Public/member privacy remains enforced after the tree snapshot is loaded, exactly as it is after a D1 read.
 - Recovery snapshots were seeded from a fresh control-plane D1 export: 415 people, 688 relationships, 14 stories, password visibility, four members, and three provider links. They are private R2 objects and contain no access password, share token, session token, OAuth secret, or raw request address.
