@@ -203,6 +203,7 @@ export async function getSiteVisibility(fresh = false): Promise<SiteVisibility> 
     waitUntil(env.FILES.put(VISIBILITY_SNAPSHOT_OBJECT_KEY, value, { httpMetadata: { contentType: "text/plain" } }));
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    console.warn("d1_quota_fallback_site_visibility");
     const object = await env.FILES.get(VISIBILITY_SNAPSHOT_OBJECT_KEY);
     const snapshot = object ? await object.text() : "";
     if (snapshot !== "public" && snapshot !== "members" && snapshot !== "password") throw error;
@@ -304,6 +305,7 @@ export async function listMembers(): Promise<Member[]> {
     }));
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    console.warn("d1_quota_fallback_member_list");
     const snapshot = await memberAccessSnapshot();
     if (!snapshot) throw error;
     return snapshot.members.map((member) => ({ email: member.email, role: member.role, addedBy: "snapshot", createdAt: "", links: snapshot.links.filter((link) => link.memberEmail === member.email && link.email !== member.email).map(({ email, provider }) => ({ email, provider })) }));
@@ -325,6 +327,7 @@ export async function resolveMemberEmail(email: string): Promise<string> {
     return row?.memberEmail ?? normalized;
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    console.warn("d1_quota_fallback_member_resolution");
     return (await memberAccessSnapshot())?.links.find((link) => link.email === normalized)?.memberEmail ?? normalized;
   }
 }
@@ -363,6 +366,7 @@ export async function getMemberPerson(email: string): Promise<string | null> {
     return row?.personId ?? null;
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    console.warn("d1_quota_fallback_member_person");
     return (await memberAccessSnapshot())?.members.find((member) => member.email === canonical)?.personId ?? null;
   }
 }
@@ -396,6 +400,7 @@ export async function getMemberRole(email: string): Promise<MemberRole | null> {
     return row?.role ?? null;
   } catch (error) {
     if (!isD1DailyReadLimitError(error)) throw error;
+    console.warn("d1_quota_fallback_member_role");
     return (await memberAccessSnapshot())?.members.find((member) => member.email === canonical)?.role ?? null;
   }
 }
