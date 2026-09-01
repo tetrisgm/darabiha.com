@@ -172,6 +172,12 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
         </div>
       </div>
 
+      <div className="settings-card">
+        <h2>Try a safe sample</h2>
+        <p className="settings-hint">Explore importing, panning, opening records, undoing, and resetting with invented people. The sample never touches this family archive.</p>
+        <a className="settings-link-card" href="/demo"><strong>Open the interactive demo</strong><span>No sign-in and no real family data.</span></a>
+      </div>
+
       {(viewer.role === "admin" || viewer.role === "canEdit") && <div className="settings-card">
         <h2>The archive behind the archive</h2>
         <p className="settings-hint">Where the records came from, and what has been done to them.</p>

@@ -29,7 +29,7 @@ The launch story is not “another family-tree drawing tool.” The differentiat
 | Privacy and ownership | Partial | Public/member/password visibility, roles, private cache controls, export, reversible record deletion, public living-person detail/photo/story redaction, explicit AI/storage/ownership copy, and D1-backed per-address limits for public AI and password attempts exist. Whole-archive self-service deletion remains. |
 | General onboarding | Missing | Production is one Darabiha archive. There is no create-a-family flow, workspace boundary, invitation journey, or sample-to-own-tree conversion. |
 | Collaboration | Partial | Members, roles, comments, fill-in questions, digest, and mobile UI exist. The contribution flow needs a simpler share/invite prompt and notification preferences. |
-| Safe public demo | Missing | The live archive contains real family data. Launch needs a synthetic or consented sample with resettable agent actions. |
+| Safe public demo | Verified | `/demo` is a no-login, in-memory sandbox with invented people. Visitors can pan/zoom, inspect cards, import a sample GEDCOM result, undo, and reset; it cannot mutate or query the production archive. |
 | Launch assets | Partial | A Remotion tour exists. HN technical post, PH listing, architecture diagram, benchmark, screenshots, maker notes, privacy explanation, and support/runbook need final versions. |
 
 ## Definition of launch-ready

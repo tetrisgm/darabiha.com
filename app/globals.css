@@ -1398,3 +1398,10 @@ html[lang="fa"] { font-variant-numeric: normal; }
    It has no arrival flourish now: a card the reader clicked must sit still,
    and every attempt to keep the animation for other cases left the camera
    measuring a board that was still moving. */
+/* Launch sandbox: a real interactive canvas backed only by invented in-memory records. */
+.demo-shell{display:grid;grid-template-columns:minmax(300px,390px) 1fr;height:100dvh;background:var(--canvas)}
+.demo-sidebar{position:relative;z-index:2;display:flex;min-height:0;flex-direction:column;gap:24px;padding:28px;background:var(--panel);border-right:1px solid var(--line);overflow-y:auto}
+.demo-sidebar h1{font-family:var(--font-serif);font-size:2.3rem;line-height:1.02;margin:.5rem 0 1rem}.demo-sidebar p{color:var(--muted);line-height:1.55}
+.demo-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:auto}.demo-actions button{border:1px solid var(--line);border-radius:999px;background:var(--card);padding:10px 15px;font-weight:650}.demo-actions button:first-child{background:var(--accent-fill);color:white}.demo-actions button:disabled{opacity:.45}
+.demo-canvas{position:relative;min-width:0;min-height:0;overflow:hidden}
+@media(max-width:760px){.demo-shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}.demo-sidebar{max-height:45dvh;border-right:0;border-bottom:1px solid var(--line);padding:20px}.demo-sidebar h1{font-size:1.8rem}.demo-canvas{min-height:55dvh}}

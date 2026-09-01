@@ -11,6 +11,7 @@
 - Public AI requests are limited to 30 per address per hour and archive-password attempts to 10 per address per 15 minutes. Only a SHA-256 request fingerprint is stored in D1; the limiter never persists the raw address and returns `429` with `Retry-After`.
 - In public mode, signed-out/non-member responses redact likely living people (no death plus a birth within 120 years): only the birth year remains, while exact date, places, residence, biography, portraits, gallery photos, and linked stories are withheld. Direct photo URLs receive the same check, and the public question-answering model only receives this redacted tree. The privacy page explains storage, OpenAI processing, ownership, export, and deletion.
 - The Documents page now exposes durable import activity. Editors can retry failed reads without re-uploading and cancel pending/failed jobs without deleting their preserved source attachment; both actions are audited. Existing ten-minute stale-reader recovery still makes abandoned reads resumable at the document boundary.
+- `/demo` is a no-login launch sandbox backed only by synthetic in-memory records. It exercises the real family canvas plus a canned safe GEDCOM import, one-step Undo, person selection, and Reset, but makes no archive or AI API calls. Settings links to it for discovery.
 - These changes are additive runtime migrations in `db/store.ts`; no manual D1 migration is required on deployment. Existing records remain readable and correctly say that no claim-level source was recorded yet.
 
 Last updated: 2026-08-30
