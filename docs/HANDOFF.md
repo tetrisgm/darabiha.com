@@ -213,6 +213,15 @@ gate before deployment.
 - `npm run lint` exits successfully with **seven known warnings and no errors**: six raw `<img>` warnings and one exhaustive-dependencies warning in the canvas focus effect. Run it every release — `npm run build` does not typecheck and `tsc` does not lint, and an error sat unnoticed in `TreeViews.tsx` for several versions because only `tsc` was being run.
 - The git checkout was clean when this handoff was written.
 
+### Version 188 (2026-09-01) — one click opens a complete family branch
+
+Card selection previously removed only the clicked person's fold and their
+folded ancestors. Any folded descendants remained closed, so a deeper family
+could appear not to respond until the same name was clicked several times.
+`openCollapsedPath` now clears the selected person's complete descendant
+subtree and their ancestor path atomically, while preserving unrelated folded
+branches. The viewport unit suite covers nested descendants explicitly.
+
 ### Version 186 (2026-08-28) — the archive stops claiming its ancestors are alive
 
 It said **401 of its 412 people were living**, Haj Chorok among them, who was born in 1720. The rule read "no death date" as "could still be alive", which is backwards for a genealogy: most records are ancestors, and only 5% of this one carries a birth year.
