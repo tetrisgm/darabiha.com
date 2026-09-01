@@ -89,6 +89,11 @@ const schemaStatements = [
   )`,
   `CREATE INDEX IF NOT EXISTS idx_evidence_claims_subject ON evidence_claims(subject_type, subject_id, predicate, status)`,
   `CREATE INDEX IF NOT EXISTS idx_evidence_claims_attachment ON evidence_claims(attachment_id)`,
+  `CREATE TABLE IF NOT EXISTS undo_entries (
+    change_id TEXT PRIMARY KEY, inverse_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'undoing', 'undone')),
+    undone_by TEXT, undone_at TEXT
+  )`,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -762,10 +767,12 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
   await ensureSchema();
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
+  let inverse: ChangeProposal | null = null;
   let deletedObjectKey: string | null = null;
   if (proposal.kind === "add_person") {
     const person = personValues(proposal.person as unknown as Record<string, unknown>);
     const personId = crypto.randomUUID();
+    inverse = { kind: "delete_person", summary: `Undid: ${proposal.summary}`, personId };
     statements.push(env.DB.prepare(`INSERT INTO people
       (id, display_name, gender, given_name, family_name, maiden_name, birth_date, death_date, birth_place, death_place, birth_city, birth_country, death_city, death_country, burial_place, residence, biography, photo_attachment_id, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -793,6 +800,7 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     const person = personValues(proposal.patch as unknown as Record<string, unknown>);
     const before = (await readTree()).people.find((candidate) => candidate.id === proposal.personId);
     if (!before) throw new Error("That person is no longer in the tree.");
+    inverse = { kind: "update_person", summary: `Undid: ${proposal.summary}`, personId: proposal.personId, patch: before };
     statements.push(env.DB.prepare(`UPDATE people SET display_name = ?, gender = ?, given_name = ?, family_name = ?, maiden_name = ?, birth_date = ?,
       death_date = ?, birth_place = ?, death_place = ?, birth_city = ?, birth_country = ?, death_city = ?, death_country = ?, burial_place = ?, residence = ?, biography = ?, photo_attachment_id = ?, updated_at = ? WHERE id = ?`)
       .bind(person.displayName, person.gender, person.givenName, person.familyName, person.maidenName, person.birthDate, person.deathDate,
@@ -819,6 +827,7 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     if (!(["parent", "spouse"] as const).includes(proposal.relationshipType)) throw new Error("Unsupported relationship.");
     new MutationInvariants(await readTree()).addRelationship(fromPersonId, toPersonId, proposal.relationshipType);
     const relationshipId = crypto.randomUUID();
+    inverse = { kind: "delete_relationship", summary: `Undid: ${proposal.summary}`, relationshipId };
     statements.push(env.DB.prepare(`INSERT INTO relationships
       (id, from_person_id, to_person_id, type, created_at) VALUES (?, ?, ?, ?, ?)`)
       .bind(relationshipId, fromPersonId, toPersonId, proposal.relationshipType, now));
@@ -826,7 +835,8 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       ["fromPersonId", fromPersonId], ["toPersonId", toPersonId], ["type", proposal.relationshipType],
     ], actorEmail, now, claimSource));
   } else if (proposal.kind === "delete_relationship") {
-    new MutationInvariants(await readTree()).relationship(proposal.relationshipId);
+    const relationship = new MutationInvariants(await readTree()).relationship(proposal.relationshipId);
+    inverse = { kind: "add_relationship", summary: `Undid: ${proposal.summary}`, fromPersonId: relationship.fromPersonId, toPersonId: relationship.toPersonId, relationshipType: relationship.type };
     statements.push(
       env.DB.prepare("DELETE FROM evidence_claims WHERE subject_type = 'relationship' AND subject_id = ?").bind(proposal.relationshipId),
       env.DB.prepare("DELETE FROM relationships WHERE id = ?").bind(proposal.relationshipId),
@@ -837,6 +847,7 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     invariants.storyPeople(proposal.personIds);
     invariants.storyAttachments(proposal.attachmentIds);
     const storyId = crypto.randomUUID();
+    inverse = { kind: "delete_story", summary: `Undid: ${proposal.summary}`, storyId };
     statements.push(env.DB.prepare(`INSERT INTO stories (id, title, body, date, place, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
       .bind(storyId, proposal.title.trim(), proposal.body.trim(), nullable(proposal.date), nullable(proposal.place), now));
     for (const personId of proposal.personIds) statements.push(env.DB.prepare(`INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)`).bind(storyId, personId));
@@ -847,6 +858,8 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     invariants.story(proposal.storyId);
     invariants.storyPeople(proposal.personIds);
     invariants.storyAttachments(proposal.attachmentIds);
+    const previous = (await readTree()).stories.find((story) => story.id === proposal.storyId);
+    if (previous) inverse = { kind: "update_story", summary: `Undid: ${proposal.summary}`, storyId: previous.id, title: previous.title, body: previous.body, date: previous.date, place: previous.place, personIds: previous.personIds, attachmentIds: previous.attachmentIds ?? [] };
     statements.push(
       env.DB.prepare("UPDATE stories SET title = ?, body = ?, date = ?, place = ? WHERE id = ?").bind(proposal.title.trim(), proposal.body.trim(), nullable(proposal.date), nullable(proposal.place), proposal.storyId),
       env.DB.prepare("DELETE FROM story_people WHERE story_id = ?").bind(proposal.storyId),
@@ -855,7 +868,10 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
     for (const personId of proposal.personIds) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_people (story_id, person_id) VALUES (?, ?)").bind(proposal.storyId, personId));
     for (const attachmentId of proposal.attachmentIds) statements.push(env.DB.prepare("INSERT OR IGNORE INTO story_attachments (story_id, attachment_id) VALUES (?, ?)").bind(proposal.storyId, attachmentId));
   } else if (proposal.kind === "delete_story") {
-    new MutationInvariants(await readTree()).story(proposal.storyId);
+    const currentTree = await readTree();
+    new MutationInvariants(currentTree).story(proposal.storyId);
+    const previous = currentTree.stories.find((story) => story.id === proposal.storyId);
+    if (previous) inverse = { kind: "add_story", summary: `Undid: ${proposal.summary}`, title: previous.title, body: previous.body, date: previous.date, place: previous.place, personIds: previous.personIds, attachmentIds: previous.attachmentIds ?? [] };
     statements.push(
       env.DB.prepare("DELETE FROM story_people WHERE story_id = ?").bind(proposal.storyId),
       env.DB.prepare("DELETE FROM story_attachments WHERE story_id = ?").bind(proposal.storyId),
@@ -871,9 +887,12 @@ export async function applyProposal(proposal: ChangeProposal, actorEmail: string
       deletedAt: now,
     }));
   }
+  const auditId = crypto.randomUUID();
   statements.push(env.DB.prepare(`INSERT INTO change_log
     (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
-    .bind(crypto.randomUUID(), actorEmail, proposal.kind, proposal.summary, JSON.stringify(proposal), now));
+    .bind(auditId, actorEmail, proposal.kind, proposal.summary, JSON.stringify(proposal), now));
+  if (inverse) statements.push(env.DB.prepare("INSERT INTO undo_entries (change_id, inverse_json, status) VALUES (?, ?, 'active')")
+    .bind(auditId, JSON.stringify(inverse)));
   await env.DB.batch(statements);
   treeJsonCache = null;
   if (deletedObjectKey) {
@@ -1302,19 +1321,43 @@ export async function unlinkPersonPhoto(personId: string, attachmentId: string, 
 
 
 // ---------- the record of who changed what ----------
-export type ChangeEntry = { id: string; actorEmail: string; kind: string; summary: string; createdAt: string };
+export type ChangeEntry = { id: string; actorEmail: string; kind: string; summary: string; createdAt: string; undoStatus: "active" | "undoing" | "undone" | null };
 
 /** Newest first, a page at a time. Every mutation in the archive writes here,
  * so this is the full account of who did what. */
 export async function listChangeLog(before?: string | null, limit = 60): Promise<{ entries: ChangeEntry[]; nextBefore: string | null }> {
   await ensureSchema();
   const rows = before
-    ? await env.DB.prepare(`SELECT id, actor_email AS actorEmail, kind, summary, created_at AS createdAt FROM change_log
+    ? await env.DB.prepare(`SELECT change_log.id, actor_email AS actorEmail, kind, summary, created_at AS createdAt, undo_entries.status AS undoStatus
+        FROM change_log LEFT JOIN undo_entries ON undo_entries.change_id = change_log.id
         WHERE created_at < ? ORDER BY created_at DESC LIMIT ?`).bind(before, limit + 1).all<ChangeEntry>()
-    : await env.DB.prepare(`SELECT id, actor_email AS actorEmail, kind, summary, created_at AS createdAt FROM change_log
+    : await env.DB.prepare(`SELECT change_log.id, actor_email AS actorEmail, kind, summary, created_at AS createdAt, undo_entries.status AS undoStatus
+        FROM change_log LEFT JOIN undo_entries ON undo_entries.change_id = change_log.id
         ORDER BY created_at DESC LIMIT ?`).bind(limit + 1).all<ChangeEntry>();
   const entries = rows.results.slice(0, limit);
   return { entries, nextBefore: rows.results.length > limit ? entries[entries.length - 1]?.createdAt ?? null : null };
+}
+
+export async function undoChange(changeId: string, actorEmail: string): Promise<FamilyTree> {
+  await ensureSchema();
+  const claimed = await env.DB.prepare("UPDATE undo_entries SET status = 'undoing' WHERE change_id = ? AND status = 'active'")
+    .bind(changeId).run();
+  if (!claimed.meta.changes) throw new Error("That change cannot be undone, or was already undone.");
+  try {
+    const row = await env.DB.prepare("SELECT inverse_json AS inverseJson FROM undo_entries WHERE change_id = ?")
+      .bind(changeId).first<{ inverseJson: string }>();
+    const inverse = row ? JSON.parse(row.inverseJson) as unknown : null;
+    if (!isChangeProposal(inverse)) throw new Error("The saved undo operation is invalid.");
+    const tree = await applyProposal(inverse, actorEmail, {
+      sourceType: "manual", sourceLabel: `Undo by ${actorEmail}`, confidence: 100,
+    });
+    await env.DB.prepare("UPDATE undo_entries SET status = 'undone', undone_by = ?, undone_at = ? WHERE change_id = ? AND status = 'undoing'")
+      .bind(actorEmail, new Date().toISOString(), changeId).run();
+    return tree;
+  } catch (error) {
+    await env.DB.prepare("UPDATE undo_entries SET status = 'active' WHERE change_id = ? AND status = 'undoing'").bind(changeId).run();
+    throw error;
+  }
 }
 
 // ---------- comments ----------

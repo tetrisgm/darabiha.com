@@ -2,6 +2,13 @@
 
 > Launch-readiness work is tracked in [`docs/LAUNCH_READINESS.md`](./LAUNCH_READINESS.md). The production interaction baseline is version 190; the user confirmed that version fixed the repeated branch-expand/hide click failure.
 
+## Launch-readiness implementation (2026-09-01)
+
+- `cbe7491` introduced claim-level evidence for new person facts, relationships, portraits, chat assertions, uploaded-document ingestion, and fill-in answers. Conflicting preferred values become durable disputed claims instead of disappearing. Editors see claim sources and can open authorized evidence.
+- `1a76309` added audited claim adjudication: a disputed claim can become the preferred value (which updates the record) or be rejected.
+- New reversible mutation work stores inverse operations for person additions/updates, relationship additions/removals, and story additions/updates/removals. Eligible history rows expose Undo; person and attachment deletion remain deliberately non-undoable until their complete dependent data/R2 restoration is implemented.
+- These changes are additive runtime migrations in `db/store.ts`; no manual D1 migration is required on deployment. Existing records remain readable and correctly say that no claim-level source was recorded yet.
+
 Last updated: 2026-08-30
 
 ## Read this first

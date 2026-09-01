@@ -1,5 +1,6 @@
 import { listChangeLog } from "../../db/store";
 import { requireEditor } from "../authz";
+import UndoChangeButton from "./UndoChangeButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "History · Darabiha" };
@@ -50,6 +51,8 @@ export default async function HistoryPage() {
                 </div>
                 <p className="history-summary">{entry.summary}</p>
                 <p className="history-actor">{entry.actorEmail}</p>
+                {entry.undoStatus === "active" && <UndoChangeButton changeId={entry.id} />}
+                {entry.undoStatus === "undone" && <p className="history-undone">Undone</p>}
               </li>
             ))}
           </ol>

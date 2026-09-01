@@ -1293,6 +1293,11 @@ html[lang="fa"] { font-variant-numeric: normal; }
 .source-actions button { border:1px solid var(--line); border-radius:999px; background:transparent; padding:.25rem .55rem;
   color:var(--ink); font-size:.68rem; font-weight:650; cursor:pointer; }
 .source-actions button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+.history-undo-wrap { display:flex; align-items:center; gap:.55rem; margin-top:.55rem; }
+.history-undo { border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--ink); padding:.3rem .7rem;
+  font-size:.72rem; font-weight:650; cursor:pointer; }
+.history-undo:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+.history-undo-wrap span, .history-undone { color:var(--muted); font-size:.7rem; }
 
 /* --- Apple's compact and regular widths, applied ---------------------------
    Below 768pt is compact: a phone, or an iPad in Slide Over. One column, the
