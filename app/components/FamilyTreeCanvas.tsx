@@ -38,6 +38,13 @@ export function openCollapsedPath(collapsed: Set<string>, personId: string, prim
   return next;
 }
 
+export function toggleCollapsedBranch(collapsed: Set<string>, personId: string) {
+  const next = new Set(collapsed);
+  if (next.has(personId)) next.delete(personId);
+  else next.add(personId);
+  return next;
+}
+
 export function centerViewOn(
   view: CanvasView,
   worldPoint: { x: number; y: number },
@@ -76,7 +83,7 @@ type ParentHook = {
 /** The graph scene is independent from the camera. React.memo keeps pointer,
  * wheel, and focus-animation camera commits from rebuilding every card and
  * connector; it rerenders only when graph/selection inputs actually change. */
-const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, spouseLines, hooks, highlighted, branchIds, collapsed, hiddenCounts, onSelect, onOpenBranch, setCollapsedState }: {
+const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, spouseLines, hooks, highlighted, branchIds, collapsed, hiddenCounts, onSelect, onOpenBranch, onToggleBranch }: {
   visibleTree: FamilyTree;
   positions: Map<string, CanvasPosition>;
   spouseLines: SpouseLine[];
@@ -87,7 +94,7 @@ const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, 
   hiddenCounts: Map<string, number>;
   onSelect: (person: Person) => void;
   onOpenBranch: (person: Person, at: DOMRect) => void;
-  setCollapsedState: React.Dispatch<React.SetStateAction<Set<string> | null>>;
+  onToggleBranch: (personId: string) => void;
 }) {
   return <>
     <svg className="tree-connectors">
@@ -107,7 +114,7 @@ const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, 
     {branchIds.map((id) => {
       const p = positions.get(id)!;
       const isFolded = collapsed.has(id);
-      return <button key={`chip-${id}`} type="button" className="branch-chip" style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} hidden family members` : "Hide this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); const next = new Set(collapsed); if (isFolded) next.delete(id); else next.add(id); setCollapsedState(next); }}>{isFolded ? `Show ${hiddenCounts.get(id) ?? 0} more` : "Hide branch"}</button>;
+      return <button key={`chip-${id}`} type="button" className="branch-chip" style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} hidden family members` : "Hide this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onToggleBranch(id); }}>{isFolded ? `Show ${hiddenCounts.get(id) ?? 0} more` : "Hide branch"}</button>;
     })}
   </>;
 });
@@ -139,6 +146,8 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
   }, [fullLayout, primaryChildren]);
   const [collapsedState, setCollapsedState] = useState<Set<string> | null>(null);
   const collapsed = collapsedState ?? defaultCollapsed;
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
   const openBranch = useCallback((person: Person, at: DOMRect) => {
     if (!fullLayout) return;
     const next = openCollapsedPath(collapsed, person.id, fullLayout.primaryParent);
@@ -146,6 +155,9 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
     holdInPlace.current = { id: person.id, at };
     setCollapsedState(next);
   }, [collapsed, fullLayout]);
+  const toggleBranch = useCallback((personId: string) => {
+    setCollapsedState((stored) => toggleCollapsedBranch(stored ?? defaultCollapsed, personId));
+  }, [defaultCollapsed]);
   const { visibleTree, hiddenCounts, visibleSet } = useMemo(() => {
     if (!fullLayout || collapsed.size === 0) {
       const counts = new Map<string, number>();
@@ -381,11 +393,12 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
   useEffect(() => {
     if (!focusPersonId || !fullLayout) return;
     const frame = requestAnimationFrame(() => {
-      const next = openCollapsedPath(collapsed, focusPersonId, fullLayout.primaryParent);
-      if (next.size !== collapsed.size) setCollapsedState(next);
+      const current = collapsedRef.current;
+      const next = openCollapsedPath(current, focusPersonId, fullLayout.primaryParent);
+      if (next.size !== current.size) setCollapsedState(next);
     });
     return () => cancelAnimationFrame(frame);
-  }, [focusPersonId, fullLayout, collapsed]);
+  }, [focusPersonId, fullLayout]);
   const lastCentered = useRef<string | null>(null);
   const enteredView = useRef(false);
   /** The screen rectangle a card occupied when it was clicked, so opening its
@@ -531,7 +544,7 @@ export function FamilyTreeCanvas({ tree, onSelect, highlightedIds = noHighlighte
       <button type="button" onPointerDown={(event) => event.stopPropagation()} onClick={() => zoomBy(1.1)} aria-label="Zoom in" title="Zoom in">＋</button>
     </div>
     <div ref={viewportRef} className="tree-viewport" style={{ transform: `translate(${committedView.x}px, ${committedView.y}px) scale(${committedView.scale})`, "--tree-scale": String(committedView.scale) } as React.CSSProperties}>
-      <FamilyTreeScene visibleTree={visibleTree} positions={positions} spouseLines={spouseLines} hooks={hooks} highlighted={highlighted} branchIds={branchIds} collapsed={collapsed} hiddenCounts={hiddenCounts} onSelect={onSelect} onOpenBranch={openBranch} setCollapsedState={setCollapsedState} />
+      <FamilyTreeScene visibleTree={visibleTree} positions={positions} spouseLines={spouseLines} hooks={hooks} highlighted={highlighted} branchIds={branchIds} collapsed={collapsed} hiddenCounts={hiddenCounts} onSelect={onSelect} onOpenBranch={openBranch} onToggleBranch={toggleBranch} />
     </div>
     <CanvasCursor mode={cursorMode} cursorRef={cursorRef} />
   </div>;

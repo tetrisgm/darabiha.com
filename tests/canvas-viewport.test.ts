@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { centerViewOn, clampScale, openCollapsedPath, panView, zoomView } from "../app/components/FamilyTreeCanvas";
+import { centerViewOn, clampScale, openCollapsedPath, panView, toggleCollapsedBranch, zoomView } from "../app/components/FamilyTreeCanvas";
 
 describe("family canvas viewport math", () => {
   it("keeps zoom within usable bounds", () => {
@@ -46,5 +46,12 @@ describe("family canvas viewport math", () => {
     const parents = new Map([["child", "parent"]]);
 
     expect(openCollapsedPath(collapsed, "child", parents)).toEqual(collapsed);
+  });
+
+  it("toggles one branch without mutating or losing other folded branches", () => {
+    const collapsed = new Set(["first", "second"]);
+    expect(toggleCollapsedBranch(collapsed, "first")).toEqual(new Set(["second"]));
+    expect(toggleCollapsedBranch(collapsed, "third")).toEqual(new Set(["first", "second", "third"]));
+    expect(collapsed).toEqual(new Set(["first", "second"]));
   });
 });
