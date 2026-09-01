@@ -1,0 +1,20 @@
+{
+  "name": "darabiha-tour",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.ts",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts DarabihaTour out/darabiha-tour.mp4"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@remotion/cli": "4.0.519",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.519"
+  }
+}
