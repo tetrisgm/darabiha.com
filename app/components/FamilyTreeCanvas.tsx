@@ -126,12 +126,16 @@ const FamilyTreeScene = memo(function FamilyTreeScene({ visibleTree, positions, 
     {visibleTree.people.map((person) => {
       const p = positions.get(person.id) ?? { x: 0, y: 90 };
       const location = [person.birthCity, person.birthCountry].filter(Boolean).join(", ");
-      return <button className={`tree-card ${highlighted.has(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} data-person-id={person.id} onClick={(event) => { onOpenBranch(person, event.currentTarget.getBoundingClientRect()); onSelect(person); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>;
+      const activate = (element: HTMLButtonElement) => {
+        onOpenBranch(person, element.getBoundingClientRect());
+        onSelect(person);
+      };
+      return <button className={`tree-card ${highlighted.has(person.id) ? "is-highlighted" : ""}`} style={{ left: `${p.x}px`, top: `${p.y}px`, cursor: "pointer" }} key={person.id} data-person-id={person.id} onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); if (event.button === 0) activate(event.currentTarget); }} onClick={(event) => { if (event.detail === 0) activate(event.currentTarget); }} aria-label={`Open ${person.displayName}`}><span className="tree-card-portrait">{person.photoAttachmentId ? <img src={`/api/photos/${person.photoAttachmentId}`} alt="" /> : <Silhouette gender={person.gender} />}</span><span className="tree-card-copy"><strong>{person.displayName}</strong><span>{person.birthDate ? `Born ${cardDate(person.birthDate)}` : "Birth date unknown"}{location ? ` · ${location}` : ""}</span></span></button>;
     })}
     {branchIds.map((id) => {
       const p = positions.get(id)!;
       const isFolded = collapsed.has(id);
-      return <button key={`chip-${id}`} type="button" className="branch-chip" data-branch-person-id={id} style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} hidden family members` : "Hide this branch"} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onToggleBranch(id); }}>{isFolded ? `Show ${hiddenCounts.get(id) ?? 0} more` : "Hide branch"}</button>;
+      return <button key={`chip-${id}`} type="button" className="branch-chip" data-branch-person-id={id} style={{ left: `${p.x}px`, top: `${p.y + 56}px` }} aria-label={isFolded ? `Show ${hiddenCounts.get(id) ?? 0} hidden family members` : "Hide this branch"} onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.stopPropagation(); if (event.button === 0) onToggleBranch(id); }} onClick={(event) => { event.stopPropagation(); if (event.detail === 0) onToggleBranch(id); }}>{isFolded ? `Show ${hiddenCounts.get(id) ?? 0} more` : "Hide branch"}</button>;
     })}
   </>;
 });
