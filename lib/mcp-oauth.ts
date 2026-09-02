@@ -7,10 +7,11 @@
  * the member's email, and useless the moment that member leaves the list,
  * because every call re-resolves the member's current role.
  *
- * Deliberate v1 deviation from the kit: access tokens live 30 days and there
- * is no refresh-token rotation. MCP clients re-run the approval when a token
- * expires; the shorter-lived-token-plus-refresh-family upgrade is on the
- * platform roadmap (docs/PLATFORM.md).
+ * Token lifecycle follows the kit: one-hour access tokens plus hashed
+ * rotating refresh tokens. A connection is a token family with a 180-day
+ * absolute and 30-day inactivity lifetime; presenting an already-consumed
+ * refresh token is treated as a replay and revokes the entire family and
+ * every access token it issued.
  */
 
 import { env } from "cloudflare:workers";
@@ -22,7 +23,9 @@ import { publicOrigin } from "./archive-config";
 export const MCP_SCOPES = ["read", "propose"] as const;
 export type McpScope = (typeof MCP_SCOPES)[number];
 export const CODE_TTL_SECONDS = 60 * 10;
-export const TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
+export const REFRESH_ABSOLUTE_TTL_SECONDS = 180 * 24 * 60 * 60;
+export const REFRESH_INACTIVITY_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 const encoder = new TextEncoder();
 const CODE_VERIFIER_RE = /^[A-Za-z0-9._~-]{43,128}$/;
@@ -111,8 +114,24 @@ export async function mintAuthorizationCode(request: AuthorizeRequest, memberEma
 }
 
 export type TokenExchange =
-  | { ok: true; body: { access_token: string; token_type: "Bearer"; expires_in: number; scope: McpScope } }
+  | { ok: true; body: { access_token: string; refresh_token: string; token_type: "Bearer"; expires_in: number; scope: McpScope } }
   | { ok: false; error: string; description: string };
+
+/** One access token + one refresh token inside a family, atomically. */
+async function issueTokens(family: { id: string; memberEmail: string; clientId: string; clientName: string; scope: string }, extraStatements: D1PreparedStatement[] = []): Promise<{ accessToken: string; refreshToken: string }> {
+  const now = new Date().toISOString();
+  const accessToken = `dat_${toBase64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
+  const refreshToken = `drt_${toBase64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
+  const accessTokenId = crypto.randomUUID();
+  await env.DB.batch([
+    ...extraStatements,
+    env.DB.prepare("INSERT INTO agent_tokens (id, token_hash, member_email, client_id, client_name, scope, created_at, expires_at, family_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(accessTokenId, await sha256Base64Url(accessToken), family.memberEmail, family.clientId, family.clientName, family.scope, now, new Date(Date.now() + ACCESS_TOKEN_TTL_SECONDS * 1000).toISOString(), family.id),
+    env.DB.prepare("INSERT INTO agent_refresh_tokens (id, family_id, token_hash, access_token_id, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), family.id, await sha256Base64Url(refreshToken), accessTokenId, now),
+  ]);
+  return { accessToken, refreshToken };
+}
 
 export async function exchangeCodeForToken(input: { code: string; clientId: string; redirectUri: string; codeVerifier: string }): Promise<TokenExchange> {
   await ensureSchema();
@@ -128,11 +147,57 @@ export async function exchangeCodeForToken(input: { code: string; clientId: stri
   if (!consumed) return { ok: false, error: "invalid_grant", description: "The authorization code is invalid, expired, or already used." };
   if (await sha256Base64Url(input.codeVerifier) !== consumed.codeChallenge) return { ok: false, error: "invalid_grant", description: "PKCE verification failed." };
   const client = await getClient(input.clientId);
-  const token = `dat_${toBase64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
-  await env.DB.prepare("INSERT INTO agent_tokens (id, token_hash, member_email, client_id, client_name, scope, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(crypto.randomUUID(), await sha256Base64Url(token), consumed.memberEmail, input.clientId, client?.name ?? "MCP client", consumed.scope, now, new Date(Date.now() + TOKEN_TTL_SECONDS * 1000).toISOString())
-    .run();
-  return { ok: true, body: { access_token: token, token_type: "Bearer", expires_in: TOKEN_TTL_SECONDS, scope: consumed.scope as McpScope } };
+  const family = { id: crypto.randomUUID(), memberEmail: consumed.memberEmail, clientId: input.clientId, clientName: client?.name ?? "MCP client", scope: consumed.scope };
+  const { accessToken, refreshToken } = await issueTokens(family, [
+    env.DB.prepare(`INSERT INTO agent_token_families (id, member_email, client_id, client_name, scope, created_at, last_used_at, absolute_expires_at, inactivity_expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(family.id, family.memberEmail, family.clientId, family.clientName, family.scope, now, now,
+        new Date(Date.now() + REFRESH_ABSOLUTE_TTL_SECONDS * 1000).toISOString(),
+        new Date(Date.now() + REFRESH_INACTIVITY_TTL_SECONDS * 1000).toISOString()),
+  ]);
+  return { ok: true, body: { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: ACCESS_TOKEN_TTL_SECONDS, scope: consumed.scope as McpScope } };
+}
+
+export async function rotateRefreshToken(input: { refreshToken: string; clientId: string }): Promise<TokenExchange> {
+  await ensureSchema();
+  if (!input.refreshToken.startsWith("drt_")) return { ok: false, error: "invalid_grant", description: "Unrecognized refresh token." };
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const presented = await env.DB.prepare(`SELECT rt.id, rt.consumed_at AS consumedAt, rt.access_token_id AS accessTokenId,
+      f.id AS familyId, f.member_email AS memberEmail, f.client_id AS clientId, f.client_name AS clientName, f.scope,
+      f.revoked_at AS revokedAt, f.absolute_expires_at AS absoluteExpiresAt, f.inactivity_expires_at AS inactivityExpiresAt
+      FROM agent_refresh_tokens rt JOIN agent_token_families f ON f.id = rt.family_id
+      WHERE rt.token_hash = ?`)
+    .bind(await sha256Base64Url(input.refreshToken))
+    .first<{ id: string; consumedAt: string | null; accessTokenId: string; familyId: string; memberEmail: string; clientId: string; clientName: string; scope: string; revokedAt: string | null; absoluteExpiresAt: string; inactivityExpiresAt: string }>();
+  if (!presented || presented.clientId !== input.clientId) return { ok: false, error: "invalid_grant", description: "Unrecognized refresh token." };
+  if (presented.consumedAt) {
+    // replay: a consumed refresh token came back, so someone else may hold
+    // this family's credentials - revoke everything it ever issued
+    await env.DB.batch([
+      env.DB.prepare("UPDATE agent_token_families SET revoked_at = COALESCE(revoked_at, ?), replay_detected_at = COALESCE(replay_detected_at, ?) WHERE id = ?")
+        .bind(nowIso, nowIso, presented.familyId),
+      env.DB.prepare("UPDATE agent_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL").bind(nowIso, presented.familyId),
+    ]);
+    console.warn("agent_refresh_replay_family_revoked");
+    return { ok: false, error: "invalid_grant", description: "This refresh token was already used; the connection has been revoked. Reconnect and approve again." };
+  }
+  if (presented.revokedAt || presented.absoluteExpiresAt <= nowIso || presented.inactivityExpiresAt <= nowIso) {
+    return { ok: false, error: "invalid_grant", description: "This connection has ended. Reconnect and approve again." };
+  }
+  // atomic consume: losing a race to another rotation means zero rows change
+  const claimed = await env.DB.prepare("UPDATE agent_refresh_tokens SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL RETURNING id")
+    .bind(nowIso, presented.id).first<{ id: string }>();
+  if (!claimed) return { ok: false, error: "invalid_grant", description: "This refresh token was already used." };
+  const { accessToken, refreshToken } = await issueTokens(
+    { id: presented.familyId, memberEmail: presented.memberEmail, clientId: presented.clientId, clientName: presented.clientName, scope: presented.scope },
+    [
+      env.DB.prepare("UPDATE agent_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL").bind(nowIso, presented.accessTokenId),
+      env.DB.prepare("UPDATE agent_token_families SET last_used_at = ?, inactivity_expires_at = MIN(absolute_expires_at, ?) WHERE id = ?")
+        .bind(nowIso, new Date(now.getTime() + REFRESH_INACTIVITY_TTL_SECONDS * 1000).toISOString(), presented.familyId),
+    ],
+  );
+  return { ok: true, body: { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: ACCESS_TOKEN_TTL_SECONDS, scope: presented.scope as McpScope } };
 }
 
 export type AgentIdentity = { memberEmail: string; clientName: string; scope: McpScope; role: "admin" | "canEdit" | "canView" };
@@ -163,7 +228,7 @@ export function authorizationServerMetadata() {
     token_endpoint: `${origin}/oauth/token`,
     registration_endpoint: `${origin}/oauth/register`,
     response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none"],
     scopes_supported: [...MCP_SCOPES],

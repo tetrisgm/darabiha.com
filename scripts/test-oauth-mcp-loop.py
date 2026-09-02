@@ -102,7 +102,7 @@ status, _, body = fetch(meta["token_endpoint"], method="POST",
                                                      "code_verifier": verifier}).encode(),
                         headers={"content-type": "application/x-www-form-urlencoded"})
 token = json.loads(body)
-step("token exchange", status == 200 and token.get("token_type") == "Bearer")
+step("token exchange", status == 200 and token.get("token_type") == "Bearer" and token.get("refresh_token", "").startswith("drt_") and token.get("expires_in") == 3600)
 auth = {"authorization": f"Bearer {token['access_token']}", "content-type": "application/json"}
 
 # 5b. a replayed code must be rejected
@@ -132,11 +132,6 @@ step("tree_summary read", status == 200 and "people" in text, text.splitlines()[
 status, found = rpc("tools/call", {"name": "find_person", "arguments": {"query": "zzz-no-such-person"}})
 step("graceful empty find", status == 200 and "No person matching" in found["result"]["content"][0]["text"])
 
-# 7. a read-scope token must not be able to file proposals
-status, rejected = rpc("tools/call", {"name": "propose_person", "arguments": {"display_name": "Loop Probe", "source_note": "loop test"}})
-step("read-scope write rejection", status == 200 and rejected["result"]["isError"] and "reading only" in rejected["result"]["content"][0]["text"])
-
-# 8. approve again with the propose scope and file a real proposal
 def approve(scope):
     v = b64url(secrets.token_bytes(48))[:64]
     challenge = hashlib.sha256(v.encode()).digest()
@@ -159,6 +154,31 @@ def approve(scope):
                        headers={"content-type": "application/x-www-form-urlencoded"})
     return json.loads(body)
 
+# 6b. refresh rotation: the old refresh token buys a new pair, once
+def refresh(rt):
+    return fetch(meta["token_endpoint"], method="POST",
+                 data=urllib.parse.urlencode({"grant_type": "refresh_token", "refresh_token": rt,
+                                              "client_id": client_id}).encode(),
+                 headers={"content-type": "application/x-www-form-urlencoded"})
+status, _, body = refresh(token["refresh_token"])
+rotated = json.loads(body)
+step("refresh rotation", status == 200 and rotated.get("refresh_token", "").startswith("drt_") and rotated["refresh_token"] != token["refresh_token"])
+auth = {"authorization": f"Bearer {rotated['access_token']}", "content-type": "application/json"}
+status, _ = rpc("ping")
+step("rotated access token works", status == 200)
+# 6c. replaying the consumed refresh token revokes the whole family
+status, _, _ = refresh(token["refresh_token"])
+step("refresh replay rejected", status == 400)
+status, _ = rpc("ping")
+step("replay revoked the family", status == 401)
+# a fresh read approval carries the remaining read-scope checks
+auth = {"authorization": f"Bearer {approve('read')['access_token']}", "content-type": "application/json"}
+
+# 7. a read-scope token must not be able to file proposals
+status, rejected = rpc("tools/call", {"name": "propose_person", "arguments": {"display_name": "Loop Probe", "source_note": "loop test"}})
+step("read-scope write rejection", status == 200 and rejected["result"]["isError"] and "reading only" in rejected["result"]["content"][0]["text"])
+
+# 8. approve again with the propose scope and file a real proposal
 propose_token = approve("propose")
 step("propose-scope token", propose_token.get("scope") == "propose")
 auth = {"authorization": f"Bearer {propose_token['access_token']}", "content-type": "application/json"}

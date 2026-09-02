@@ -2,7 +2,7 @@
 // their own; removing someone from the member list ends theirs implicitly.
 import { getAppleUser } from "../../apple-auth";
 import { getViewerRole } from "../../authz";
-import { listAgentConnections, resolveMemberEmail, revokeAgentToken } from "../../../db/store";
+import { listAgentConnections, resolveMemberEmail, revokeAgentConnection } from "../../../db/store";
 import { privateJsonResponse } from "../../../lib/archive-cache";
 
 async function memberIdentity(): Promise<string | null> {
@@ -27,6 +27,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid_json" }, { status: 400 });
   }
   if (typeof body.tokenId !== "string" || !body.tokenId) return Response.json({ error: "invalid_request" }, { status: 400 });
-  const revoked = await revokeAgentToken(body.tokenId, email);
+  const revoked = await revokeAgentConnection(body.tokenId, email);
   return revoked ? Response.json({ ok: true }) : Response.json({ error: "connection_not_found" }, { status: 404 });
 }

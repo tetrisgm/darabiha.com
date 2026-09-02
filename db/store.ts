@@ -123,6 +123,20 @@ const schemaStatements = [
     created_at TEXT NOT NULL, expires_at TEXT NOT NULL, revoked_at TEXT, last_used_at TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agent_tokens_member ON agent_tokens(member_email, revoked_at)`,
+  // A connection is a token family: short-lived access tokens hang off it,
+  // refresh tokens rotate inside it, and reusing a consumed refresh token
+  // (a replay) revokes the whole family and everything it issued.
+  `CREATE TABLE IF NOT EXISTS agent_token_families (
+    id TEXT PRIMARY KEY, member_email TEXT NOT NULL, client_id TEXT NOT NULL, client_name TEXT NOT NULL,
+    scope TEXT NOT NULL, created_at TEXT NOT NULL, last_used_at TEXT NOT NULL,
+    absolute_expires_at TEXT NOT NULL, inactivity_expires_at TEXT NOT NULL,
+    revoked_at TEXT, replay_detected_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_token_families_member ON agent_token_families(member_email, revoked_at)`,
+  `CREATE TABLE IF NOT EXISTS agent_refresh_tokens (
+    id TEXT PRIMARY KEY, family_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE,
+    access_token_id TEXT NOT NULL, created_at TEXT NOT NULL, consumed_at TEXT
+  )`,
   // Changes external agents propose over MCP. Nothing here touches the tree
   // until an editor applies it through the same audited applyProposal path
   // every other mutation takes.
@@ -183,6 +197,11 @@ async function initializeSchema() {
   // old table also drops its indexes. Duplicate claims must stop startup rather
   // than silently weakening this invariant.
   await env.DB.prepare(MEMBERS_PERSON_INDEX_SQL).run();
+  // databases created before refresh rotation lack the family column
+  await ensureColumns(["family_id"], {
+    listColumns: async () => new Set((await env.DB.prepare("PRAGMA table_info(agent_tokens)").all<{ name: string }>()).results.map(({ name }) => name)),
+    addColumn: async (column) => { await env.DB.prepare(`ALTER TABLE agent_tokens ADD COLUMN ${column} TEXT`).run(); },
+  });
   // Install triggers only after the legacy members rebuild. DROP TABLE also
   // drops that table's triggers, and older databases still take this path.
   await env.DB.batch(RUNTIME_INTEGRITY_SCHEMA.map((sql) => env.DB.prepare(sql)));
@@ -1529,25 +1548,32 @@ export async function decideAgentProposal(id: string, verdict: "apply" | "reject
 
 export type AgentConnection = { id: string; clientName: string; scope: string; createdAt: string; lastUsedAt: string | null; expiresAt: string };
 
-/** The MCP connections a member has approved and can end from Settings. */
+/** The MCP connections (token families) a member has approved and can end
+ * from Settings. Access tokens rotate inside a family; the family is the
+ * durable thing a person recognizes and revokes. */
 export async function listAgentConnections(memberEmail: string): Promise<AgentConnection[]> {
   await ensureSchema();
+  const now = new Date().toISOString();
   const rows = await env.DB.prepare(`SELECT id, client_name AS clientName, scope, created_at AS createdAt,
-      last_used_at AS lastUsedAt, expires_at AS expiresAt FROM agent_tokens
-      WHERE member_email = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at DESC`)
-    .bind(memberEmail, new Date().toISOString())
+      last_used_at AS lastUsedAt, absolute_expires_at AS expiresAt FROM agent_token_families
+      WHERE member_email = ? AND revoked_at IS NULL AND absolute_expires_at > ? AND inactivity_expires_at > ?
+      ORDER BY created_at DESC`)
+    .bind(memberEmail, now, now)
     .all<AgentConnection>();
   return rows.results;
 }
 
-export async function revokeAgentToken(id: string, memberEmail: string): Promise<boolean> {
+export async function revokeAgentConnection(familyId: string, memberEmail: string): Promise<boolean> {
   await ensureSchema();
   const now = new Date().toISOString();
-  const result = await env.DB.prepare("UPDATE agent_tokens SET revoked_at = ? WHERE id = ? AND member_email = ? AND revoked_at IS NULL")
-    .bind(now, id, memberEmail).run();
+  const result = await env.DB.prepare("UPDATE agent_token_families SET revoked_at = ? WHERE id = ? AND member_email = ? AND revoked_at IS NULL")
+    .bind(now, familyId, memberEmail).run();
   if (result.meta.changes > 0) {
-    await env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), memberEmail, "agent_disconnected", "Disconnected an assistant", JSON.stringify({ tokenId: id }), now).run();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE agent_tokens SET revoked_at = ? WHERE family_id = ? AND revoked_at IS NULL").bind(now, familyId),
+      env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), memberEmail, "agent_disconnected", "Disconnected an assistant", JSON.stringify({ connectionId: familyId }), now),
+    ]);
   }
   return result.meta.changes > 0;
 }

@@ -1,4 +1,4 @@
-import { exchangeCodeForToken } from "../../../lib/mcp-oauth";
+import { exchangeCodeForToken, rotateRefreshToken } from "../../../lib/mcp-oauth";
 
 export const runtime = "edge";
 
@@ -12,8 +12,17 @@ export async function POST(request: Request) {
   } catch {
     return oauthError("invalid_request", "The token request body is unreadable.");
   }
-  if (form.get("grant_type") !== "authorization_code") {
-    return oauthError("unsupported_grant_type", "Only authorization_code is supported; re-run the approval when a token expires.");
+  const grantType = form.get("grant_type");
+  if (grantType === "refresh_token") {
+    const refreshToken = form.get("refresh_token") ?? "";
+    const clientId = form.get("client_id") ?? "";
+    if (!refreshToken || !clientId) return oauthError("invalid_request", "refresh_token and client_id are required.");
+    const rotated = await rotateRefreshToken({ refreshToken, clientId });
+    if (!rotated.ok) return oauthError(rotated.error, rotated.description);
+    return Response.json(rotated.body, { headers: { "access-control-allow-origin": "*", "cache-control": "no-store", pragma: "no-cache" } });
+  }
+  if (grantType !== "authorization_code") {
+    return oauthError("unsupported_grant_type", "Only authorization_code and refresh_token are supported.");
   }
   const code = form.get("code") ?? "";
   const clientId = form.get("client_id") ?? "";
