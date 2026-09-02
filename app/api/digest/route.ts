@@ -2,6 +2,7 @@ import { listChangeLog, listMembers, readTree } from "../../../db/store";
 import { requireAdmin, requireEditor } from "../../authz";
 import { buildDigest, digestHtml, digestText } from "../../../lib/digest";
 import { sendMail } from "../../../lib/smtp";
+import { archiveName } from "../../../lib/archive-config";
 import { preventSharedCaching, privateJsonResponse } from "../../../lib/archive-cache";
 
 export const runtime = "edge";
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     await sendMail(smtpUrl, {
       to: recipients, from,
       replyTo: process.env.MAIL_REPLY_TO || undefined,
-      subject: `Darabiha · ${digest.headline}`,
+      subject: `${archiveName()} · ${digest.headline}`,
       text: digestText(digest),
       html: digestHtml(digest),
     });

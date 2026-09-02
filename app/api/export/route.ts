@@ -2,6 +2,7 @@ import { readTree } from "../../../db/store";
 import { requireEditor } from "../../authz";
 import { buildGedcom } from "../../../lib/gedcom";
 import { preventSharedCaching } from "../../../lib/archive-cache";
+import { archiveSlug } from "../../../lib/archive-config";
 
 export const runtime = "edge";
 
@@ -15,7 +16,7 @@ export async function GET() {
   return preventSharedCaching(new Response(buildGedcom(tree), {
     headers: {
       "content-type": "text/vnd.familysearch.gedcom; charset=utf-8",
-      "content-disposition": `attachment; filename="darabiha-${stamp}.ged"`,
+      "content-disposition": `attachment; filename="${archiveSlug()}-${stamp}.ged"`,
     },
   }));
 }

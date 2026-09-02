@@ -1,4 +1,5 @@
 import type { FamilyTree } from "./types";
+import { archiveName, archiveSlug, publicOrigin } from "./archive-config";
 
 /** GEDCOM 5.5.1 - the interchange format every genealogy program reads.
  * Exporting it is the archive's insurance policy: whatever happens to this
@@ -36,7 +37,7 @@ function gedcomDate(value: string | null): string | null {
 const placeOf = (city: string | null, country: string | null, fallback: string | null) =>
   [city, country].filter(Boolean).join(", ") || fallback || null;
 
-export function buildGedcom(tree: FamilyTree, origin = "https://darabiha.com"): string {
+export function buildGedcom(tree: FamilyTree, origin = publicOrigin(), sourceName = archiveName(), sourceId = archiveSlug().toUpperCase().replace(/-/g, "_")): string {
   const lines: string[] = [];
   const xref = new Map<string, string>();
   tree.people.forEach((person, index) => xref.set(person.id, `@I${index + 1}@`));
@@ -65,7 +66,7 @@ export function buildGedcom(tree: FamilyTree, origin = "https://darabiha.com"): 
   const familyXref = new Map<string, string>();
   [...families.keys()].forEach((key, index) => familyXref.set(key, `@F${index + 1}@`));
 
-  lines.push("0 HEAD", "1 SOUR DARABIHA", "2 NAME The Darabiha family archive", `2 CORP ${origin}`,
+  lines.push("0 HEAD", `1 SOUR ${sourceId}`, `2 NAME ${sourceName}`, `2 CORP ${origin}`,
     "1 GEDC", "2 VERS 5.5.1", "2 FORM LINEAGE-LINKED", "1 CHAR UTF-8",
     `1 DATE ${gedcomDate(new Date().toISOString().slice(0, 10))}`);
 

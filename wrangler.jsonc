@@ -7,6 +7,7 @@
   "vars": {
     "PUBLIC_ORIGIN": "https://darabiha.com",
     "OWNER_EMAIL": "ramine@ramine.net",
+    "ARCHIVE_NAME": "Darabiha",
     "APPLE_CLIENT_ID": "com.darabiha.family",
     "APPLE_TEAM_ID": "52WM463HR2",
     "APPLE_KEY_ID": "J6958HV8HB",

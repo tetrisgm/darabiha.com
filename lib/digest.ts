@@ -1,6 +1,7 @@
 import type { FamilyTree } from "./types";
 import type { ChangeEntry } from "../db/store";
 import { onThisDay } from "./family-facts";
+import { archiveName, publicOrigin } from "./archive-config";
 
 /** What the family would want to hear about since they last looked: who was
  * added, what was answered, which stories arrived, and whose anniversary is
@@ -57,20 +58,20 @@ export function buildDigest(tree: FamilyTree, entries: ChangeEntry[], since: Dat
   return { since: since.toISOString().slice(0, 10), headline, sections, empty: !recent.length && !upcoming.length };
 }
 
-export function digestText(digest: Digest, origin = "https://darabiha.com"): string {
+export function digestText(digest: Digest, origin = publicOrigin()): string {
   const body = digest.sections.map((section) => `${section.title}\n${section.lines.map((line) => `  - ${line}`).join("\n")}`).join("\n\n");
   return `${digest.headline}\n\nSince ${digest.since}\n\n${body || "Nothing has changed."}\n\n${origin}\n`;
 }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char] ?? char);
 
-export function digestHtml(digest: Digest, origin = "https://darabiha.com"): string {
+export function digestHtml(digest: Digest, origin = publicOrigin()): string {
   const sections = digest.sections.map((section) => `
     <h2 style="font:600 15px/1.4 system-ui,sans-serif;color:#1c1c1e;margin:22px 0 6px">${escapeHtml(section.title)}</h2>
     <ul style="margin:0;padding-left:18px">${section.lines.map((line) => `<li style="font:400 14px/1.6 system-ui,sans-serif;color:#3a3a3c">${escapeHtml(line)}</li>`).join("")}</ul>`).join("");
   return `<!doctype html><html><body style="margin:0;background:#f5f5f7;padding:24px">
     <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:14px;padding:26px 28px">
-      <p style="font:700 11px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#457156;margin:0 0 8px">Darabiha</p>
+      <p style="font:700 11px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#457156;margin:0 0 8px">${escapeHtml(archiveName())}</p>
       <h1 style="font:600 22px/1.3 Georgia,serif;color:#1c1c1e;margin:0">${escapeHtml(digest.headline)}</h1>
       ${sections || '<p style="font:400 14px/1.6 system-ui,sans-serif;color:#3a3a3c">Nothing has changed this week.</p>'}
       <p style="margin:26px 0 0"><a href="${origin}" style="font:600 14px/1 system-ui,sans-serif;color:#457156">Open the family archive →</a></p>

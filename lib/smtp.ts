@@ -1,4 +1,5 @@
 import { connect } from "cloudflare:sockets";
+import { archiveDomain } from "./archive-config";
 
 /** A small SMTP client that runs inside a Worker.
  *
@@ -66,7 +67,7 @@ function buildMessage(message: MailMessage, recipients: string[]): string {
     message.replyTo ? `Reply-To: ${message.replyTo}` : "",
     `Subject: ${message.subject}`,
     `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <${crypto.randomUUID()}@darabiha.com>`,
+    `Message-ID: <${crypto.randomUUID()}@${archiveDomain()}>`,
     "MIME-Version: 1.0",
   ].filter(Boolean);
   if (!message.html) {
@@ -102,7 +103,7 @@ export async function sendMail(smtpUrl: string, message: MailMessage): Promise<v
   let talk = new Conversation(reader, writer);
   try {
     await talk.read(220);
-    await talk.send(`EHLO darabiha.com`, 250);
+    await talk.send(`EHLO ${archiveDomain()}`, 250);
     if (!config.implicitTls) {
       await talk.send("STARTTLS", 220);
       reader.releaseLock(); writer.releaseLock();
@@ -110,7 +111,7 @@ export async function sendMail(smtpUrl: string, message: MailMessage): Promise<v
       writer = active.writable.getWriter();
       reader = active.readable.getReader();
       talk = new Conversation(reader, writer);
-      await talk.send(`EHLO darabiha.com`, 250);
+      await talk.send(`EHLO ${archiveDomain()}`, 250);
     }
     await talk.send("AUTH LOGIN", 334);
     await talk.send(base64(config.user), 334);
