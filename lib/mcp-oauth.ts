@@ -17,7 +17,9 @@ import { env } from "cloudflare:workers";
 import { ensureSchema } from "../db/store";
 import { publicOrigin } from "./archive-config";
 
-export const MCP_SCOPES = ["read"] as const;
+/** "read" queries the archive; "propose" additionally files additive change
+ * proposals for editor review (and includes read). */
+export const MCP_SCOPES = ["read", "propose"] as const;
 export type McpScope = (typeof MCP_SCOPES)[number];
 export const CODE_TTL_SECONDS = 60 * 10;
 export const TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -91,7 +93,10 @@ export async function validateAuthorizeRequest(params: URLSearchParams): Promise
   if (!CODE_CHALLENGE_RE.test(codeChallenge)) return { ok: false, problem: "The PKCE challenge is malformed." };
   const requested = (params.get("scope") ?? "read").split(/\s+/).filter(Boolean);
   if (requested.some((scope) => !MCP_SCOPES.some((known) => known === scope))) return { ok: false, problem: "Unknown scope requested." };
-  return { ok: true, request: { client, redirectUri, codeChallenge, scope: "read", state: params.get("state") } };
+  // propose includes read; a standards-compliant request naming both scopes
+  // normalizes to the effective one
+  const scope: McpScope = requested.includes("propose") ? "propose" : "read";
+  return { ok: true, request: { client, redirectUri, codeChallenge, scope, state: params.get("state") } };
 }
 
 export async function mintAuthorizationCode(request: AuthorizeRequest, memberEmail: string): Promise<string> {
@@ -127,7 +132,7 @@ export async function exchangeCodeForToken(input: { code: string; clientId: stri
   await env.DB.prepare("INSERT INTO agent_tokens (id, token_hash, member_email, client_id, client_name, scope, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
     .bind(crypto.randomUUID(), await sha256Base64Url(token), consumed.memberEmail, input.clientId, client?.name ?? "MCP client", consumed.scope, now, new Date(Date.now() + TOKEN_TTL_SECONDS * 1000).toISOString())
     .run();
-  return { ok: true, body: { access_token: token, token_type: "Bearer", expires_in: TOKEN_TTL_SECONDS, scope: "read" } };
+  return { ok: true, body: { access_token: token, token_type: "Bearer", expires_in: TOKEN_TTL_SECONDS, scope: consumed.scope as McpScope } };
 }
 
 export type AgentIdentity = { memberEmail: string; clientName: string; scope: McpScope; role: "admin" | "canEdit" | "canView" };

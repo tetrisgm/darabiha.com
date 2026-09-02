@@ -1,6 +1,7 @@
-import { listChangeLog } from "../../db/store";
+import { listAgentProposals, listChangeLog } from "../../db/store";
 import { requireEditor } from "../authz";
 import UndoChangeButton from "./UndoChangeButton";
+import ProposalDecision from "./ProposalDecision";
 import { archiveName } from "../../lib/archive-config";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export default async function HistoryPage() {
       </main>
     );
   }
-  const { entries } = await listChangeLog();
+  const [{ entries }, pendingProposals] = await Promise.all([listChangeLog(), listAgentProposals({ status: "pending" })]);
   return (
     <main className="settings-page">
       <header className="settings-masthead">
@@ -41,6 +42,22 @@ export default async function HistoryPage() {
       </header>
       <section className="settings-panel">
         <h1>History</h1>
+        {pendingProposals.length > 0 && (
+          <div className="settings-card">
+            <h2>Waiting for review</h2>
+            <p className="settings-hint">Changes proposed by connected assistants. Nothing below touches the archive until an editor applies it; applying records the agent as the source.</p>
+            <ol className="history-list">
+              {pendingProposals.map((proposal) => (
+                <li key={proposal.id}>
+                  <p className="history-summary">{proposal.summary}</p>
+                  <p className="history-actor">{proposal.clientName} · via {proposal.submittedBy} · {new Date(proposal.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</p>
+                  {proposal.note && <p className="history-summary">Source: {proposal.note}</p>}
+                  <ProposalDecision proposalId={proposal.id} />
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
         <div className="settings-card">
           <p className="settings-hint">Every change anyone has made to the archive, newest first. Nothing here is editable — it is the record of the record.</p>
           <ol className="history-list">

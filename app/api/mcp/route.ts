@@ -12,8 +12,9 @@
 import { publicOrigin } from "../../../lib/archive-config";
 import { resolveAgentToken } from "../../../lib/mcp-oauth";
 import { findMcpTool, MCP_TOOLS } from "../../../lib/mcp-tools";
+import { findMcpWriteTool, MCP_WRITE_TOOLS } from "../../../lib/mcp-write-tools";
 import { archiveName } from "../../../lib/archive-config";
-import { readTree } from "../../../db/store";
+import { listAgentProposals, readTree, submitAgentProposal } from "../../../db/store";
 
 export const runtime = "edge";
 
@@ -66,16 +67,47 @@ export async function POST(request: Request) {
     }
     case "ping":
       return rpcResponse(id, { result: {} });
-    case "tools/list":
-      return rpcResponse(id, { result: { tools: MCP_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema, annotations: { readOnlyHint: true } })) } });
+    case "tools/list": {
+      const tools = MCP_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema, annotations: { readOnlyHint: true } }));
+      // write tools exist only for tokens approved with the propose scope
+      if (identity.scope === "propose") {
+        tools.push(...MCP_WRITE_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema, annotations: { readOnlyHint: false } })));
+        tools.push({
+          name: "list_my_proposals",
+          description: "The proposals this connection has filed, with their review status.",
+          inputSchema: { type: "object", properties: {}, additionalProperties: false },
+          annotations: { readOnlyHint: true },
+        });
+      }
+      return rpcResponse(id, { result: { tools } });
+    }
     case "tools/call": {
       const name = typeof params?.name === "string" ? params.name : "";
       const args = (params?.arguments ?? {}) as Record<string, unknown>;
       try {
-        const tool = findMcpTool(name);
-        if (!tool) throw new Error(`Unknown tool: ${name}`);
-        const text = tool.handler(args, await readTree());
-        return rpcResponse(id, { result: { content: [{ type: "text", text }], isError: false } });
+        const readTool = findMcpTool(name);
+        if (readTool) {
+          const text = readTool.handler(args, await readTree());
+          return rpcResponse(id, { result: { content: [{ type: "text", text }], isError: false } });
+        }
+        const writeTool = findMcpWriteTool(name);
+        // authorization check runs before the handler, never after
+        if ((writeTool || name === "list_my_proposals") && identity.scope !== "propose") {
+          throw new Error("This connection was approved for reading only. Reconnect and request the propose scope to file proposals.");
+        }
+        if (writeTool) {
+          const { proposal, note } = writeTool.build(args, await readTree());
+          const proposalId = await submitAgentProposal(proposal, identity.memberEmail, identity.clientName, note);
+          return rpcResponse(id, { result: { content: [{ type: "text", text: `Filed for family review (proposal ${proposalId}): ${proposal.summary}. Nothing changes until an editor applies it; check its status with list_my_proposals.` }], isError: false } });
+        }
+        if (name === "list_my_proposals") {
+          const proposals = await listAgentProposals({ submittedBy: identity.memberEmail });
+          const text = proposals.length
+            ? proposals.map((entry) => `- [${entry.status}] ${entry.summary} (${entry.id}, filed ${entry.createdAt.slice(0, 10)})`).join("\n")
+            : "No proposals filed from this member yet.";
+          return rpcResponse(id, { result: { content: [{ type: "text", text }], isError: false } });
+        }
+        throw new Error(`Unknown tool: ${name}`);
       } catch (error) {
         // tool-level failures are results, not protocol errors, so the model can read them
         return rpcResponse(id, { result: { content: [{ type: "text", text: error instanceof Error ? error.message : "The tool call failed." }], isError: true } });

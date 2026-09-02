@@ -46,8 +46,10 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
 
   return shell(
     <>
-      <p><strong>{validated.request.client.name}</strong> is asking to read this family archive as you ({user.email}).</p>
-      <p>It will be able to look up people, relationships, and stories with your member access — and nothing more: this connection cannot change the archive. You can end it at any time by asking an admin to remove the connection, and it ends automatically if you leave the member list.</p>
+      <p><strong>{validated.request.client.name}</strong> is asking to {validated.request.scope === "propose" ? "read this family archive and suggest additions" : "read this family archive"} as you ({user.email}).</p>
+      <p>{validated.request.scope === "propose"
+        ? "It will be able to look up people, relationships, and stories with your member access, and to file proposed additions — new people, links, or stories — which wait for a family editor to review before anything changes. It can never edit, delete, or merge records."
+        : "It will be able to look up people, relationships, and stories with your member access — and nothing more: this connection cannot change the archive."} You can end it at any time from Settings, and it ends automatically if you leave the member list.</p>
       <form method="post" action="/oauth/authorize/approve">
         <input type="hidden" name="client_id" value={validated.request.client.clientId} />
         <input type="hidden" name="redirect_uri" value={validated.request.redirectUri} />

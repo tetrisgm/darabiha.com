@@ -7,9 +7,12 @@ import { useEffect, useState } from "react";
 type Role = "admin" | "canEdit" | "canView" | null;
 type Identity = { email: string; provider: string | null };
 type Member = { email: string; role: "admin" | "canEdit" | "canView"; addedBy: string; createdAt: string; links: Identity[] };
+type AgentConnection = { id: string; clientName: string; scope: string; createdAt: string; lastUsedAt: string | null; expiresAt: string };
 type Props = {
   viewer: { signedIn: boolean; email: string | null; accountEmail: string | null; displayName: string | null; role: Role; links: Identity[]; connectedProviders: string[] };
   siteVisibility: "public" | "members" | "password" | null;
+  agentConnections: AgentConnection[];
+  mcpUrl: string;
   appleSignInPath: string;
   googleSignInPath: string | null;
   signOutPath: string;
@@ -29,7 +32,8 @@ const ERROR_COPY: Record<string, string> = {
   identity_linked_elsewhere: "That sign-in is already linked to a different member \u2014 unlink it there first.",
 };
 
-export default function SettingsClient({ viewer, siteVisibility, appleSignInPath, googleSignInPath, signOutPath }: Props) {
+export default function SettingsClient({ viewer, siteVisibility, agentConnections, mcpUrl, appleSignInPath, googleSignInPath, signOutPath }: Props) {
+  const [connections, setConnections] = useState(agentConnections);
   // the cookie is the single source, shared with the server; read it lazily so
   // the first client render already knows which language is chosen
   const [currentLang] = useState<Lang>(() => {
@@ -171,6 +175,20 @@ export default function SettingsClient({ viewer, siteVisibility, appleSignInPath
             }}>{LANGUAGE_NAMES[code]}</button>)}
         </div>
       </div>
+
+      {viewer.signedIn && viewer.role !== null && <div className="settings-card">
+        <h2>Connected assistants</h2>
+        <p className="settings-hint">Your AI can use this archive as a tool. In Claude, ChatGPT, or any MCP client, add a connector with the address below and approve; assistants read with your access, and proposed additions wait for an editor. Disconnecting ends that assistant&rsquo;s access immediately.</p>
+        <p><code>{mcpUrl}</code></p>
+        {connections.length === 0 && <p className="settings-hint">Nothing is connected for you yet.</p>}
+        {connections.map((connection) => <div className="settings-identity-row" key={connection.id}>
+          <span><strong>{connection.clientName}</strong> · {connection.scope === "propose" ? "reads and proposes" : "read-only"} · connected {new Date(connection.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}{connection.lastUsedAt ? `, last used ${new Date(connection.lastUsedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}</span>
+          <button type="button" className="settings-unlink" onClick={async () => {
+            const response = await fetch("/api/agents", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tokenId: connection.id }) });
+            if (response.ok) setConnections((current) => current.filter((candidate) => candidate.id !== connection.id));
+          }}>Disconnect</button>
+        </div>)}
+      </div>}
 
       <div className="settings-card">
         <h2>Try a safe sample</h2>

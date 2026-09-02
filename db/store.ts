@@ -123,6 +123,16 @@ const schemaStatements = [
     created_at TEXT NOT NULL, expires_at TEXT NOT NULL, revoked_at TEXT, last_used_at TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_agent_tokens_member ON agent_tokens(member_email, revoked_at)`,
+  // Changes external agents propose over MCP. Nothing here touches the tree
+  // until an editor applies it through the same audited applyProposal path
+  // every other mutation takes.
+  `CREATE TABLE IF NOT EXISTS agent_proposals (
+    id TEXT PRIMARY KEY, proposal_json TEXT NOT NULL, summary TEXT NOT NULL,
+    submitted_by TEXT NOT NULL, client_name TEXT NOT NULL, note TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'applied', 'rejected')),
+    created_at TEXT NOT NULL, decided_by TEXT, decided_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_proposals_status ON agent_proposals(status, created_at)`,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
@@ -1435,6 +1445,111 @@ export async function recordAgentQuestions(
       JSON.stringify({ questions: conflicts.map((conflict) => conflict.question) }), now));
   await env.DB.batch(statements);
   return conflicts.length;
+}
+
+/* Changes proposed by external agents over MCP. Additive kinds only: an
+ * agent can suggest a person, a relationship, or a story, and nothing else.
+ * Deletes, merges, and updates stay with the humans and the in-app
+ * archivist. A proposal touches the tree only when an editor applies it. */
+
+const AGENT_PROPOSAL_KINDS = new Set(["add_person", "add_relationship", "add_story"]);
+
+export type AgentProposal = {
+  id: string;
+  proposal: ChangeProposal;
+  summary: string;
+  submittedBy: string;
+  clientName: string;
+  note: string | null;
+  status: "pending" | "applied" | "rejected";
+  createdAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+};
+
+export async function submitAgentProposal(proposal: ChangeProposal, submittedBy: string, clientName: string, note: string | null): Promise<string> {
+  if (!AGENT_PROPOSAL_KINDS.has(proposal.kind)) throw new Error("agent_proposal_kind_not_allowed");
+  await ensureSchema();
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO agent_proposals (id, proposal_json, summary, submitted_by, client_name, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(id, JSON.stringify(proposal), proposal.summary, submittedBy, clientName, note, now),
+    env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), submittedBy, "agent_proposal_submitted", `${clientName} proposed: ${proposal.summary}`, JSON.stringify({ proposalId: id, kind: proposal.kind }), now),
+  ]);
+  return id;
+}
+
+export async function listAgentProposals(filter?: { submittedBy?: string; status?: AgentProposal["status"] }): Promise<AgentProposal[]> {
+  await ensureSchema();
+  const conditions: string[] = [];
+  const bindings: string[] = [];
+  if (filter?.submittedBy) { conditions.push("submitted_by = ?"); bindings.push(filter.submittedBy); }
+  if (filter?.status) { conditions.push("status = ?"); bindings.push(filter.status); }
+  const rows = await env.DB.prepare(`SELECT id, proposal_json AS proposalJson, summary, submitted_by AS submittedBy,
+      client_name AS clientName, note, status, created_at AS createdAt, decided_by AS decidedBy, decided_at AS decidedAt
+      FROM agent_proposals ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY created_at DESC LIMIT 100`)
+    .bind(...bindings)
+    .all<Omit<AgentProposal, "proposal"> & { proposalJson: string }>();
+  return rows.results.map(({ proposalJson, ...row }) => ({ ...row, proposal: JSON.parse(proposalJson) as ChangeProposal }));
+}
+
+export async function decideAgentProposal(id: string, verdict: "apply" | "reject", actorEmail: string): Promise<{ status: "applied" | "rejected" }> {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  const status = verdict === "apply" ? "applied" : "rejected";
+  // single-statement claim: a second decision on the same proposal updates zero rows
+  const claimed = await env.DB.prepare(`UPDATE agent_proposals SET status = ?, decided_by = ?, decided_at = ?
+      WHERE id = ? AND status = 'pending'
+      RETURNING proposal_json AS proposalJson, submitted_by AS submittedBy, client_name AS clientName, note`)
+    .bind(status, actorEmail, now, id)
+    .first<{ proposalJson: string; submittedBy: string; clientName: string; note: string | null }>();
+  if (!claimed) throw new Error("proposal_not_pending");
+  if (verdict === "reject") {
+    await env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), actorEmail, "agent_proposal_rejected", `Rejected an agent proposal`, JSON.stringify({ proposalId: id }), now).run();
+    return { status: "rejected" };
+  }
+  const proposal = JSON.parse(claimed.proposalJson) as ChangeProposal;
+  try {
+    await applyProposal(proposal, actorEmail, {
+      sourceType: "agent",
+      sourceLabel: `${claimed.clientName} via ${claimed.submittedBy}`,
+      sourceExcerpt: claimed.note,
+      confidence: 70,
+    });
+  } catch (error) {
+    // the apply failed, so the decision did not happen; put it back for review
+    await env.DB.prepare("UPDATE agent_proposals SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ?").bind(id).run();
+    throw error;
+  }
+  return { status: "applied" };
+}
+
+export type AgentConnection = { id: string; clientName: string; scope: string; createdAt: string; lastUsedAt: string | null; expiresAt: string };
+
+/** The MCP connections a member has approved and can end from Settings. */
+export async function listAgentConnections(memberEmail: string): Promise<AgentConnection[]> {
+  await ensureSchema();
+  const rows = await env.DB.prepare(`SELECT id, client_name AS clientName, scope, created_at AS createdAt,
+      last_used_at AS lastUsedAt, expires_at AS expiresAt FROM agent_tokens
+      WHERE member_email = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at DESC`)
+    .bind(memberEmail, new Date().toISOString())
+    .all<AgentConnection>();
+  return rows.results;
+}
+
+export async function revokeAgentToken(id: string, memberEmail: string): Promise<boolean> {
+  await ensureSchema();
+  const now = new Date().toISOString();
+  const result = await env.DB.prepare("UPDATE agent_tokens SET revoked_at = ? WHERE id = ? AND member_email = ? AND revoked_at IS NULL")
+    .bind(now, id, memberEmail).run();
+  if (result.meta.changes > 0) {
+    await env.DB.prepare("INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), memberEmail, "agent_disconnected", "Disconnected an assistant", JSON.stringify({ tokenId: id }), now).run();
+  }
+  return result.meta.changes > 0;
 }
 
 export async function listOpenQuestions(): Promise<OpenQuestion[]> {

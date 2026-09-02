@@ -1,6 +1,7 @@
 import { appleSignInPath, appleSignOutPath, getAppleUser } from "../apple-auth";
 import { getViewerRole } from "../authz";
-import { getSiteVisibility, listConnectedProviders, listLinksFor, resolveMemberEmail } from "../../db/store";
+import { getSiteVisibility, listAgentConnections, listConnectedProviders, listLinksFor, resolveMemberEmail } from "../../db/store";
+import { publicOrigin } from "../../lib/archive-config";
 import SettingsClient from "./SettingsClient";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,8 @@ export default async function SettingsPage() {
     <SettingsClient
       viewer={{ signedIn: Boolean(user), email: user?.email ?? null, accountEmail, displayName: user?.displayName ?? null, role, links, connectedProviders }}
       siteVisibility={siteVisibility}
+      agentConnections={role && accountEmail ? await listAgentConnections(accountEmail) : []}
+      mcpUrl={`${publicOrigin()}/api/mcp`}
       appleSignInPath={appleSignInPath("/settings")}
       googleSignInPath={process.env.GOOGLE_CLIENT_ID ? "/api/auth/google?return_to=%2Fsettings" : null}
       signOutPath={appleSignOutPath("/settings")}

@@ -132,4 +132,72 @@ step("tree_summary read", status == 200 and "people" in text, text.splitlines()[
 status, found = rpc("tools/call", {"name": "find_person", "arguments": {"query": "zzz-no-such-person"}})
 step("graceful empty find", status == 200 and "No person matching" in found["result"]["content"][0]["text"])
 
+# 7. a read-scope token must not be able to file proposals
+status, rejected = rpc("tools/call", {"name": "propose_person", "arguments": {"display_name": "Loop Probe", "source_note": "loop test"}})
+step("read-scope write rejection", status == 200 and rejected["result"]["isError"] and "reading only" in rejected["result"]["content"][0]["text"])
+
+# 8. approve again with the propose scope and file a real proposal
+def approve(scope):
+    v = b64url(secrets.token_bytes(48))[:64]
+    challenge = hashlib.sha256(v.encode()).digest()
+    form = urllib.parse.urlencode({"client_id": client_id, "redirect_uri": REDIRECT,
+                                   "code_challenge": b64url(challenge), "scope": scope,
+                                   "decision": "approve"}).encode()
+    request = urllib.request.Request(f"{ORIGIN}/oauth/authorize/approve", data=form, method="POST",
+                                     headers={"content-type": "application/x-www-form-urlencoded",
+                                              "origin": ORIGIN, "cookie": session_cookie(), "user-agent": UA})
+    try:
+        response = urllib.request.build_opener(NoRedirect()).open(request, timeout=30)
+        location = response.headers.get("Location", "")
+    except urllib.error.HTTPError as error:
+        location = error.headers.get("Location", "")
+    approved = urllib.parse.parse_qs(urllib.parse.urlparse(location).query)["code"][0]
+    _, _, body = fetch(meta["token_endpoint"], method="POST",
+                       data=urllib.parse.urlencode({"grant_type": "authorization_code", "code": approved,
+                                                    "client_id": client_id, "redirect_uri": REDIRECT,
+                                                    "code_verifier": v}).encode(),
+                       headers={"content-type": "application/x-www-form-urlencoded"})
+    return json.loads(body)
+
+propose_token = approve("propose")
+step("propose-scope token", propose_token.get("scope") == "propose")
+auth = {"authorization": f"Bearer {propose_token['access_token']}", "content-type": "application/json"}
+status, tools = rpc("tools/list")
+names = [tool["name"] for tool in tools["result"]["tools"]]
+step("propose tools listed", "propose_person" in names and "list_my_proposals" in names)
+unique = f"Loop Probe {secrets.token_hex(3)}"
+status, filed = rpc("tools/call", {"name": "propose_person", "arguments": {"display_name": unique, "birth_date": "1990", "source_note": "end-to-end loop test"}})
+step("proposal filed", status == 200 and not filed["result"].get("isError") and "Filed for family review" in filed["result"]["content"][0]["text"])
+status, mine = rpc("tools/call", {"name": "list_my_proposals", "arguments": {}})
+step("proposal listed pending", status == 200 and "[pending]" in mine["result"]["content"][0]["text"] and unique in mine["result"]["content"][0]["text"])
+
+# 9. editor review: apply the proposal through /api/proposals. In production
+# the loop member is a viewer and gets 403, which is itself the right answer.
+proposal_id = filed["result"]["content"][0]["text"].split("proposal ")[1].split(")")[0]
+status, _, body = fetch(f"{ORIGIN}/api/proposals", method="POST",
+                        data=json.dumps({"proposalId": proposal_id, "verdict": "apply"}).encode(),
+                        headers={"content-type": "application/json", "cookie": session_cookie(), "origin": ORIGIN})
+if status == 403 or status == 401:
+    step("editor apply gated for viewers", True, f"status={status}")
+else:
+    step("editor apply", status == 200 and json.loads(body).get("status") == "applied", body[:120].decode(errors="replace"))
+    status, found = rpc("tools/call", {"name": "find_person", "arguments": {"query": unique}})
+    step("applied proposal reached the tree", unique in found["result"]["content"][0]["text"])
+    status, mine = rpc("tools/call", {"name": "list_my_proposals", "arguments": {}})
+    step("proposal marked applied", "[applied]" in mine["result"]["content"][0]["text"])
+
+# 10. the member disconnects the assistant from Settings; its token dies now
+status, _, body = fetch(f"{ORIGIN}/api/agents", headers={"cookie": session_cookie()})
+connections = json.loads(body).get("connections", []) if status == 200 else []
+target = next((c for c in connections if c["scope"] == "propose"), None)
+if target:
+    status, _, body = fetch(f"{ORIGIN}/api/agents", method="POST",
+                            data=json.dumps({"tokenId": target["id"]}).encode(),
+                            headers={"content-type": "application/json", "cookie": session_cookie()})
+    step("connection revoked from settings", status == 200)
+    status, _ = rpc("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "loop-test", "version": "0"}})
+    step("revoked token rejected", status == 401)
+else:
+    step("connection listed for revocation", False, f"status={status} connections={len(connections)}")
+
 print("\nAll steps passed.")
