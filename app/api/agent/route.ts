@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { modelClient, modelConfigured, modelName } from "../../../lib/model";
 import { Buffer } from "node:buffer";
 import { strFromU8 } from "fflate";
 import { requireEditor } from "../../authz";
@@ -47,8 +47,7 @@ function archivistContext(tree: FamilyTree, conversation: string): string {
 export async function POST(request: Request) {
   const auth = await requireEditor();
   if (!auth.ok) return auth.response;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return Response.json({ error: "openai_not_configured" }, { status: 503 });
+  if (!modelConfigured()) return Response.json({ error: "openai_not_configured" }, { status: 503 });
   if (requestExceedsUploadEnvelope(request.headers)) return Response.json({ error: "files_too_large" }, { status: 413 });
 
   // a request that is not multipart throws here, outside the try below, and
@@ -134,10 +133,10 @@ export async function POST(request: Request) {
         : { type: "input_text", text: `Uploaded evidence file ${file.name} (${contentType}, ${file.size} bytes) was preserved, but its binary format cannot be read directly.` });
   }
 
-  const openai = new OpenAI({ apiKey });
+  const openai = modelClient();
   try {
     const response = await openai.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-5.4",
+      model: modelName(),
       instructions: archivistInstructions(readerLanguage),
       input: [{ role: "user", content }] as never,
       tools: archivistTools as never,

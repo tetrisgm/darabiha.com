@@ -1,5 +1,5 @@
-import OpenAI from "openai";
 import { readTree } from "../../../db/store";
+import { modelClient, modelConfigured, modelName } from "../../../lib/model";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
 import { archiveQueryRelationships } from "../../../lib/archive-query-context";
 import { isArchiveMember, requireVisitor } from "../../authz";
@@ -32,8 +32,7 @@ export async function POST(request: Request) {
   if (!access.ok) return access.response;
   const limited = await limitRequest(request, "public-ai", 30, 60 * 60);
   if (limited) return limited;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return Response.json({ error: "openai_not_configured" }, { status: 503 });
+  if (!modelConfigured()) return Response.json({ error: "openai_not_configured" }, { status: 503 });
   const body = await request.json() as { message?: unknown };
   const message = typeof body.message === "string" ? body.message.trim().slice(0, 4000) : "";
   if (!message) return Response.json({ error: "empty_message" }, { status: 400 });
@@ -41,8 +40,8 @@ export async function POST(request: Request) {
   const tree = access.visibility === "public" && !(await isArchiveMember()) ? redactLivingDetails(fullTree) : fullTree;
   const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
   try {
-    const response = await new OpenAI({ apiKey }).responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-5.4",
+    const response = await modelClient().responses.create({
+      model: modelName(),
       max_output_tokens: MAX_PUBLIC_REPLY_TOKENS,
       instructions: `You answer questions about the ${archiveName()} family archive. Use only the supplied tree data. If a fact is absent, say it is not recorded. Never invent relationships, dates, places, or biographies. Do not propose or perform changes. When asked how two people are related, use the precomputed relationships supplied below rather than working it out yourself. Write for a narrow chat column: short paragraphs, each list item on its own line beginning with "- ", and never print internal IDs.
 

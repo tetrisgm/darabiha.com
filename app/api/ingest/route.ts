@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { modelClient, modelConfigured, modelName } from "../../../lib/model";
 import { Buffer } from "node:buffer";
 import { cookies } from "next/headers";
 import { requireEditor } from "../../authz";
@@ -83,15 +83,14 @@ export async function POST() {
       const queue = await listDocumentQueue();
       return Response.json({ done: false, read: { filename: item.filename, applied, questions: reconciled.conflicts.length, report: { ...report, proposals: undefined }, summary }, pending: queue.filter((entry) => entry.status === "pending").length });
     }
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OpenAI is not configured for unstructured document reading.");
+    if (!modelConfigured()) throw new Error("OpenAI is not configured for unstructured document reading.");
     const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
     const dataUrl = `data:${file.contentType};base64,${Buffer.from(file.bytes).toString("base64")}`;
     const isImage = file.contentType.startsWith("image/");
 
-    const client = new OpenAI({ apiKey });
+    const client = modelClient();
     const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || "gpt-5.4",
+      model: modelName(),
       instructions: archivistInstructions(readerLanguage),
       input: [{
         role: "user",

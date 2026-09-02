@@ -33,6 +33,20 @@ disputed-claim adjudication, reversible audited mutations, and living-person
 redaction. Mainstream products have none of these; every new agentic surface
 must route through them rather than around them.
 
+## Status (2026-09-02)
+
+Phases 1–7 are substantially shipped (versions 199–205): config spine and
+ownership, templated prompts, README/AGENTS.md/`scripts/setup.mjs`/`npm run
+deploy`, tree scrub (history rewrite still the owner's call), hosted MCP with
+read tools, propose-scope write tools into the editor-reviewed
+`agent_proposals` queue, refresh-token rotation with replay revocation,
+genesis interview on an empty archive, env-parameterized browser suites, and
+the model seam in `lib/model.ts`. Still open: a second model provider behind
+that seam, the production run of the MCP loop (blocked on the account D1
+quota reset), i18n language-set configurability plus the fa-font conditional
+(build-time constraint), a real geocoder for the map, and the public-history
+decision.
+
 A 2026-09-01 survey found the core already generic — data model, GEDCOM
 import/export, auth mechanics, claims/provenance, agent tooling, `/demo`
 (invented people, no network). The instance coupling is: ~30 files of brand
