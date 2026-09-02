@@ -1,0 +1,71 @@
+# Agent setup contract
+
+You are setting up a self-hosted agentic family archive for the person you
+are working with. Everything here is executable by a coding agent with shell
+access; steps a human must click through are marked **HUMAN**. Read
+`README.md` for what the product is; this file is the how.
+
+## Set up a new archive
+
+1. **Preconditions.** `node >= 22.13`, `npx wrangler whoami` succeeds (else
+   have the human run `npx wrangler login`). Run `npm install`.
+2. **Provision.**
+   ```sh
+   npx wrangler d1 create <family>-tree        # note the database_id in the output
+   npx wrangler r2 bucket create <family>-tree-files
+   ```
+3. **Rewrite `wrangler.jsonc`** (it ships with the reference instance's
+   values — replace them all):
+   - `name`: the Worker name, e.g. `<family>-tree`
+   - `d1_databases[0]`: your `database_name` + `database_id` (binding stays `DB`)
+   - `r2_buckets[0]`: your `bucket_name` (binding stays `FILES`)
+   - delete the `routes` block (serves from `workers.dev`) or set the
+     human's own zone
+   - `vars`: `PUBLIC_ORIGIN` (the workers.dev URL until a domain exists),
+     `OWNER_EMAIL` (the human's sign-in email — required; an empty database
+     refuses to start without it), `ARCHIVE_NAME`, `ARCHIVE_TAGLINE`, and
+     optionally `ARCHIVE_NAME_<LANG>` and `ARCHIVE_PROMPT_CONTEXT` (ask the
+     human which languages/calendars their family's records use).
+4. **Secrets.** Generate and set the session secret yourself:
+   ```sh
+   openssl rand -base64 48 | npx wrangler secret put AUTH_SESSION_SECRET
+   ```
+   `OPENAI_API_KEY`: ask the human for a key (never echo it; pipe it to
+   `wrangler secret put`). Without it the site deploys fine and AI features
+   return 503, so this can wait.
+5. **Sign-in providers.** **HUMAN** — these need developer-console clicks:
+   - Google: create an OAuth client (web) in Google Cloud Console with
+     redirect URI `<PUBLIC_ORIGIN>/api/auth/google/callback`; set the
+     `GOOGLE_CLIENT_ID` var and `GOOGLE_CLIENT_SECRET` secret. To publish
+     past test mode, Google requires privacy-policy and terms links — this
+     app serves them at `/privacy` and `/terms`.
+   - Apple (optional): a Services ID, key, and team ID; callback
+     `<PUBLIC_ORIGIN>/api/auth/apple/callback`; vars
+     `APPLE_CLIENT_ID`/`APPLE_TEAM_ID`/`APPLE_KEY_ID`, secret `APPLE_PRIVATE_KEY`.
+   At least one provider must be configured or nobody can sign in.
+6. **Deploy and verify.**
+   ```sh
+   npm run deploy
+   curl -fsS <PUBLIC_ORIGIN>/api/version     # {"version":...} proves the Worker is up
+   ```
+   The schema self-creates at first request; there is no migration step.
+7. **First sign-in.** **HUMAN** signs in with the `OWNER_EMAIL` account and
+   lands as admin. Offer to walk them through Settings → Members & access
+   (visibility: public / members / password) and their first GEDCOM import
+   or archivist conversation.
+
+## Working on the code
+
+- Run `npm run gate` (tests, typecheck, lint, build) before any push; lint
+  and typecheck are separate gates because `npm run build` runs neither.
+- `npm run test:browser` targets the deployed site; set `PLAYWRIGHT_BASE_URL`
+  to test elsewhere. It needs a member session — see the note at the top of
+  `tests/browser/public-tree.spec.ts`.
+- Deployment identity: bump `VERSION`/`BUILD_ID` in `lib/build.ts` with each
+  production release; `/api/version` and the page corner expose it uncached.
+- The store keeps the archive readable through D1 daily-read-quota
+  exhaustion via R2 snapshots (`system/*` objects) and a per-isolate circuit
+  breaker (`db/store.ts`). Never write those snapshot objects by hand with a
+  shell that appends a newline; `lib/tree-snapshot.ts` documents the shapes.
+- Working notes and decisions live in `docs/HANDOFF.md`; the platform roadmap
+  is `docs/PLATFORM.md`.
