@@ -1,9 +1,10 @@
 import { listChangeLog } from "../../db/store";
 import { requireEditor } from "../authz";
 import UndoChangeButton from "./UndoChangeButton";
+import { archiveName } from "../../lib/archive-config";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "History · Darabiha" };
+export function generateMetadata() { return { title: `History · ${archiveName()}` }; }
 
 const KIND_LABELS: Record<string, string> = {
   add_person: "Added a person", update_person: "Updated a record", delete_person: "Removed a person",

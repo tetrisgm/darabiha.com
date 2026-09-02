@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { Cormorant_Garamond, Plus_Jakarta_Sans, Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { isRtl, LANG_COOKIE, parseLang } from "../lib/i18n";
+import { archiveName, archiveTagline, publicOrigin } from "../lib/archive-config";
 
 const sans = Plus_Jakarta_Sans({ variable: "--font-sans", subsets: ["latin"] });
 // Persian needs a face with real Arabic-script coverage; Vazirmatn is the
@@ -20,22 +21,26 @@ const serif = Cormorant_Garamond({
    and then keep content out of those insets yourself, which globals.css does. */
 export const viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" as const };
 
-export const metadata: Metadata = {
-  metadataBase: new URL("https://darabiha.com"),
-  title: "Darabiha · Our family tree",
-  description: "A living record of the Darabi family, built together.",
-  openGraph: {
-    title: "Darabiha",
-    description: "A living record of the Darabi family.",
-    images: [{ url: "/og.png", width: 1200, height: 630 }],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Darabiha",
-    description: "A living record of the Darabi family.",
-    images: ["/og.png"],
-  },
-};
+export function generateMetadata(): Metadata {
+  const name = archiveName();
+  const tagline = archiveTagline();
+  return {
+    metadataBase: new URL(publicOrigin()),
+    title: `${name} · Our family tree`,
+    description: tagline,
+    openGraph: {
+      title: name,
+      description: tagline,
+      images: [{ url: "/og.png", width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: name,
+      description: tagline,
+      images: ["/og.png"],
+    },
+  };
+}
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);

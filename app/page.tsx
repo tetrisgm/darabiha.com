@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import FamilyTreeApp from "./components/FamilyTreeApp";
 import { LanguageProvider } from "./components/LanguageContext";
-import { LANG_COOKIE, parseLang } from "../lib/i18n";
+import { LANG_COOKIE, LANGUAGES, parseLang } from "../lib/i18n";
+import { archiveName, archiveNames } from "../lib/archive-config";
 import { appleSignInPath, appleSignOutPath, getAppleUser } from "./apple-auth";
 import { getViewerRole, visitorGate, TEMPORARY_OPEN_EDITOR } from "./authz";
 import { getMemberPerson } from "../db/store";
@@ -19,7 +20,7 @@ export default async function Home() {
     return (
       <main className="settings-page visit-gate">
         <section className="settings-panel">
-          <p className="eyebrow settings-eyebrow">Darabiha</p>
+          <p className="eyebrow settings-eyebrow">{archiveName()}</p>
           <h1>A family archive</h1>
           <PasswordGate />
         </section>
@@ -30,7 +31,7 @@ export default async function Home() {
     return (
       <main className="settings-page visit-gate">
         <section className="settings-panel">
-          <p className="eyebrow settings-eyebrow">Darabiha</p>
+          <p className="eyebrow settings-eyebrow">{archiveName()}</p>
           <h1>A family archive</h1>
           <div className="settings-card">
             <p>{user
@@ -48,7 +49,7 @@ export default async function Home() {
   }
   const lang = parseLang((await cookies()).get(LANG_COOKIE)?.value);
   return (
-    <LanguageProvider initial={lang}>
+    <LanguageProvider initial={lang} archive={archiveNames(LANGUAGES)}>
       <FamilyTreeApp
         initialTree={null}
         viewer={{ signedIn: Boolean(user), canEdit: TEMPORARY_OPEN_EDITOR || role === "admin" || role === "canEdit", role, displayName: user?.displayName ?? null, personId: user && role ? await getMemberPerson(user.email) : null }}

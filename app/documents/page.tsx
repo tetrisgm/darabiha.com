@@ -1,9 +1,10 @@
 import { listAttachments, listDocumentQueue } from "../../db/store";
 import { requireEditor } from "../authz";
 import DocumentQueue from "./DocumentQueue";
+import { archiveName } from "../../lib/archive-config";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Documents · Darabiha" };
+export function generateMetadata() { return { title: `Documents · ${archiveName()}` }; }
 
 const KB = 1024;
 const size = (bytes: number) => bytes > KB * KB ? `${(bytes / (KB * KB)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / KB))} KB`;

@@ -12,7 +12,7 @@ export const useLanguage = () => useContext(LanguageContext);
 /** The language lives in a cookie so the server-rendered pages (settings,
  * documents, history) and the client agree without a round trip. Changing it
  * reloads, which is the honest way to re-render a whole document's direction. */
-export function LanguageProvider({ initial, children }: { initial: Lang; children: React.ReactNode }) {
+export function LanguageProvider({ initial, archive, children }: { initial: Lang; archive?: Partial<Record<Lang, string>>; children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(initial);
   const setLang = useCallback((next: Lang) => {
     const chosen = parseLang(next);
@@ -20,6 +20,7 @@ export function LanguageProvider({ initial, children }: { initial: Lang; childre
     setLangState(chosen);
     window.location.reload();
   }, []);
-  const value = useMemo<LanguageValue>(() => ({ lang, setLang, t: (key, vars) => translate(lang, key, vars) }), [lang, setLang]);
+  // every string may name the archive; {archive} resolves per language
+  const value = useMemo<LanguageValue>(() => ({ lang, setLang, t: (key, vars) => translate(lang, key, { archive: archive?.[lang] ?? archive?.en ?? "", ...vars }) }), [lang, setLang, archive]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }

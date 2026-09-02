@@ -17,10 +17,10 @@ export default function DemoClient() {
   const [message, setMessage] = useState("This sandbox uses invented people and resets in your browser.");
   const [undo, setUndo] = useState<FamilyTree | null>(null);
   function importFixture() { setUndo(tree); setTree(IMPORTED); setMessage("Imported 4 people and 6 parent/spouse links from sample-family.ged. No conflicts found."); }
-  function reset() { setTree(BASE); setSelected(null); setUndo(null); setMessage("Sandbox reset. Nothing here touches the Darabiha archive."); }
+  function reset() { setTree(BASE); setSelected(null); setUndo(null); setMessage("Sandbox reset. Nothing here touches the family archive."); }
   return <main className="demo-shell">
     <aside className="demo-sidebar">
-      <Link className="settings-back-pill" href="/">← Darabiha</Link><div><p className="eyebrow">Safe sample</p><h1>Meet the family archivist.</h1><p>Try the core loop with synthetic records: import a structured family file, inspect the graph, and undo it.</p></div>
+      <Link className="settings-back-pill" href="/">← Back to the archive</Link><div><p className="eyebrow">Safe sample</p><h1>Meet the family archivist.</h1><p>Try the core loop with synthetic records: import a structured family file, inspect the graph, and undo it.</p></div>
       <div className="settings-card"><strong>Archivist</strong><p>{message}</p></div>
       {selected && <div className="settings-card"><p className="eyebrow">Person</p><h2>{selected.displayName}</h2><p>Born {selected.birthDate}. This sample profile contains no real person or private source.</p></div>}
       <div className="demo-actions"><button type="button" onClick={importFixture} disabled={tree.people.length > BASE.people.length}>Import sample GEDCOM</button>{undo && <button type="button" onClick={() => { setTree(undo); setUndo(null); setSelected(null); setMessage("Import undone in one step."); }}>Undo</button>}<button type="button" onClick={reset}>Reset</button></div>

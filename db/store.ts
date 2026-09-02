@@ -554,7 +554,7 @@ export async function readTree(): Promise<FamilyTree> {
 
 async function readTreeFromDatabase(): Promise<FamilyTree> {
   await ensureSchema();
-  const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult, storyAttachmentsResult, personPhotosResult] = await Promise.all([
+  const [peopleResult, relationshipsResult, storiesResult, storyPeopleResult, storyAttachmentsResult, personPhotosResult, rootPersonResult] = await Promise.all([
     env.DB.prepare(`SELECT id, display_name AS displayName, gender, given_name AS givenName,
       family_name AS familyName, maiden_name AS maidenName, birth_date AS birthDate, death_date AS deathDate,
       birth_place AS birthPlace, death_place AS deathPlace, birth_city AS birthCity, birth_country AS birthCountry,
@@ -565,6 +565,7 @@ async function readTreeFromDatabase(): Promise<FamilyTree> {
     env.DB.prepare(`SELECT story_id AS storyId, person_id AS personId FROM story_people`).all<{ storyId: string; personId: string }>(),
     env.DB.prepare(`SELECT story_id AS storyId, attachment_id AS attachmentId FROM story_attachments`).all<{ storyId: string; attachmentId: string }>(),
     env.DB.prepare(`SELECT person_id AS personId, attachment_id AS attachmentId FROM person_photos ORDER BY created_at`).all<{ personId: string; attachmentId: string }>(),
+    env.DB.prepare("SELECT value FROM site_settings WHERE key = 'root_person_id'").first<{ value: string }>(),
   ]);
   const links = new Map<string, string[]>();
   for (const row of storyPeopleResult.results) links.set(row.storyId, [...(links.get(row.storyId) ?? []), row.personId]);
@@ -582,6 +583,7 @@ async function readTreeFromDatabase(): Promise<FamilyTree> {
     }),
     relationships: relationshipsResult.results,
     stories: storiesResult.results.map((story) => ({ ...story, personIds: links.get(story.id) ?? [], attachmentIds: attachmentLinks.get(story.id) ?? [] })),
+    rootPersonId: rootPersonResult?.value ?? null,
   };
   treeJsonCache = { body: JSON.stringify(tree), time: Date.now() };
   waitUntil(env.FILES.put(TREE_SNAPSHOT_OBJECT_KEY, treeJsonCache.body, {

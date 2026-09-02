@@ -11,6 +11,27 @@ export function archiveName(): string {
   return (process.env.ARCHIVE_NAME || "").trim() || "Family Archive";
 }
 
+/** The deployment's operator, for legal-page contact lines. Same variable
+ * that seeds the first admin, so it exists on every working deployment. */
+export function ownerEmail(): string {
+  return (process.env.OWNER_EMAIL || "").trim().toLowerCase();
+}
+
+export function archiveTagline(): string {
+  return (process.env.ARCHIVE_TAGLINE || "").trim() || "A living family record, built together.";
+}
+
+/** The archive's name per interface language. A family whose name is
+ * written differently in another script sets ARCHIVE_NAME_<LANG>
+ * (e.g. ARCHIVE_NAME_FA); everything else inherits ARCHIVE_NAME. */
+export function archiveNames(languages: readonly string[]): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const lang of languages) {
+    names[lang] = (process.env[`ARCHIVE_NAME_${lang.toUpperCase()}`] || "").trim() || archiveName();
+  }
+  return names;
+}
+
 /** The origin's host, for identities that must align with the sending
  * domain (SMTP EHLO, Message-ID) or name the deployment (GEDCOM source). */
 export function archiveDomain(): string {

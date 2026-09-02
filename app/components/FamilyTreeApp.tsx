@@ -316,7 +316,8 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   const focal = useMemo(() => {
     const explicit = focalId ? tree.people.find((person) => person.id === focalId) : undefined;
     if (explicit) return explicit;
-    return tree.people.find((person) => person.displayName === "Nasser Darabiha") ?? tree.people[0];
+    // the archive's own root-person setting decides where a stranger lands
+    return (tree.rootPersonId ? tree.people.find((person) => person.id === tree.rootPersonId) : undefined) ?? tree.people[0];
   }, [tree, focalId]);
 
   return (
@@ -464,7 +465,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
         </section>
 
       </div>
-      <span className="build-version" aria-label={`Darabiha version ${VERSION}`}>Version {VERSION}</span>
+      <span className="build-version" aria-label={`Archive version ${VERSION}`}>Version {VERSION}</span>
     </main>
   );
 }

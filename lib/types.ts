@@ -91,6 +91,9 @@ export type FamilyTree = {
   people: Person[];
   relationships: Relationship[];
   stories: Story[];
+  /** The person the tree opens on for a viewer who has not identified
+   * themselves - a per-archive setting, not a hardcoded name. */
+  rootPersonId?: string | null;
 };
 
 export type AddPersonProposal = {
