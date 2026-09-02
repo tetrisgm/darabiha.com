@@ -374,12 +374,17 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto pr-1">
                   {!selectedPerson && <div className="max-w-[18rem] rounded-2xl rounded-tl-sm border border-[var(--line)] bg-[var(--card)] px-4 py-3 text-sm leading-6 shadow-sm">
-                    {t("chat.welcome", { name: viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : "" })}
+                    {treeLoaded && tree.people.length === 0
+                      ? t("chat.genesis", { name: viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : "" })
+                      : t("chat.welcome", { name: viewer.displayName ? `, ${viewer.displayName.split(" ")[0]}` : "" })}
                   </div>}
                   {!selectedPerson && greeting?.fact && messages.length === 0 && <button type="button" className="chat-fact" onClick={openGreetingPerson} disabled={!greeting.personId}>
                     <span className="chat-fact-label">{t("chat.fromArchive")}</span>
                     <span>{greeting.fact}</span>
                   </button>}
+                  {messages.length === 0 && treeLoaded && tree.people.length === 0 && !selectedPerson && <div className="chat-suggestions">{[
+                    t("chat.genesisMe"), t("chat.genesisParents"), t("chat.genesisImport"),
+                  ].map((prompt) => <button type="button" className="chat-suggestion" key={prompt} onClick={() => { setInput(prompt); inputRef.current?.focus(); }}>{prompt}</button>)}</div>}
                   {messages.length === 0 && (selectedPerson
                     ? <div className="chat-suggestions">{[
                         `What do we know about ${selectedPerson.displayName.split(" ")[0]}?`,
@@ -563,9 +568,12 @@ function PlacePanel({ place, onPick, onClose }: { place: MappedPlace; onPick: (p
 }
 
 function EmptyTree({ canEdit }: { canEdit: boolean }) {
+  const { t } = useLanguage();
+  // the monogram is the archive's own initial, not the reference instance's
+  const monogram = (t("archive.name") || "A").trim().charAt(0).toUpperCase();
   return (
     <div className="m-auto flex max-w-md flex-col items-center py-20 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--wash)] font-serif text-2xl text-[var(--accent)]">D</span>
+      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--wash)] font-serif text-2xl text-[var(--accent)]">{monogram}</span>
       <h2 className="mt-5 font-serif text-3xl tracking-[-.025em] text-white">The first branch starts here.</h2>
       <p className="mt-3 text-sm leading-6 text-slate-300">{canEdit ? "Tell the archivist about one family member to begin the record." : "The family is gathering names, dates, photographs, and stories for this living archive."}</p>
     </div>
