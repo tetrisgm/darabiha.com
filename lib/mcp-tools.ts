@@ -11,13 +11,18 @@
 import type { FamilyTree, Person } from "./types";
 import { describeRelationship, relationshipSentence } from "./relationship-path";
 import { archiveName } from "./archive-config";
+import { familyInYear, familyOrigins, kinshipToEgo, lifeStory, namesakes, upcomingDates } from "./family-answers";
 
 type JsonSchema = Record<string, unknown>;
+export type McpToolContext = {
+  /** the person in the tree the connected member says they are, when linked */
+  egoId: string | null;
+};
 export type McpTool = {
   name: string;
   description: string;
   inputSchema: JsonSchema;
-  handler: (args: Record<string, unknown>, tree: FamilyTree) => string;
+  handler: (args: Record<string, unknown>, tree: FamilyTree, context: McpToolContext) => string;
 };
 
 const lifespan = (person: Person) => {
@@ -32,6 +37,18 @@ function personOrThrow(tree: FamilyTree, id: unknown): Person {
   const person = typeof id === "string" ? tree.people.find((candidate) => candidate.id === id) : undefined;
   if (!person) throw new Error(`No person with id ${String(id)}. Use find_person to look up ids by name.`);
   return person;
+}
+
+/** Resolve by id or by name - intent questions arrive with names. */
+function resolvePerson(tree: FamilyTree, args: Record<string, unknown>): Person {
+  if (typeof args.person_id === "string" && args.person_id) return personOrThrow(tree, args.person_id);
+  const query = String(args.name ?? "").trim().toLowerCase();
+  if (!query) throw new Error("Give a name or a person_id.");
+  const exact = tree.people.filter((person) => person.displayName.toLowerCase() === query);
+  const matches = exact.length ? exact : tree.people.filter((person) => person.displayName.toLowerCase().includes(query));
+  if (!matches.length) throw new Error(`No one named "${args.name}" is recorded. Try find_person.`);
+  if (matches.length > 1) throw new Error(`Several people match "${args.name}": ${matches.slice(0, 8).map(brief).join("; ")}. Use the exact name or a person_id.`);
+  return matches[0];
 }
 
 function relativesOf(tree: FamilyTree, id: string) {
@@ -138,6 +155,55 @@ export const MCP_TOOLS: McpTool[] = [
     },
   },
 ];
+
+/* The intent tools: the questions families actually ask, not record CRUD.
+ * Grounded in what people bring to any family tree - "how am I related to
+ * her", "what was his life like", "where do we come from", "who am I named
+ * after", "whose birthday is coming" - the questions incumbent genealogy
+ * APIs cannot answer because they stop at persons-and-relationships. */
+export const MCP_INTENT_TOOLS: McpTool[] = [
+  {
+    name: "how_am_i_related",
+    description: "How the connected member is related to a named person, in kinship words (\"your second cousin once removed\") from their own point of view. The single most-asked family question - prefer this over relationship_path when the asker means themselves.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, person_id: { type: "string" } }, additionalProperties: false },
+    handler: (args, tree, context) => kinshipToEgo(tree, context.egoId, resolvePerson(tree, args).id),
+  },
+  {
+    name: "life_of",
+    description: "A person's life told in order - birth, parents, marriages, children, places, stories, death and age - rather than a field dump. Use for \"what was her life like?\" and for introducing a person.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, person_id: { type: "string" } }, additionalProperties: false },
+    handler: (args, tree) => lifeStory(tree, resolvePerson(tree, args).id),
+  },
+  {
+    name: "family_origins",
+    description: "Where the family comes from: recorded birth places by generation, oldest first, so migrations read as movement. Answers \"where are we from?\".",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    handler: (_args, tree) => familyOrigins(tree),
+  },
+  {
+    name: "family_in_year",
+    description: "A snapshot of the family in a given year: who was born, who died, who was alive and their ages. Answers \"what was the family like when …\".",
+    inputSchema: { type: "object", properties: { year: { type: "integer" } }, required: ["year"], additionalProperties: false },
+    handler: (args, tree) => {
+      const when = Number(args.year);
+      if (!Number.isInteger(when) || when < 1000 || when > 3000) throw new Error("Give a four-digit year.");
+      return familyInYear(tree, when);
+    },
+  },
+  {
+    name: "namesakes",
+    description: "Everyone who carries a given name across the generations, eldest line first. Answers \"who am I named after?\" - names handed down usually honour the earlier bearer.",
+    inputSchema: { type: "object", properties: { given_name: { type: "string" } }, required: ["given_name"], additionalProperties: false },
+    handler: (args, tree) => namesakes(tree, String(args.given_name ?? "")),
+  },
+  {
+    name: "upcoming_family_dates",
+    description: "Birthdays of the living and remembrance anniversaries in the next month, from fully dated records.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    handler: (_args, tree) => upcomingDates(tree),
+  },
+];
+MCP_TOOLS.push(...MCP_INTENT_TOOLS);
 
 export function findMcpTool(name: string): McpTool | null {
   return MCP_TOOLS.find((candidate) => candidate.name === name) ?? null;

@@ -24,7 +24,7 @@ const build = (name: string, args: Record<string, unknown>) => {
 
 describe("mcp write tool builders", () => {
   it("builds a valid add_person proposal and demands a source note", () => {
-    const { proposal, note } = build("propose_person", { display_name: "Kian Golestani", birth_date: "1998", source_note: "his cousin told me" });
+    const { proposals: [proposal], note } = build("propose_person", { display_name: "Kian Golestani", birth_date: "1998", source_note: "his cousin told me" });
     expect(isChangeProposal(proposal)).toBe(true);
     expect(proposal.kind).toBe("add_person");
     expect(note).toBe("his cousin told me");
@@ -37,7 +37,7 @@ describe("mcp write tool builders", () => {
   it("builds a relationship proposal only between recorded people", () => {
     const child = { ...tree, people: [...tree.people, person("p3", "Roya Golestani")] };
     const tool = MCP_WRITE_TOOLS.find((candidate) => candidate.name === "propose_relationship")!;
-    const { proposal } = tool.build({ from_person_id: "p1", to_person_id: "p3", relationship_type: "parent", source_note: "x" }, child);
+    const { proposals: [proposal] } = tool.build({ from_person_id: "p1", to_person_id: "p3", relationship_type: "parent", source_note: "x" }, child);
     expect(isChangeProposal(proposal)).toBe(true);
     expect(() => build("propose_relationship", { from_person_id: "p1", to_person_id: "missing", relationship_type: "parent", source_note: "x" })).toThrow(/find_person/);
   });
@@ -47,12 +47,12 @@ describe("mcp write tool builders", () => {
   });
 
   it("builds a story proposal linked to known people", () => {
-    const { proposal } = build("propose_story", { title: "The wedding", body: "It rained.", person_ids: ["p1", "p2"], source_note: "family letter" });
+    const { proposals: [proposal] } = build("propose_story", { title: "The wedding", body: "It rained.", person_ids: ["p1", "p2"], source_note: "family letter" });
     expect(isChangeProposal(proposal)).toBe(true);
     expect(proposal.kind).toBe("add_story");
   });
 
   it("offers no destructive tools", () => {
-    expect(MCP_WRITE_TOOLS.map((tool) => tool.name).sort()).toEqual(["propose_person", "propose_relationship", "propose_story"]);
+    expect(MCP_WRITE_TOOLS.map((tool) => tool.name).sort()).toEqual(["propose_person", "propose_relationship", "propose_story", "record_life_event"]);
   });
 });

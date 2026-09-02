@@ -41,7 +41,7 @@ test("the page registers its WebMCP tools with the browser agent", async ({ page
   await expect(page.locator('main[data-hydrated="true"]')).toBeAttached();
   await expect.poll(() => page.evaluate(() => Object.keys((window as unknown as { __webmcp: Record<string, unknown> }).__webmcp))).toContain("show_person_on_canvas");
   const names = await page.evaluate(() => Object.keys((window as unknown as { __webmcp: Record<string, unknown> }).__webmcp).sort());
-  expect(names).toEqual(["ask_the_archivist", "how_are_they_related", "overview_of_family_tree", "person_details", "search_family", "show_person_on_canvas", "switch_view"]);
+  expect(names).toEqual(["ask_the_archivist", "family_in_year", "family_origins", "how_am_i_related", "how_are_they_related", "life_of", "namesakes", "overview_of_family_tree", "person_details", "search_family", "show_person_on_canvas", "switch_view", "upcoming_family_dates"]);
 });
 
 test("a WebMCP tool call moves the real UI", async ({ page }) => {

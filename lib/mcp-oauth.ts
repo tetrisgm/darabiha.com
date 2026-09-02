@@ -200,7 +200,7 @@ export async function rotateRefreshToken(input: { refreshToken: string; clientId
   return { ok: true, body: { access_token: accessToken, refresh_token: refreshToken, token_type: "Bearer", expires_in: ACCESS_TOKEN_TTL_SECONDS, scope: presented.scope as McpScope } };
 }
 
-export type AgentIdentity = { memberEmail: string; clientName: string; scope: McpScope; role: "admin" | "canEdit" | "canView" };
+export type AgentIdentity = { memberEmail: string; clientName: string; scope: McpScope; role: "admin" | "canEdit" | "canView"; personId: string | null };
 
 /** Resolves a presented bearer token to a live member. Role is re-read on
  * every call so removing someone from the member list revokes their agents. */
@@ -209,14 +209,14 @@ export async function resolveAgentToken(authorization: string | null): Promise<A
   if (!token || !token.startsWith("dat_")) return null;
   await ensureSchema();
   const now = new Date().toISOString();
-  const row = await env.DB.prepare(`SELECT t.id, t.member_email AS memberEmail, t.client_name AS clientName, t.scope, m.role
+  const row = await env.DB.prepare(`SELECT t.id, t.member_email AS memberEmail, t.client_name AS clientName, t.scope, m.role, m.person_id AS personId
       FROM agent_tokens t JOIN members m ON m.email = t.member_email
       WHERE t.token_hash = ? AND t.revoked_at IS NULL AND t.expires_at > ?`)
     .bind(await sha256Base64Url(token), now)
-    .first<{ id: string; memberEmail: string; clientName: string; scope: string; role: "admin" | "canEdit" | "canView" }>();
+    .first<{ id: string; memberEmail: string; clientName: string; scope: string; role: "admin" | "canEdit" | "canView"; personId: string | null }>();
   if (!row) return null;
   await env.DB.prepare("UPDATE agent_tokens SET last_used_at = ? WHERE id = ?").bind(now, row.id).run();
-  return { memberEmail: row.memberEmail, clientName: row.clientName, scope: row.scope as McpScope, role: row.role };
+  return { memberEmail: row.memberEmail, clientName: row.clientName, scope: row.scope as McpScope, role: row.role, personId: row.personId };
 }
 
 /** RFC 8414 + 9728 documents; every MCP client discovery starts here. */

@@ -125,7 +125,9 @@ status, initialized = rpc("initialize", {"protocolVersion": "2025-06-18", "capab
 step("mcp initialize", status == 200 and "serverInfo" in initialized.get("result", {}))
 status, tools = rpc("tools/list")
 names = sorted(tool["name"] for tool in tools["result"]["tools"])
-step("tool registry", names == ["find_person", "list_stories", "person_record", "relationship_path", "story", "tree_summary"], str(names))
+step("tool registry", names == ["family_in_year", "family_origins", "find_person", "how_am_i_related", "life_of",
+                                "list_stories", "namesakes", "person_record", "relationship_path", "story",
+                                "tree_summary", "upcoming_family_dates"], str(names))
 status, summary = rpc("tools/call", {"name": "tree_summary", "arguments": {}})
 text = summary["result"]["content"][0]["text"]
 step("tree_summary read", status == 200 and "people" in text, text.splitlines()[0][:90])

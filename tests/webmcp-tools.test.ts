@@ -25,7 +25,7 @@ const tree: FamilyTree = {
 const actions = (): WebMcpActions & { focused: Person[]; views: string[] } => {
   const focused: Person[] = [];
   const views: string[] = [];
-  return { focused, views, focusPerson: (p) => focused.push(p), setView: (v) => views.push(v), askArchivist: vi.fn(async () => "archivist says hi") };
+  return { focused, views, egoId: "p3", focusPerson: (p) => focused.push(p), setView: (v) => views.push(v), askArchivist: vi.fn(async () => "archivist says hi") };
 };
 
 const run = (name: string, args: Record<string, unknown>, act: WebMcpActions) => {

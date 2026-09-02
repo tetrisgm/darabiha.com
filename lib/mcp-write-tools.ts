@@ -14,7 +14,9 @@ export type McpWriteTool = {
   name: string;
   description: string;
   inputSchema: JsonSchema;
-  build: (args: Record<string, unknown>, tree: FamilyTree) => { proposal: ChangeProposal; note: string | null };
+  /** One intent may yield several proposals (a birth is a person plus its
+   * parent links); each is filed separately so editors review them adjacent. */
+  build: (args: Record<string, unknown>, tree: FamilyTree) => { proposals: ChangeProposal[]; note: string | null };
 };
 
 const text = (value: unknown, maximum: number): string | null => {
@@ -67,7 +69,7 @@ export const MCP_WRITE_TOOLS: McpWriteTool[] = [
       const existing = tree.people.filter((person) => person.displayName.toLowerCase() === displayName.toLowerCase());
       if (existing.length) throw new Error(`${displayName} may already be recorded (${existing.map((person) => person.id).join(", ")}). Look at the existing record first; if this is truly a different person, say so in source_note and retry with a distinguishing detail in the name.`);
       return {
-        proposal: validated({
+        proposals: [validated({
           kind: "add_person",
           summary: `Add ${displayName}`,
           person: {
@@ -80,7 +82,7 @@ export const MCP_WRITE_TOOLS: McpWriteTool[] = [
             birthCountry: text(args.birth_country, 500),
             biography: text(args.biography, 50_000),
           },
-        }),
+        })],
         note: note(args),
       };
     },
@@ -109,13 +111,13 @@ export const MCP_WRITE_TOOLS: McpWriteTool[] = [
         && ((link.fromPersonId === from.id && link.toPersonId === to.id) || (type === "spouse" && link.fromPersonId === to.id && link.toPersonId === from.id)));
       if (already) throw new Error("That relationship is already recorded.");
       return {
-        proposal: validated({
+        proposals: [validated({
           kind: "add_relationship",
           summary: type === "parent" ? `Record ${from.displayName} as a parent of ${to.displayName}` : `Record the marriage of ${from.displayName} and ${to.displayName}`,
           fromPersonId: from.id,
           toPersonId: to.id,
           relationshipType: type,
-        }),
+        })],
         note: note(args),
       };
     },
@@ -141,7 +143,7 @@ export const MCP_WRITE_TOOLS: McpWriteTool[] = [
       if (!title || !body) throw new Error("title and body are required.");
       const personIds = Array.isArray(args.person_ids) ? args.person_ids.slice(0, 32).map((id) => requirePerson(tree, id, "person_ids").id) : [];
       return {
-        proposal: validated({
+        proposals: [validated({
           kind: "add_story",
           summary: `Add the story “${title}”`,
           title, body,
@@ -149,9 +151,66 @@ export const MCP_WRITE_TOOLS: McpWriteTool[] = [
           place: text(args.place, 500),
           personIds,
           attachmentIds: [],
-        }),
+        })],
         note: note(args),
       };
+    },
+  },
+  {
+    name: "record_life_event",
+    description: "Record a family event as one intent - a birth (\"Sara had a boy named Dara in March 2026\") or a marriage - and the right proposals are composed and filed together for editor review. Prefer this over separate propose_person/propose_relationship calls for births and marriages.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        event: { type: "string", enum: ["birth", "marriage"] },
+        person_name: { type: "string", description: "Birth: the new child's full name. Marriage: one spouse (must already be recorded, or include their details in a propose_person first)." },
+        other_name: { type: "string", description: "Marriage: the other spouse's full name (recorded, or new)." },
+        date: { type: "string", description: "YYYY, YYYY-MM, or YYYY-MM-DD." },
+        gender: { type: "string", enum: ["male", "female"] },
+        parent_names: { type: "array", items: { type: "string" }, description: "Birth: the recorded parents (one or two names)." },
+        source_note: { type: "string" },
+      },
+      required: ["event", "person_name", "source_note"],
+      additionalProperties: false,
+    },
+    build: (args, tree) => {
+      const resolveByName = (query: string): Person | null => {
+        const needle = query.trim().toLowerCase();
+        const exact = tree.people.filter((person) => person.displayName.toLowerCase() === needle);
+        if (exact.length > 1) throw new Error(`Several people are named ${query}; use their exact full names.`);
+        return exact[0] ?? null;
+      };
+      const personName = text(args.person_name, 300);
+      if (!personName) throw new Error("person_name is required.");
+      const proposals: ChangeProposal[] = [];
+      if (args.event === "birth") {
+        if (resolveByName(personName)) throw new Error(`${personName} is already recorded; a birth adds someone new.`);
+        const parents = (Array.isArray(args.parent_names) ? args.parent_names : []).slice(0, 2).map((name) => {
+          const parent = resolveByName(String(name));
+          if (!parent) throw new Error(`Parent "${name}" is not recorded yet - propose them first, then record the birth.`);
+          return parent;
+        });
+        proposals.push(validated({
+          kind: "add_person",
+          summary: `Record the birth of ${personName}${parents.length ? `, child of ${parents.map((p) => p.displayName).join(" and ")}` : ""}`,
+          person: { ...emptyPerson, displayName: personName, gender: args.gender === "male" || args.gender === "female" ? args.gender : null, birthDate: text(args.date, 100) },
+          relationshipHints: parents.map((parent) => ({ personName: parent.displayName, relationshipType: "parent" as const })),
+        }));
+      } else if (args.event === "marriage") {
+        const otherName = text(args.other_name, 300);
+        if (!otherName) throw new Error("A marriage needs other_name.");
+        const a = resolveByName(personName);
+        const b = resolveByName(otherName);
+        if (!a) throw new Error(`${personName} is not recorded yet - propose them first.`);
+        if (!b) {
+          proposals.push(validated({ kind: "add_person", summary: `Add ${otherName}, marrying ${a.displayName}`, person: { ...emptyPerson, displayName: otherName }, relationshipHints: [{ personName: a.displayName, relationshipType: "spouse" }] }));
+        } else {
+          proposals.push(validated({ kind: "add_relationship", summary: `Record the marriage of ${a.displayName} and ${b.displayName}${text(args.date, 100) ? ` (${text(args.date, 100)})` : ""}`, fromPersonId: a.id, toPersonId: b.id, relationshipType: "spouse" }));
+        }
+      } else {
+        throw new Error("event must be birth or marriage. Record a death as a suggest_correction to the person's record for now.");
+      }
+      return { proposals, note: note(args) };
     },
   },
 ];

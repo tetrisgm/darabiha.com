@@ -235,6 +235,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
   // archive's tools with no token - it acts as the member already signed in
   // here - and, uniquely, can move the live UI (focus a person, switch view).
   useWebMcp(treeLoaded ? tree : null, {
+    egoId: identity ?? viewer.personId ?? null,
     focusPerson: (person) => openPerson(person),
     setView: (view) => setViewMode(view as ViewMode),
     askArchivist: async (question) => {

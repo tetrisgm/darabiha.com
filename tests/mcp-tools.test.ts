@@ -27,7 +27,7 @@ const tree: FamilyTree = {
 const run = (name: string, args: Record<string, unknown> = {}) => {
   const tool = MCP_TOOLS.find((candidate) => candidate.name === name);
   if (!tool) throw new Error(`missing tool ${name}`);
-  return tool.handler(args, tree);
+  return tool.handler(args, tree, { egoId: "p3" });
 };
 
 describe("mcp tool registry", () => {
@@ -64,7 +64,8 @@ describe("mcp tool registry", () => {
 
   it("declares every tool read-only through the registry shape", () => {
     expect(MCP_TOOLS.map((tool) => tool.name).sort()).toEqual(
-      ["find_person", "list_stories", "person_record", "relationship_path", "story", "tree_summary"],
+      ["family_in_year", "family_origins", "find_person", "how_am_i_related", "life_of", "list_stories",
+        "namesakes", "person_record", "relationship_path", "story", "tree_summary", "upcoming_family_dates"],
     );
   });
 });

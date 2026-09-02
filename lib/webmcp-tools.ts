@@ -15,6 +15,7 @@
 
 import type { FamilyTree, Person } from "./types";
 import { describeRelationship, relationshipSentence } from "./relationship-path";
+import { familyInYear, familyOrigins, kinshipToEgo, lifeStory, namesakes, upcomingDates } from "./family-answers";
 
 export type WebMcpView = "tree" | "family" | "list" | "timeline" | "calendar" | "map" | "stats" | "fill";
 
@@ -22,6 +23,8 @@ export type WebMcpActions = {
   focusPerson: (person: Person) => void;
   setView: (view: WebMcpView) => void;
   askArchivist: (question: string) => Promise<string>;
+  /** the person in the tree the signed-in viewer says they are, when known */
+  egoId: string | null;
 };
 
 type JsonSchema = Record<string, unknown>;
@@ -140,6 +143,42 @@ export const WEBMCP_TOOLS: WebMcpTool[] = [
       actions.setView(view);
       return `Switched to the ${view} view.`;
     },
+  },
+  {
+    name: "how_am_i_related",
+    description: "How the person using this page is related to someone in the tree, in kinship words from their own point of view. Prefer this when they ask about themselves.",
+    inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"], additionalProperties: false },
+    execute: (args, tree, actions) => kinshipToEgo(tree, actions.egoId, resolveOne(tree, String(args.name ?? "")).id),
+  },
+  {
+    name: "life_of",
+    description: "A person's life told in order - birth, parents, marriages, children, places, stories, death - rather than a field dump.",
+    inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"], additionalProperties: false },
+    execute: (args, tree) => lifeStory(tree, resolveOne(tree, String(args.name ?? "")).id),
+  },
+  {
+    name: "family_origins",
+    description: "Where the family comes from: recorded birth places by generation, oldest first, so migrations read as movement.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    execute: (_args, tree) => familyOrigins(tree),
+  },
+  {
+    name: "family_in_year",
+    description: "A snapshot of the family in a given year: births, deaths, who was alive and their ages.",
+    inputSchema: { type: "object", properties: { year: { type: "integer" } }, required: ["year"], additionalProperties: false },
+    execute: (args, tree) => familyInYear(tree, Number(args.year)),
+  },
+  {
+    name: "namesakes",
+    description: "Everyone who carries a given name across the generations - answers \"who am I named after?\".",
+    inputSchema: { type: "object", properties: { given_name: { type: "string" } }, required: ["given_name"], additionalProperties: false },
+    execute: (args, tree) => namesakes(tree, String(args.given_name ?? "")),
+  },
+  {
+    name: "upcoming_family_dates",
+    description: "Birthdays of the living and remembrance anniversaries in the next month.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    execute: (_args, tree) => upcomingDates(tree),
   },
   {
     name: "ask_the_archivist",

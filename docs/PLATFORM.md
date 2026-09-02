@@ -123,6 +123,38 @@ is onboarding: a fresh deploy has no path to its first admin.
   history (`git filter-repo` — destructive, coordinate first) or re-root a
   fresh public history. Decision deferred; nothing above depends on it.
 
+## Phase 5c — the intent layer: answer what families actually ask
+
+Shipped in version 207. The insight (owner, 2026-09-02): incumbent services
+expose record-management APIs — persons, relationships, sources — but the
+questions people bring to a family tree are relational and narrative, and the
+most successful features of the incumbents are exactly the ones that answer
+them (Geni's path finder, WikiTree's connection finder, every "cousin
+calculator"). The gap between `SELECT person WHERE` and "how am I related to
+her?" is where an agentic product wins.
+
+The questions, from what people actually ask:
+- **"How am I related to X?"** — the most-asked question at any family
+  gathering. Ego-aware: the member's linked person (`members.person_id`)
+  anchors the answer, in kinship words ("your second cousin once removed").
+- **"What was her life like?"** — a life told in order, not a field dump.
+- **"Where does our family come from?"** — birth places by generation,
+  oldest first, so migration reads as movement.
+- **"What was the family like in 1950?"** — a year snapshot: born, died,
+  alive, ages, with the honesty note that undated records are not counted.
+- **"Who am I named after?"** — namesakes across generations, eldest first.
+- **"Whose birthday is coming?"** — the digest's knowledge, on demand.
+- Contribution is intent-shaped too: **`record_life_event`** ("Sara had a
+  boy named Dara in March") composes the person + parent links as one call's
+  worth of proposals, and **`suggest_correction`** files a disputed-fact
+  question into the Fill-in tab — never touching the record — instead of
+  demanding CRUD choreography.
+
+`lib/family-answers.ts` is the single intent layer (pure, unit-tested); the
+hosted MCP registry, the WebMCP page tools, and eventually the archivist all
+answer through it. Ego reaches hosted MCP via the token's member →
+`members.person_id`; WebMCP uses the page's identified viewer.
+
 ## Phase 5b — the page as a tool (WebMCP)
 
 Shipped in version 206. Alongside the hosted MCP server (a remote agent
