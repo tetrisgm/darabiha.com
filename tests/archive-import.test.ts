@@ -5,13 +5,13 @@ import { extractArchive, extractArchiveEntries } from "../lib/archive-import";
 describe("recursive archive import", () => {
   it("keeps nested family data and images while ignoring unrelated binaries", () => {
     const archive = zipSync({
-      "tree/index.html": strToU8("<h1>Nasser Darabiha</h1>"),
-      "tree/branches/children.json": strToU8('{"children":["Ramine","Parissima"]}'),
-      "tree/photos/nasser.jpg": new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+      "tree/index.html": strToU8("<h1>Farhad Golestani</h1>"),
+      "tree/branches/children.json": strToU8('{"children":["Roya","Kian"]}'),
+      "tree/photos/farhad.jpg": new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
       "tree/program.exe": new Uint8Array([1, 2, 3]),
     });
     const entries = extractArchiveEntries(archive);
-    expect(entries.map((entry) => entry.path)).toEqual(["tree/index.html", "tree/branches/children.json", "tree/photos/nasser.jpg"]);
+    expect(entries.map((entry) => entry.path)).toEqual(["tree/index.html", "tree/branches/children.json", "tree/photos/farhad.jpg"]);
     expect(entries.map((entry) => entry.kind)).toEqual(["text", "text", "image"]);
   });
 
@@ -40,7 +40,7 @@ describe("recursive archive import", () => {
 
   it("enforces compression ratios and reports partial extraction", () => {
     const archive = zipSync({
-      "tree/index.html": strToU8("Nasser"),
+      "tree/index.html": strToU8("Farhad"),
       "tree/repeated.txt": strToU8("family".repeat(10_000)),
     });
     const report = extractArchive(archive, { compressionRatio: 2 });

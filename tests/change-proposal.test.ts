@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { isChangeProposal } from "../lib/change-proposal";
 
 const person = {
-  displayName: "Nasser Darabiha",
+  displayName: "Farhad Golestani",
   gender: "male",
-  givenName: "Nasser",
-  familyName: "Darabiha",
+  givenName: "Farhad",
+  familyName: "Golestani",
   maidenName: null,
   birthDate: "1940",
   deathDate: null,
@@ -24,11 +24,11 @@ const person = {
 describe("change proposal validation", () => {
   it("accepts every supported proposal shape", () => {
     const proposals = [
-      { kind: "add_person", summary: "Add Nasser", person, relationshipHints: [{ personName: "Jila Darabiha", relationshipType: "spouse" }] },
-      { kind: "update_person", summary: "Update Nasser", personId: "person-1", patch: person },
+      { kind: "add_person", summary: "Add Farhad", person, relationshipHints: [{ personName: "Mina Golestani", relationshipType: "spouse" }] },
+      { kind: "update_person", summary: "Update Farhad", personId: "person-1", patch: person },
       { kind: "delete_person", summary: "Delete a duplicate", personId: "person-1" },
       { kind: "add_relationship", summary: "Add parent", fromPersonId: "person-1", toPersonId: "person-2", relationshipType: "parent" },
-      { kind: "add_relationship", summary: "Resolve new people", fromPersonId: "", toPersonId: "", fromPersonName: "Nasser", toPersonName: "Ramine", relationshipType: "parent" },
+      { kind: "add_relationship", summary: "Resolve new people", fromPersonId: "", toPersonId: "", fromPersonName: "Farhad", toPersonName: "Roya", relationshipType: "parent" },
       { kind: "delete_relationship", summary: "Remove an incorrect link", relationshipId: "relationship-1" },
       { kind: "merge_people", summary: "Merge a duplicate", sourcePersonId: "person-duplicate", targetPersonId: "person-canonical" },
       { kind: "add_story", summary: "Add a story", title: "A memory", body: "Story text", date: null, place: null, personIds: ["person-1"], attachmentIds: [] },
@@ -40,7 +40,7 @@ describe("change proposal validation", () => {
   });
 
   it("rejects partial person updates that would erase omitted fields", () => {
-    expect(isChangeProposal({ kind: "update_person", summary: "Update", personId: "person-1", patch: { displayName: "Nasser" } })).toBe(false);
+    expect(isChangeProposal({ kind: "update_person", summary: "Update", personId: "person-1", patch: { displayName: "Farhad" } })).toBe(false);
   });
 
   it("rejects malformed relationships, links, and destructive targets", () => {

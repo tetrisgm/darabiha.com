@@ -19,7 +19,7 @@ describe("change proposal route", () => {
     const response = await POST(new Request("https://darabiha.com/api/changes", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "update_person", summary: "Update", personId: "person-1", patch: { displayName: "Nasser" } }),
+      body: JSON.stringify({ kind: "update_person", summary: "Update", personId: "person-1", patch: { displayName: "Farhad" } }),
     }));
 
     expect(response.status).toBe(400);

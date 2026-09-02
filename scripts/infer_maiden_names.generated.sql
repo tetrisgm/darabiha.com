@@ -1,1 +1,0 @@
-INSERT INTO change_log (id, actor_email, kind, summary, payload_json, created_at) VALUES ('d2f44d6e-fa9c-4fcb-acaa-29ae63909b9c', 'ramine@ramine.net', 'infer_maiden_names', 'Inferred maiden names for 0 women from recorded fathers and curated import records; set only where the name differs from the displayed surname.', '{"count":0,"entries":[]}', '2026-08-27T05:40:07.970Z');

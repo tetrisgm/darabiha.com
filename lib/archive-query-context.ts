@@ -9,7 +9,7 @@ const words = (value: string) => value
 const phrase = (value: string) => words(value).join(" ");
 
 /** Resolve names conservatively for model context. A complete displayed name
- * wins over a shared given name, so asking about "Ali Jaberian" does not also
+ * wins over a shared given name, so asking about "Ali Golestani" does not also
  * pull every cousin named Ali into the prompt. A given-name-only question
  * intentionally returns every matching candidate (up to the context limit),
  * leaving the ambiguity visible rather than guessing. */

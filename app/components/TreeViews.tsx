@@ -770,7 +770,7 @@ export function MissingDataView({ tree, onSaved, onOpen }: { tree: FamilyTree; o
                 onClick={() => setForm({ ...form, deathDate: "", deathCity: "", deathCountry: "", burialPlace: "" })}>×</button>}
             </div></div>
             <div className="fill-field"><label>Birth city{person.birthCity || person.birthPlace ? "" : " · missing"}</label>{field("birthCity", "Qazvin")}</div>
-            <div className="fill-field"><label>Birth country{person.birthCountry || person.birthPlace ? "" : " · missing"}</label>{field("birthCountry", "Iran")}</div>
+            <div className="fill-field"><label>Birth country{person.birthCountry || person.birthPlace ? "" : " · missing"}</label>{field("birthCountry", "Country")}</div>
             {presumedLiving(person) && <div className="fill-field"><label>{t("person.lives")}{person.residence ? "" : " · missing"}</label>{field("residence", "Paris, France")}</div>}
             {person.biography && <p className="fill-bio">{person.biography}</p>}
             <div className="fill-actions">
