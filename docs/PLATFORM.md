@@ -151,8 +151,14 @@ The questions, from what people actually ask:
   demanding CRUD choreography.
 
 `lib/family-answers.ts` is the single intent layer (pure, unit-tested); the
-hosted MCP registry, the WebMCP page tools, and eventually the archivist all
-answer through it. Ego reaches hosted MCP via the token's member →
+hosted MCP registry, the WebMCP page tools, and the archivist all answer
+through it. The archivist gets it as `intentContext` (version 208): who the
+asker is in the tree and their kinship to everyone the question mentions,
+snapshots of any year named (Persian and Arabic-Indic digits included),
+origins, and the month's dates are computed and injected as authoritative
+"(computed)" blocks, per the house rule that graph facts are never
+model-derived. Ego comes from the session member's linked person on both
+chat routes. Ego reaches hosted MCP via the token's member →
 `members.person_id`; WebMCP uses the page's identified viewer.
 
 ## Phase 5b — the page as a tool (WebMCP)

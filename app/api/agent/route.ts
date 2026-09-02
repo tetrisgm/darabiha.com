@@ -4,7 +4,8 @@ import { strFromU8 } from "fflate";
 import { requireEditor } from "../../authz";
 import { cookies } from "next/headers";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
-import { listAttachments, readTree, recordAgentQuestions, saveAttachment } from "../../../db/store";
+import { getMemberPerson, listAttachments, readTree, recordAgentQuestions, saveAttachment } from "../../../db/store";
+import { intentContext } from "../../../lib/family-answers";
 import { extractArchive } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
@@ -31,12 +32,15 @@ type ToolCall = { type: "function_call"; name: string; arguments: string };
  * than left to the model; the interview leads are the gaps near whoever is
  * being discussed, which is the only place a living relative can actually
  * help. */
-function archivistContext(tree: FamilyTree, conversation: string): string {
+function archivistContext(tree: FamilyTree, conversation: string, egoId: string | null): string {
   const { people, relationships } = archiveQueryRelationships(tree, conversation);
   const leads = interviewLeads(tree, people.map((person) => person.id));
   const today = onThisDay(tree).map((fact) => fact.text);
   return [
     relationships.length ? `Computed relationships (authoritative):\n${relationships.join("\n")}` : "",
+    // the intent layer: who this editor is in the tree and their kinship to
+    // everyone mentioned, year snapshots, origins - computed, never derived
+    intentContext(tree, conversation, egoId),
     leads.length ? `Worth asking about (gaps near the people in this conversation):\n${leads.map((lead) => `- ${lead.personName}${lead.nearTo ? ` (near ${lead.nearTo})` : ""}: missing ${lead.missing.join(", ")}`).join("\n")}` : "",
     today.length ? `Anniversaries today:\n${today.join("\n")}` : "",
     `Facts about the archive:\n${familyFactoids(tree).map((fact) => fact.text).join("\n")}`,
@@ -61,7 +65,7 @@ export async function POST(request: Request) {
   if (!message && files.length === 0) return Response.json({ error: "empty_message" }, { status: 400 });
   const uploadError = validateUploadBatch(files);
   if (uploadError) return Response.json({ error: uploadError }, { status: 413 });
-  const [tree, existingAttachments] = await Promise.all([readTree(), listAttachments()]);
+  const [tree, existingAttachments, egoId] = await Promise.all([readTree(), listAttachments(), getMemberPerson(auth.user.email)]);
   // the archive is multilingual and so is the reader
   const readerLanguage = LANGUAGE_ENDONYM[parseLang((await cookies()).get(LANG_COOKIE)?.value)];
   const stored: Attachment[] = [];
@@ -69,7 +73,7 @@ export async function POST(request: Request) {
   for (const file of files) stored.push(await saveAttachment(file, auth.user.email));
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
-    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\n${archivistContext(tree, `${message} ${history}`)}Current tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,
+    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\n${archivistContext(tree, `${message} ${history}`, egoId)}Current tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,
   }];
   for (const file of files) {
     if (file.name.toLowerCase().endsWith(".zip")) {

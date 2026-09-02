@@ -69,3 +69,26 @@ describe("family answers", () => {
     expect(result).not.toContain("Bahram Karimi");
   });
 });
+
+import { intentContext } from "../lib/family-answers";
+
+describe("intent context for the archivist", () => {
+  it("names the asker and precomputes their kinship to mentioned people", () => {
+    const context = intentContext(tree, "How am I related to Bahram Golestani?", "p3");
+    expect(context).toContain("The person asking is Roya Golestani");
+    expect(context).toMatch(/the asker's (great-)?grandfather/);
+  });
+
+  it("snapshots years written in Persian digits", () => {
+    const context = intentContext(tree, "خانواده در سال ۱۹۷۲ چطور بود؟", null);
+    expect(context).toContain("The family in 1972 (computed)");
+    expect(context).toContain("Roya Golestani");
+  });
+
+  it("always carries origins and upcoming dates as computed blocks", () => {
+    const context = intentContext(tree, "hello", null);
+    expect(context).toContain("Family origins (computed)");
+    expect(context).toContain("Dates this month (computed)");
+    expect(context).not.toContain("The person asking");
+  });
+});

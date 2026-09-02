@@ -13,6 +13,7 @@
 import type { FamilyTree, Person } from "./types";
 import { describeRelationship, relationshipSentence } from "./relationship-path";
 import { buildGenerations } from "./tree-layout";
+import { peopleMentionedInArchiveText } from "./archive-query-context";
 
 const year = (date: string | null | undefined): number | null => {
   const value = Number(date?.slice(0, 4));
@@ -153,4 +154,39 @@ export function upcomingDates(tree: FamilyTree, today = new Date()): string {
   }
   if (!entries.length) return "No full-dated birthdays or anniversaries fall in the next month.";
   return `In the next month: ${entries.sort((a, b) => a.days - b.days).map((entry) => entry.text).join("; ")}.`;
+}
+
+/** Precomputed intent answers for the archivist's prompt.
+ *
+ * The archivist's house rule is that graph facts are computed, never
+ * model-derived: the ask and editor-chat routes already inject pairwise
+ * relationships. This adds the intent layer's answers - who the asker is and
+ * their kinship to everyone the question mentions, a snapshot of any year
+ * named (Persian and Arabic-Indic digits included), where the family comes
+ * from, and the month's dates - so "how am I related to her?" or "what was
+ * the family like in ۱۹۵۰?" is answered from the records in any language. */
+export function intentContext(tree: FamilyTree, message: string, egoId: string | null): string {
+  const blocks: string[] = [];
+
+  const ego = egoId ? tree.people.find((person) => person.id === egoId) : undefined;
+  if (ego) {
+    const kin = peopleMentionedInArchiveText(tree, message)
+      .filter((person) => person.id !== ego.id)
+      .map((person) => {
+        const result = describeRelationship(tree, ego.id, person.id);
+        return result
+          ? relationshipSentence(result).replace(`${ego.displayName}'s`, "the asker's")
+          : `No recorded chain connects the asker and ${person.displayName}.`;
+      });
+    blocks.push([`The person asking is ${briefName(ego)} in the tree; "I", "me", and "my" mean them.`, ...kin].join("\n"));
+  }
+
+  // years written in Latin, Persian, or Arabic-Indic digits
+  const western = message.replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit))).replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+  const years = [...new Set(western.match(/\b1[0-9]{3}\b|\b20[0-9]{2}\b/g) ?? [])].slice(0, 2);
+  for (const mentioned of years) blocks.push(`The family in ${mentioned} (computed):\n${familyInYear(tree, Number(mentioned))}`);
+
+  blocks.push(`Family origins (computed):\n${familyOrigins(tree)}`);
+  blocks.push(`Dates this month (computed):\n${upcomingDates(tree)}`);
+  return blocks.join("\n\n");
 }
