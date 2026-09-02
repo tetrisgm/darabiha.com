@@ -8,6 +8,7 @@ import { Silhouette, TreeSearch } from "./TreePrimitives";
 import { FamilyTreeCanvas } from "./FamilyTreeCanvas";
 import { Markdown } from "./Markdown";
 import { useLanguage } from "./LanguageContext";
+import { useWebMcp } from "./useWebMcp";
 import { LANGUAGES, LANGUAGE_FLAGS, LANGUAGE_NAMES } from "../../lib/i18n";
 import { BUILD_ID, VERSION } from "../../lib/build";
 import { isUsefulArchivePath, selectedFileKey, selectedFilePath } from "../../lib/upload-policy";
@@ -230,6 +231,19 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     if (mode !== "map") setPlaceFocus(null);
     try { window.localStorage.setItem("darabiha-view", mode); } catch { /* private mode */ }
   };
+  // A browser-side agent (Chrome/Edge WebMCP) driving this page gets the
+  // archive's tools with no token - it acts as the member already signed in
+  // here - and, uniquely, can move the live UI (focus a person, switch view).
+  useWebMcp(treeLoaded ? tree : null, {
+    focusPerson: (person) => openPerson(person),
+    setView: (view) => setViewMode(view as ViewMode),
+    askArchivist: async (question) => {
+      const response = await fetch("/api/ask", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: question }) });
+      const data = await response.json() as { reply?: string; error?: string };
+      if (!response.ok) throw new Error(data.error === "openai_not_configured" ? "The archivist AI is not configured on this deployment." : "The archivist could not answer right now.");
+      return data.reply || "That detail is not recorded in the archive.";
+    },
+  }, treeLoaded);
   // what the archive volunteers before it is asked: an anniversary today, or
   // a fact about the family, with openers worth tapping
   const [greeting, setGreeting] = useState<Greeting | null>(null);
