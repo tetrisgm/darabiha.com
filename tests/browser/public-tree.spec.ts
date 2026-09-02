@@ -38,7 +38,19 @@ async function onCameraCard(page: Page): Promise<Locator> {
   const cards = page.locator(".tree-card");
   for (let index = 0; index < await cards.count(); index += 1) {
     const box = await cards.nth(index).boundingBox();
-    if (box && box.x + box.width > canvas.x && box.x < canvas.x + canvas.width && box.y + box.height > canvas.y + 64 && box.y < canvas.y + canvas.height) return cards.nth(index);
+    if (!box) continue;
+    // Playwright aims at the centre, so a card is only "on camera" when its
+    // centre is inside the stage and not buried under the chat sidebar, its
+    // resize handle, or the zoom controls - a human clicks the visible part,
+    // the runner cannot.
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    if (x < canvas.x || x > canvas.x + canvas.width || y < canvas.y + 64 || y > canvas.y + canvas.height) continue;
+    const hittable = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest(".tree-card") !== null,
+      { x, y },
+    );
+    if (hittable) return cards.nth(index);
   }
   throw new Error("No family card is currently on camera");
 }
