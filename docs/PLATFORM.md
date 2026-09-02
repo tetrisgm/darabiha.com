@@ -1,10 +1,37 @@
-# Platform plan: from Darabiha's archive to a deployable agentic family tree
+# Platform plan: the state-of-the-art agentic family tree
 
 Owner decisions (2026-09-01): the platform is a **fork-and-deploy template**,
 generalized **in place in this repo** (darabiha.com stays the living reference
 instance deploying from `main`), and the repo will eventually be **public**
 after real family data is scrubbed from the tree. Multi-tenant SaaS is out of
 scope; the store is deliberately one-Worker-one-family.
+
+## North star (owner, 2026-09-01)
+
+The bar is pen.dev / paper.design in their categories: the agent is the
+primary creator, not a feature. Concretely, three properties:
+
+1. **Genesis by conversation.** A brand-new archive interviews its family
+   into existence: people, relationships, and stories appear on the live
+   canvas as the founder talks, every fact carrying interview provenance.
+   No genealogy software knowledge required - the agent is the interface.
+2. **The archive is itself a tool.** A hosted MCP server exposes the
+   archive to whatever agent the family already uses (Claude, ChatGPT,
+   Cursor). External agents read freely within visibility rules and write
+   only through the existing proposal/claims/adjudication pipeline - the
+   audited, reversible boundary already built is exactly the right trust
+   contract for third-party agents. Raw CRUD is never exposed over MCP.
+3. **Agent-runnable making.** "Talk with agents and make it" includes the
+   deployment: the repo carries an agent-first setup path (AGENTS.md plus
+   a setup skill/script) so a stranger tells their coding agent "set up my
+   family's archive" and the agent provisions D1/R2, walks OAuth
+   registration, sets OWNER_EMAIL, and deploys. Docs are written for
+   agents first, humans second.
+
+The differentiator to protect while building this: claim-level provenance,
+disputed-claim adjudication, reversible audited mutations, and living-person
+redaction. Mainstream products have none of these; every new agentic surface
+must route through them rather than around them.
 
 A 2026-09-01 survey found the core already generic — data model, GEDCOM
 import/export, auth mechanics, claims/provenance, agent tooling, `/demo`
@@ -82,7 +109,57 @@ is onboarding: a fresh deploy has no path to its first admin.
   history (`git filter-repo` — destructive, coordinate first) or re-root a
   fresh public history. Decision deferred; nothing above depends on it.
 
-## Phase 5 — the nice example
+## Phase 5 — the archive as a tool (MCP)
+
+- A hosted MCP server on the Worker (`/api/mcp` or a dedicated route) with
+  OAuth connect-and-approve, so "add my archive to Claude" is paste-one-URL.
+  The owner's `stack:add-mcp` pattern is the reference implementation.
+- Read tools first: `find_person`, `person_record`, `relationship_path`,
+  `list_stories`, `tree_summary` - all through the same visibility/redaction
+  path as `/api/tree` (living-person redaction applies to agents too).
+- Write tools second, and only as proposals: `propose_person`,
+  `propose_relationship`, `record_story`, `attach_evidence`, `answer_question`.
+  Every write lands in the existing claims/adjudication queue attributed to
+  the connecting member's identity plus the agent's name; nothing an external
+  agent does is un-undoable. Deletes are not exposed.
+- Rate/budget limits reuse the existing fingerprint limiter.
+
+## Phase 6 — genesis by conversation
+
+- First-run experience on an empty archive: the archivist opens the interview
+  itself ("Who are you? Tell me about your parents.") and builds the tree
+  live. Interview provenance already exists; the empty-state routing does not.
+- Agent-driven canvas focus: chat responses can carry a focus directive
+  (person/branch) the canvas follows, so the conversation and the picture
+  stay one thing. Streaming tree updates after each applied change.
+- The ingestion pipeline becomes a hero flow: GEDCOM from Ancestry, a folder
+  of scans, a eulogy PDF - "give me what you have and I will ask about the
+  rest." Already works mechanically; needs the empty-archive path and
+  progress narration.
+- Voice is a later question (recording an elder is the killer version of the
+  interview); not in scope until the text loop is excellent.
+
+## Phase 7 — agent-runnable setup
+
+- `AGENTS.md` at the repo root: a setup contract written for coding agents -
+  exact provisioning commands (D1 create, R2 create, secrets list, OAuth
+  registration steps with console URLs), verification probes, and the deploy
+  ritual. The README points humans at it: "open this repo with your agent
+  and say: set up my family archive."
+- A `scripts/setup.mjs` the agent (or human) runs: checks wrangler auth,
+  provisions resources, writes the instance's wrangler values, prints what
+  it cannot do itself (OAuth console clicks) as a checklist.
+- Model-boundary note: the archivist currently speaks OpenAI's API
+  (`OPENAI_API_KEY`/`OPENAI_MODEL`). State of the art means the deployer
+  brings whatever key they have; abstracting the model call behind one
+  module (Anthropic/OpenAI-compatible) is a deliberate decision to make
+  during this phase, not incidental drift.
+- Free-tier honesty: this week's D1 daily-read quota incident proves the
+  flagship runs at the edge of the free tier. The template documents the
+  quota envelope, ships the R2-snapshot circuit breaker as standard, and
+  recommends the paid plan for large or busy archives.
+
+## Phase 8 — the nice example
 
 - Onboarding: empty-archive first-run experience (claim admin, name the
   archive, add the first person or import GEDCOM), with `/demo` as the
