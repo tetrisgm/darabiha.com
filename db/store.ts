@@ -107,6 +107,22 @@ const schemaStatements = [
     deleted_at TEXT NOT NULL, restored_at TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_at TEXT NOT NULL)`,
+  // Hosted MCP: dynamically registered OAuth clients, single-use PKCE codes,
+  // and the bearer tokens external agents present. Tokens are stored hashed.
+  `CREATE TABLE IF NOT EXISTS oauth_clients (
+    client_id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris_json TEXT NOT NULL, created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS oauth_codes (
+    code_hash TEXT PRIMARY KEY, member_email TEXT NOT NULL, client_id TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL, code_challenge TEXT NOT NULL, scope TEXT NOT NULL,
+    expires_at TEXT NOT NULL, consumed_at TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS agent_tokens (
+    id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, member_email TEXT NOT NULL,
+    client_id TEXT NOT NULL, client_name TEXT NOT NULL, scope TEXT NOT NULL,
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL, revoked_at TEXT, last_used_at TEXT
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_tokens_member ON agent_tokens(member_email, revoked_at)`,
 ];
 
 type CompatibilityTable = "people" | "relationships" | "members" | "stories";
