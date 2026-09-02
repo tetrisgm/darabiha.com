@@ -1,5 +1,33 @@
 # Darabiha handoff
 
+## Platform build, second pass (2026-09-02) — versions 202–203
+
+The owner fixed partyparty's scans, but the account quota stays spent until
+the midnight-UTC reset, so production OAuth writes still 503 by design; a
+monitor in the build session watches `/api/access` and the production run of
+`scripts/test-oauth-mcp-loop.py` is the one open verification. Version 202:
+agents can now propose. MCP's `propose` scope adds three additive write
+tools (person, relationship, story) that build validated ChangeProposals
+into the new `agent_proposals` table — never touching the tree — plus
+`list_my_proposals`; a read-scope call to them is rejected before the
+handler. Editors see pending proposals atop History and Apply routes through
+the same audited `applyProposal` path with the agent and approving member as
+the claim source; deletes/merges/updates are deliberately absent. Settings
+gained a Connected assistants card (MCP address, per-connection scope and
+last use, immediate Disconnect). The loop gate now walks 23 steps —
+discovery through propose, editor apply into the real tree, settings
+revocation, dead-token rejection — all green against a from-scratch local
+Worker (`npx -y wrangler@4.128.0 dev`; wipe `.wrangler/state/v3/d1` for a
+virgin database). Version 203 is genesis: a GENESIS block makes the
+archivist the founding interviewer on an empty archive, the editor chat
+greets an empty tree with that invitation and three starter suggestions in
+en/fa/fr, and the empty-state monogram takes the archive's own initial;
+verified visually against a virgin local database (note: local R2 state kept
+a stale greeting factoid across the D1 wipe — test-bench artifact, but says
+greeting caches outlive the database they describe). Remaining from the
+plan: the production loop run after quota reset, refresh-token rotation,
+model-provider abstraction, and the public-history decision.
+
 ## Platform build (2026-09-02) — versions 199–201
 
 The owner-approved plan in `docs/PLATFORM.md` is executing; this session
