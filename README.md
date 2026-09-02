@@ -63,6 +63,21 @@ setup contract it will follow. By hand, the same steps are:
    visibility (public / members / password) under Settings → Members & access,
    then start talking to the archivist or import a GEDCOM.
 
+## Connect an assistant (MCP)
+
+The archive is itself an MCP server. In Claude, ChatGPT, or any MCP client,
+add a custom connector with the URL `https://<your-archive>/api/mcp` and
+approve as a signed-in member; in Claude Code:
+
+```sh
+claude mcp add --transport http family-archive https://<your-archive>/api/mcp
+```
+
+Connected agents get read-only tools (people, records, relationship paths,
+stories) with the approving member's access; leaving the member list revokes
+their agents. `scripts/test-oauth-mcp-loop.py` is the end-to-end regression
+gate for this flow - keep it passing.
+
 ## Develop
 
 ```sh

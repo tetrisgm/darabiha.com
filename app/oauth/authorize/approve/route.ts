@@ -12,7 +12,8 @@ const redirect = (location: string) => new Response(null, { status: 302, headers
 export async function POST(request: Request) {
   // the consent form must come from this origin, not a cross-site POST
   const origin = request.headers.get("origin");
-  if (origin && origin !== publicOrigin()) return new Response("Cross-origin approval rejected.", { status: 403 });
+  const selfOrigins = new Set([publicOrigin(), new URL(request.url).origin]);
+  if (origin && !selfOrigins.has(origin)) return new Response("Cross-origin approval rejected.", { status: 403 });
 
   const form = await request.formData();
   const params = new URLSearchParams();

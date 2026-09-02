@@ -23,8 +23,13 @@ export async function POST(request: Request) {
       grant_types: ["authorization_code"],
       response_types: ["code"],
     }, { status: 201, headers: { "access-control-allow-origin": "*" } });
-  } catch {
-    return Response.json({ error: "invalid_redirect_uri", error_description: "Redirect URIs must be https (or localhost for CLI clients)." }, { status: 400 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "invalid_redirect_uri") {
+      return Response.json({ error: "invalid_redirect_uri", error_description: "Redirect URIs must be https (or localhost for CLI clients)." }, { status: 400 });
+    }
+    // infrastructure failure (for example an exhausted D1 quota), not the client's fault
+    console.error("oauth_registration_failed", error instanceof Error ? error.message : String(error));
+    return Response.json({ error: "temporarily_unavailable", error_description: "Registration is temporarily unavailable; try again later." }, { status: 503 });
   }
 }
 

@@ -39,3 +39,4 @@ next-env.d.ts
 /work/
 scripts/enrich_gender.generated.sql
 tsconfig.tsbuildinfo
+.dev.vars
