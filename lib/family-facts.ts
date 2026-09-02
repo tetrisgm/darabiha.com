@@ -138,7 +138,11 @@ export function familyFactoids(tree: FamilyTree, today = new Date()): FamilyFact
   const topPlace = [...places.entries()].sort((a, b) => b[1] - a[1])[0];
   if (topPlace) facts.push({ kind: "factoid", text: `${topPlace[0]} appears in more records than anywhere else — ${topPlace[1]} births and deaths.`, ask: `What is the family's connection to ${topPlace[0]}?` });
 
-  if (tree.stories.length) facts.push({ kind: "factoid", text: `The archive holds ${tree.stories.length} family ${tree.stories.length === 1 ? "story" : "stories"}, kept in the Persian they were written in with an English translation beside them.`, ask: "What stories does the archive hold, and who is in them?" });
+  if (tree.stories.length) {
+    // only claim bilingual keeping when stories actually carry an original
+    const bilingual = tree.stories.some((story) => story.originalBody);
+    facts.push({ kind: "factoid", text: `The archive holds ${tree.stories.length} family ${tree.stories.length === 1 ? "story" : "stories"}${bilingual ? ", kept in the language they were written in with an English translation beside them" : ""}.`, ask: "What stories does the archive hold, and who is in them?" });
+  }
 
   const generations = new Set(tree.people.map((person) => year(person.birthDate)).filter(Boolean).map((born) => Math.floor((born! - 1700) / 25)));
   if (generations.size > 3) facts.push({ kind: "factoid", text: `${tree.people.length} people are recorded here, spanning roughly ${generations.size} generations.`, ask: "Walk me down the generations, from the earliest ancestor to the youngest child." });

@@ -32,6 +32,14 @@ export function archiveNames(languages: readonly string[]): Record<string, strin
   return names;
 }
 
+/** A paragraph the archivist prompts embed describing this family's
+ * languages, scripts, and calendars. Written per archive (or by the
+ * founder during onboarding); the default assumes nothing. */
+export function archivePromptContext(): string {
+  return (process.env.ARCHIVE_PROMPT_CONTEXT || "").trim() ||
+    "This family's records may span several languages and scripts; the archive holds all of them as written.";
+}
+
 /** The origin's host, for identities that must align with the sending
  * domain (SMTP EHLO, Message-ID) or name the deployment (GEDCOM source). */
 export function archiveDomain(): string {

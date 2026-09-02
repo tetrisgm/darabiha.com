@@ -91,7 +91,7 @@ export async function POST() {
 
     const client = new OpenAI({ apiKey });
     const response = await client.responses.create({
-      model: "gpt-5",
+      model: process.env.OPENAI_MODEL || "gpt-5.4",
       instructions: archivistInstructions(readerLanguage),
       input: [{
         role: "user",

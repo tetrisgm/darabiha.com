@@ -10,6 +10,7 @@
     "ARCHIVE_NAME": "Darabiha",
     "ARCHIVE_NAME_FA": "دارابی",
     "ARCHIVE_TAGLINE": "A living record of the Darabi family, built together.",
+    "ARCHIVE_PROMPT_CONTEXT": "This family's records are not in one language: the histories were written in Persian, part of the family lives in France, and the archive holds all of it. Expect Persian, French, and English, sometimes mixed in one document, and dates that may be Solar Hijri.",
     "APPLE_CLIENT_ID": "com.darabiha.family",
     "APPLE_TEAM_ID": "52WM463HR2",
     "APPLE_KEY_ID": "J6958HV8HB",
