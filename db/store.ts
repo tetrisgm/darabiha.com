@@ -160,12 +160,17 @@ async function initializeSchema() {
   // Install triggers only after the legacy members rebuild. DROP TABLE also
   // drops that table's triggers, and older databases still take this path.
   await env.DB.batch(RUNTIME_INTEGRITY_SCHEMA.map((sql) => env.DB.prepare(sql)));
-  // First run seeds the member list: the owner as admin, plus any emails the
-  // old EDITOR_EMAILS allow-list carried, as editors.
+  // First run seeds the member list: the deployment's owner as admin, plus
+  // any emails the old EDITOR_EMAILS allow-list carried, as editors. The
+  // owner comes from OWNER_EMAIL - an empty members table with no owner
+  // configured must stop startup, because seeding nobody (or somebody
+  // else's address) locks the deployer out of their own archive.
   const memberCount = await env.DB.prepare("SELECT COUNT(*) AS count FROM members").first<{ count: number }>();
   if (!memberCount?.count) {
+    const owner = (process.env.OWNER_EMAIL ?? "").trim().toLowerCase();
+    if (!owner) throw new Error("owner_email_not_configured");
     const now = new Date().toISOString();
-    const seeds: [string, "admin" | "canEdit"][] = [["ramine@ramine.net", "admin"]];
+    const seeds: [string, "admin" | "canEdit"][] = [[owner, "admin"]];
     for (const email of (process.env.EDITOR_EMAILS ?? "").split(",").map((value) => value.trim().toLowerCase()).filter(Boolean)) {
       if (!seeds.some(([seeded]) => seeded === email)) seeds.push([email, "canEdit"]);
     }
