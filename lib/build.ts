@@ -2,3 +2,4 @@
 // expose one unambiguous deployment identity.
 export const BUILD_ID = "cf866d9";
 export const VERSION = 201;
+export const DEPLOYED_AT = "2026-09-02";

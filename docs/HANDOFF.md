@@ -1,5 +1,37 @@
 # Darabiha handoff
 
+## Platform build (2026-09-02) — versions 199–201
+
+The owner-approved plan in `docs/PLATFORM.md` is executing; this session
+landed phases 1–5 of it. Version 199 is the substrate: OWNER_EMAIL replaces
+the seeded admin (an empty database now refuses to start without it),
+`lib/archive-config.ts` carries per-deployment identity (name, tagline,
+origin, per-language names, prompt context) through every branded surface —
+titles/OG, gates, legal pages, GEDCOM headers, digest email, SMTP
+EHLO/Message-ID — the archivist prompts are templated (production keeps the
+Persian/French/Solar-Hijri guidance verbatim in ARCHIVE_PROMPT_CONTEXT), the
+tree opens on a `root_person_id` site setting (production seeded to Nasser),
+README/AGENTS.md/`npm run deploy`/`npm run gate` give strangers a way in, the
+Darabiha-only legacy toolchain moved to `~/dev/darabiha-legacy` (still in git
+history; the public-history rewrite remains an owner decision), and real
+relatives were replaced in unit fixtures. Versions 200–201 are the hosted
+MCP server: mcp-kit's click-to-approve OAuth chain (RFC 9728/8414 discovery
+under `/well-known` behind a `/.well-known` rewrite — vinext drops
+dot-directories from the app router — dynamic registration, PKCE consent at
+`/oauth/authorize`, hashed 30-day member-bound tokens in `agent_tokens`) in
+front of a hand-rolled JSON-RPC endpoint at `/api/mcp` exposing six read-only
+tools. `scripts/test-oauth-mcp-loop.py` is the release gate for that flow; it
+passed all thirteen steps against a from-scratch local Worker
+(`npx -y wrangler@4.128.0 dev` — the pinned wrangler 4.92's workerd is too
+old for the compat date), which also proved the fresh-deploy path end to end.
+Run it against production after the account D1 quota resets; the quota was
+exhausted again all evening (see below), so production OAuth writes 503 by
+design until then. Cookie names were deliberately left darabiha_* — browser
+state is origin-scoped, so renaming buys nothing and forces logouts. Next
+phases: proposal-based MCP write tools, refresh-token rotation, genesis
+onboarding (empty-archive interview), and a settings surface listing/revoking
+agent connections.
+
 ## Root cause of the D1 quota outages (2026-09-02)
 
 The daily row-read quota that caused the Version 193–198 incident is
