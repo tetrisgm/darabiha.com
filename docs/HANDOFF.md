@@ -1,5 +1,22 @@
 # Darabiha handoff
 
+## Root cause of the D1 quota outages (2026-09-02)
+
+The daily row-read quota that caused the Version 193–198 incident is
+**account-wide, and this archive was never the consumer**. `wrangler d1
+insights` over the last day: darabiha-family read ~380k rows — well inside
+the 5M/day free allowance — while the unrelated `partyparty-app` database
+read ~48M rows from three unindexed housekeeping sweeps (`UPDATE
+catalog_sources SET queued_ms=NULL WHERE queued_ms IS NOT NULL AND
+queued_ms<…` and two siblings). The quota re-exhausted at ~00:45 UTC on
+2026-09-02, 45 minutes after its midnight reset, with darabiha nearly idle.
+Fixing partyparty's scans (or a paid Workers plan, which lifts the account
+limit) is the real remedy and is its own owner-approved task; this archive's
+snapshot circuit breaker is the correct defense and keeps the site readable
+throughout. While the account quota is exhausted, `/api/access` and
+`/api/ask` fail closed by design, and the ~8 browser-suite failures in that
+state are outage artifacts, not regressions.
+
 ## Production data-route incident and Version 193 diagnostics
 
 - Quota-resilience implementation commit `ddbdbce` is pushed on `main`; visible Version 194 binds production to that exact body of work.
