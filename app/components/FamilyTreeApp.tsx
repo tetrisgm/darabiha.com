@@ -279,7 +279,7 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
     files.forEach((file) => form.append("files", file));
     try {
       const response = await fetch("/api/agent", { method: "POST", body: form });
-      const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; conflicts?: AgentConflict[]; attachments?: Attachment[]; error?: string };
+      const data = await response.json() as { reply?: string; proposals?: ChangeProposal[]; conflicts?: AgentConflict[]; attachments?: Attachment[]; uiActions?: Array<{ type: "show_person"; displayName: string } | { type: "switch_view"; view: string }>; error?: string };
       if (!response.ok) throw new Error(data.error || "request_failed");
       let latestTree = tree;
       let appliedCount = 0;
@@ -297,8 +297,18 @@ export default function FamilyTreeApp({ initialTree, viewer, signOutPath, signIn
       const questions = data.conflicts?.map((conflict) => `${conflict.question}\n${conflict.evidence.join(" · ")}`).join("\n\n") || "";
       const assistantText = [applied, failed, questions || (!applied && !failed ? data.reply : "")].filter(Boolean).join("\n\n") || "Done.";
       setMessages([...nextMessages, { role: "assistant", text: assistantText }]);
+      // the archivist can drive the page: its UI tool calls execute here, so
+      // "show me her branch" moves the canvas instead of asking for a click
+      let drove = false;
+      for (const action of (data.uiActions ?? []).slice(0, 4)) {
+        if (action.type === "switch_view" && (VIEW_MODES as readonly string[]).includes(action.view)) { setViewMode(action.view as ViewMode); drove = true; }
+        if (action.type === "show_person") {
+          const person = latestTree.people.find((candidate) => candidate.displayName.toLowerCase() === action.displayName.toLowerCase());
+          if (person) { openPerson(person); drove = true; }
+        }
+      }
       const mentioned = latestTree.people.filter((person) => assistantText.toLocaleLowerCase().includes(person.displayName.toLocaleLowerCase()));
-      if (mentioned.length) { setHighlightedIds(mentioned.map((person) => person.id)); setViewMode("tree"); }
+      if (mentioned.length && !drove) { setHighlightedIds(mentioned.map((person) => person.id)); setViewMode("tree"); }
       setFiles([]);
       if (fileRef.current) fileRef.current.value = "";
       if (folderRef.current) folderRef.current.value = "";

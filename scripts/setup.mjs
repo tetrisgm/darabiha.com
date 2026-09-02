@@ -11,7 +11,7 @@
  * and prints the steps that need a human (OAuth consoles).
  */
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const args = new Map();
@@ -77,19 +77,32 @@ if (!args.get("origin")) config = config.replace(/,?\s*"routes":\s*\[[^\]]*\]/, 
 writeFileSync("wrangler.jsonc", config);
 console.log("Rewrote wrangler.jsonc for this deployment.");
 
-// Session secret
-execFileSync("npx", ["wrangler", "secret", "put", "AUTH_SESSION_SECRET", "--name", name], { input: randomBytes(48).toString("base64"), stdio: ["pipe", "inherit", "inherit"] });
+// Session secret - kept in this process just long enough to derive the
+// bootstrap sign-in link below; never written to disk here.
+const sessionSecret = randomBytes(48).toString("base64");
+execFileSync("npx", ["wrangler", "secret", "put", "AUTH_SESSION_SECRET", "--name", name], { input: sessionSecret, stdio: ["pipe", "inherit", "inherit"] });
 console.log("Set AUTH_SESSION_SECRET.");
 
-console.log(`
-Done. What remains:
+// First-run sign-in that needs no OAuth console: an HMAC only the holder of
+// the session secret can mint. It retires itself once the owner links a real
+// provider (app/api/auth/bootstrap).
+const bootstrap = createHmac("sha256", sessionSecret).update(`bootstrap-signin:${owner.toLowerCase()}`)
+  .digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 
-  1. Deploy:              npm run deploy
-  2. Archivist (later ok): npx wrangler secret put OPENAI_API_KEY --name ${name}
-  3. Sign-in (HUMAN, at least one provider):
+console.log(`
+Done. Next:
+
+  1. Deploy:  npm run deploy
+  2. Sign in as the owner - no OAuth setup needed yet - by opening:
+
+       ${origin}/api/auth/bootstrap?token=${bootstrap}
+
+     (Keep it private; it is the owner's key until real sign-in exists,
+      and it stops working the moment the owner links Apple or Google.)
+  3. Archivist (any time): npx wrangler secret put OPENAI_API_KEY --name ${name}
+  4. Real sign-in, when the family should join (HUMAN, console clicks):
      - Google: OAuth client with redirect ${origin}/api/auth/google/callback
        -> set GOOGLE_CLIENT_ID var + GOOGLE_CLIENT_SECRET secret
      - Apple: Services ID with callback ${origin}/api/auth/apple/callback
        -> APPLE_CLIENT_ID/APPLE_TEAM_ID/APPLE_KEY_ID vars + APPLE_PRIVATE_KEY secret
-  4. Visit ${origin} and sign in as ${owner} - you arrive as admin.
 `);

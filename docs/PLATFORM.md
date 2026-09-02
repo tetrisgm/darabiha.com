@@ -123,6 +123,31 @@ is onboarding: a fresh deploy has no path to its first admin.
   history (`git filter-repo` — destructive, coordinate first) or re-root a
   fresh public history. Decision deferred; nothing above depends on it.
 
+## Phase 9 — the trivial path (setup and usage without friction)
+
+Shipped in version 209, from the owner's 2026-09-02 gap analysis: a curious
+person comparing this to Ancestry should get the same journey, agentically.
+Their journey there is sign up → "start with yourself" wizard → type names
+into slots → hints pull them back. Our gaps were:
+
+- **Setup died at the OAuth console.** Registering Google/Apple sign-in took
+  twenty minutes of console clicks before the product existed. Now
+  `scripts/setup.mjs` prints a **bootstrap sign-in link** — an HMAC over the
+  owner's email keyed with the session secret it just minted — and
+  `/api/auth/bootstrap` signs the owner in as admin while no real provider is
+  linked, retiring itself the moment one is. Deploy → click → talking to the
+  archivist. OAuth consoles moved to "when the family should join".
+- **Talking didn't replace clicking.** The in-app archivist now holds the
+  same UI powers WebMCP gives external browser agents: `show_person` and
+  `switch_view` are model tools whose calls return to the page as
+  `uiActions` and execute there — "show me her branch" moves the real
+  canvas. The rule in the instructions: never describe where to click when
+  you can take them there.
+- **The greeting offered trivia, not the shaky leaf.** For a member linked to
+  their person, the greeting now leads with one interview gap *near them* —
+  "Only the family can fill this in: X is missing a birth place" — the
+  agentic version of Ancestry's hint engine, drawn from interviewLeads.
+
 ## Phase 5c — the intent layer: answer what families actually ask
 
 Shipped in version 207. The insight (owner, 2026-09-02): incumbent services

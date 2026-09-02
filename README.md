@@ -47,21 +47,26 @@ setup contract it will follow. By hand, the same steps are:
    - `ARCHIVE_NAME_<LANG>` — optional per-language name (e.g. a native script)
    - `ARCHIVE_PROMPT_CONTEXT` — optional paragraph telling the archivist which
      languages, scripts, and calendars your family's records use
-3. **Secrets** (`npx wrangler secret put <NAME>`):
+3. **Secrets** (`npx wrangler secret put <NAME>`; `scripts/setup.mjs` sets
+   the session secret itself):
    - `AUTH_SESSION_SECRET` — any long random string; signs session cookies
    - `OPENAI_API_KEY` — powers the archivist (`OPENAI_MODEL` var to override
      the default model); without it the site works but AI features return 503
-   - Sign in with Apple: `APPLE_CLIENT_ID`/`APPLE_TEAM_ID`/`APPLE_KEY_ID` vars
-     plus `APPLE_PRIVATE_KEY` secret, callback
-     `<PUBLIC_ORIGIN>/api/auth/apple/callback`
-   - Google sign-in: `GOOGLE_CLIENT_ID` var plus `GOOGLE_CLIENT_SECRET`
-     secret, callback `<PUBLIC_ORIGIN>/api/auth/google/callback`
    - Optional weekly digest email: `SMTP_URL`, `MAIL_FROM`, `MAIL_REPLY_TO`
 4. **Deploy**: `npm install && npm run deploy`. The database schema creates
    and migrates itself at first request — there is no migration step.
-5. **Sign in** with the `OWNER_EMAIL` account: you arrive as admin. Configure
-   visibility (public / members / password) under Settings → Members & access,
-   then start talking to the archivist or import a GEDCOM.
+5. **Sign in with the bootstrap link** `scripts/setup.mjs` printed — no OAuth
+   console needed on day one. You arrive as admin: talk to the archivist,
+   import a GEDCOM, set visibility under Settings → Members & access.
+6. **Real sign-in, when the family should join** (the only console step, and
+   it can wait):
+   - Google: OAuth client with redirect `<PUBLIC_ORIGIN>/api/auth/google/callback`
+     → `GOOGLE_CLIENT_ID` var plus `GOOGLE_CLIENT_SECRET` secret
+   - Apple: Services ID + key, callback `<PUBLIC_ORIGIN>/api/auth/apple/callback`
+     → `APPLE_CLIENT_ID`/`APPLE_TEAM_ID`/`APPLE_KEY_ID` vars plus
+     `APPLE_PRIVATE_KEY` secret
+   The bootstrap link retires itself the moment the owner links a real
+   provider.
 
 ## Connect an assistant (MCP)
 

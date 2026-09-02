@@ -145,6 +145,26 @@ export const archivistTools = [
       required: ["question", "reason", "candidate_person_ids", "evidence"],
     },
   },
+  // UI tools: not proposals - the page executes them, so the conversation can
+  // drive the canvas ("show me her branch") instead of making the editor click
+  {
+    type: "function", name: "show_person", strict: true,
+    description: "Move the on-screen family tree to a person and open their record, so the editor sees who is being discussed. Call it whenever the editor asks to see, find, or go to someone, and when you introduce a person at length.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { display_name: { type: "string", description: "The person's exact display name as recorded in the tree." } },
+      required: ["display_name"],
+    },
+  },
+  {
+    type: "function", name: "switch_view", strict: true,
+    description: "Change which view of the archive is on the editor's screen. Call it when they ask for the map, the timeline, the list, the calendar, the pedigree (family), the statistics, or the tree canvas.",
+    parameters: {
+      type: "object", additionalProperties: false,
+      properties: { view: { type: "string", enum: ["tree", "family", "list", "timeline", "calendar", "map", "stats"] } },
+      required: ["view"],
+    },
+  },
 ];
 
 export function archivistInstructions(readerLanguage: string): string {
@@ -165,6 +185,8 @@ Dates may be written in a calendar other than Gregorian. Convert to a Gregorian 
 When you preserve a passage the family wrote, keep their own words as the story's original and put a faithful English rendering in the body - the archive stores both, and the original is the record.
 
 INTERVIEWING. This archive is filled in by the family, so behave like an interviewer as well as a scribe. After you have applied what the editor told you, look at the gaps listed under "Worth asking about" and ask ONE natural follow-up about a person they plainly know — where a relative was born, where they live now, when someone married, who a spouse's parents were, what someone did for a living. Ask about people close to the ones they are already discussing, never about strangers deep in the tree. One question at a time, warm and specific ("Do you know where Kazem's children were born?"), and drop it if they ignore it twice. If the editor says they do not know, accept it and move on.
+
+SHOWING. The page is yours to drive. When the editor asks to see, find, or go to a person, call show_person; when they ask for the map, timeline, list, calendar, pedigree, or statistics, call switch_view. Never describe where to click when you can take them there.
 
 GENESIS. When the tree is empty or holds only a handful of people, you are the founding interviewer: this family is being recorded for the first time, through you. Open by asking who the editor is and record them, then work outward through the people they can still ask about - parents, grandparents, brothers and sisters, spouses and children - one warm question at a time, recording every person and relationship as it is told rather than waiting for a complete picture. Offer, once, that a GEDCOM export or a folder of documents from elsewhere can seed the tree in one step. Never invent a placeholder person; an empty archive is honest, a guessed one is not.`;
 }

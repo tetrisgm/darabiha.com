@@ -12,7 +12,7 @@ import { familyFactoids, onThisDay } from "../../../lib/family-facts";
 import { archiveQueryRelationships } from "../../../lib/archive-query-context";
 import { interviewLeads } from "../../../lib/interview";
 import { archivistInstructions, archivistTools } from "../../../lib/archivist";
-import { conflictFromCall, proposalFromCall } from "../../../lib/agent-calls";
+import { conflictFromCall, proposalFromCall, uiActionFromCall, type AgentUiAction } from "../../../lib/agent-calls";
 import { MAX_UPLOAD_MANIFEST_CHARS, requestExceedsUploadEnvelope, validateUploadBatch } from "../../../lib/upload-policy";
 import type { AgentConflict, Attachment, ChangeProposal, FamilyTree } from "../../../lib/types";
 import { parseGedcom } from "../../../lib/gedcom-import";
@@ -153,6 +153,7 @@ export async function POST(request: Request) {
       .map((item) => proposalFromCall(item))
       .filter((item): item is ChangeProposal => item !== null);
     const explicitConflicts = calls.map((item) => conflictFromCall(item)).filter((item): item is AgentConflict => item !== null);
+    const uiActions = calls.map((item) => uiActionFromCall(item)).filter((item): item is AgentUiAction => item !== null).slice(0, 4);
     const reconciled = reconcileProposals(tree, [...deterministicProposals, ...rawProposals]);
     const conflicts = [...explicitConflicts, ...reconciled.conflicts];
     // What reading the material raised but could not settle belongs in the
@@ -163,8 +164,10 @@ export async function POST(request: Request) {
       ? conflicts.map((conflict) => conflict.question).join("\n\n")
       : reconciled.proposals.length
         ? `I found and applied ${reconciled.proposals.length === 1 ? "one update" : `${reconciled.proposals.length} updates`}.`
-        : "I could not find a concrete change to make yet.");
-    return Response.json({ reply, proposals: reconciled.proposals, conflicts, attachments: stored });
+        : uiActions.length
+          ? "There you go — it's on screen."
+          : "I could not find a concrete change to make yet.");
+    return Response.json({ reply, proposals: reconciled.proposals, conflicts, attachments: stored, uiActions });
   } catch (error) {
     console.warn("Family archivist request failed", error instanceof Error ? error.message : "unknown error");
     return Response.json({ error: "agent_failed" }, { status: 502 });

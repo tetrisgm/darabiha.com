@@ -76,3 +76,22 @@ export function conflictFromCall(call: ToolCall): AgentConflict | null {
     };
   } catch { return null; }
 }
+
+export type AgentUiAction =
+  | { type: "show_person"; displayName: string }
+  | { type: "switch_view"; view: "tree" | "family" | "list" | "timeline" | "calendar" | "map" | "stats" };
+
+/** UI tools are the page's to execute, not the archive's to apply: the route
+ * returns them and the client moves the canvas. */
+export function uiActionFromCall(call: ToolCall): AgentUiAction | null {
+  try {
+    const args = JSON.parse(call.arguments) as Record<string, unknown>;
+    if (call.name === "show_person" && typeof args.display_name === "string" && args.display_name.trim()) {
+      return { type: "show_person", displayName: args.display_name.trim() };
+    }
+    if (call.name === "switch_view" && ["tree", "family", "list", "timeline", "calendar", "map", "stats"].includes(String(args.view))) {
+      return { type: "switch_view", view: args.view as AgentUiAction extends { view: infer V } ? V : never };
+    }
+  } catch { /* malformed arguments are dropped like every other bad call */ }
+  return null;
+}
