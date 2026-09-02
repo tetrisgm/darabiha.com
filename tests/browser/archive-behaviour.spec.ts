@@ -9,7 +9,10 @@ import { createHmac } from "node:crypto";
  * visibility, because flipping that would lock the family out mid-visit. */
 
 function session(email: string): string {
-  const secret = execFileSync("security", ["find-generic-password", "-s", "darabiha-session-secret", "-w"]).toString().trim();
+  // PLAYWRIGHT_SESSION_SECRET lets anyone run the suite against their own
+  // deployment; the Keychain item is the reference instance's arrangement.
+  const secret = process.env.PLAYWRIGHT_SESSION_SECRET
+    || execFileSync("security", ["find-generic-password", "-s", "darabiha-session-secret", "-w"]).toString().trim();
   const b64 = (input: Buffer | string) => Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   const payload = b64(JSON.stringify({ subject: "browser-suite", email, displayName: "Browser suite", exp: Math.floor(Date.now() / 1000) + 3600 }));
   return `${payload}.${b64(createHmac("sha256", secret).update(payload).digest())}`;
@@ -26,7 +29,7 @@ async function openView(page: Page, name: string) {
 }
 
 test.beforeEach(async ({ context, baseURL }) => {
-  await context.addCookies([{ name: "darabiha_session", value: session("browser-suite@darabiha.com"), url: baseURL ?? "https://darabiha.com" }]);
+  await context.addCookies([{ name: "darabiha_session", value: session(process.env.PLAYWRIGHT_MEMBER_EMAIL || "browser-suite@darabiha.com"), url: baseURL ?? "https://darabiha.com" }]);
 });
 
 test("the archive opens on the Tree", async ({ page }) => {
@@ -224,7 +227,7 @@ for (const [label, width, height] of [["iPhone", 390, 844], ["iPad mini portrait
     const context = await browser.newContext({
       viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2,
     });
-    await context.addCookies([{ name: "darabiha_session", value: session("browser-suite@darabiha.com"), url: baseURL ?? "https://darabiha.com" }]);
+    await context.addCookies([{ name: "darabiha_session", value: session(process.env.PLAYWRIGHT_MEMBER_EMAIL || "browser-suite@darabiha.com"), url: baseURL ?? "https://darabiha.com" }]);
     const page = await context.newPage();
     await ready(page);
     await page.waitForTimeout(2500);

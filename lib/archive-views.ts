@@ -21,6 +21,12 @@ export type MappedPlace = {
 // Real latitude/longitude, projected with the same equirectangular mapping the
 // generated country outlines use - so markers land where the coastlines say.
 // Alias spellings (Ghazvin, Teheran) map without editing anyone's record.
+//
+// EXTENSION POINT: this dictionary is deliberately finite and weighted toward
+// the reference family's geography. A deployment whose places go unmapped
+// extends it here (lowercase city name -> [lat, lon]); unmapped places appear
+// in the Map view's own unmapped list rather than failing. A geocoding
+// service is the eventual replacement (docs/PLATFORM.md phase 8).
 const toPercent = ([lat, lon]: [number, number]): [number, number] => [((lon + 180) / 360) * 100, ((90 - lat) / 180) * 100];
 const cityLatLon: Record<string, [number, number]> = {
   paris: [48.86, 2.35], tehran: [35.69, 51.39], teheran: [35.69, 51.39],

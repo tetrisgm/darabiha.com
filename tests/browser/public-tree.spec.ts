@@ -7,9 +7,12 @@ import { VERSION } from "../../lib/build";
 // for the dedicated browser-suite viewer member. The session secret's
 // durable copy lives in the Mac login Keychain (fleet rule).
 function viewerSessionCookie(): string {
-  const secret = execFileSync("security", ["find-generic-password", "-s", "darabiha-session-secret", "-w"]).toString().trim();
+  // PLAYWRIGHT_SESSION_SECRET lets anyone run the suite against their own
+  // deployment; the Keychain item is the reference instance's arrangement.
+  const secret = process.env.PLAYWRIGHT_SESSION_SECRET
+    || execFileSync("security", ["find-generic-password", "-s", "darabiha-session-secret", "-w"]).toString().trim();
   const b64url = (input: Buffer | string) => Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-  const payload = b64url(JSON.stringify({ subject: "browser-suite", email: "browser-suite@darabiha.com", displayName: "Browser suite", exp: Math.floor(Date.now() / 1000) + 3600 }));
+  const payload = b64url(JSON.stringify({ subject: "browser-suite", email: process.env.PLAYWRIGHT_MEMBER_EMAIL || "browser-suite@darabiha.com", displayName: "Browser suite", exp: Math.floor(Date.now() / 1000) + 3600 }));
   const signature = b64url(createHmac("sha256", secret).update(payload).digest());
   return `${payload}.${signature}`;
 }

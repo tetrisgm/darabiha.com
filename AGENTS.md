@@ -9,31 +9,21 @@ access; steps a human must click through are marked **HUMAN**. Read
 
 1. **Preconditions.** `node >= 22.13`, `npx wrangler whoami` succeeds (else
    have the human run `npx wrangler login`). Run `npm install`.
-2. **Provision.**
+2. **Provision in one step** — creates (or reuses) the D1 database and R2
+   bucket, rewrites `wrangler.jsonc` for this deployment, and sets
+   `AUTH_SESSION_SECRET`:
    ```sh
-   npx wrangler d1 create <family>-tree        # note the database_id in the output
-   npx wrangler r2 bucket create <family>-tree-files
+   node scripts/setup.mjs --name <family>-tree --owner <their email> --archive-name "<Family>"
    ```
-3. **Rewrite `wrangler.jsonc`** (it ships with the reference instance's
-   values — replace them all):
-   - `name`: the Worker name, e.g. `<family>-tree`
-   - `d1_databases[0]`: your `database_name` + `database_id` (binding stays `DB`)
-   - `r2_buckets[0]`: your `bucket_name` (binding stays `FILES`)
-   - delete the `routes` block (serves from `workers.dev`) or set the
-     human's own zone
-   - `vars`: `PUBLIC_ORIGIN` (the workers.dev URL until a domain exists),
-     `OWNER_EMAIL` (the human's sign-in email — required; an empty database
-     refuses to start without it), `ARCHIVE_NAME`, `ARCHIVE_TAGLINE`, and
-     optionally `ARCHIVE_NAME_<LANG>` and `ARCHIVE_PROMPT_CONTEXT` (ask the
-     human which languages/calendars their family's records use).
-4. **Secrets.** Generate and set the session secret yourself:
-   ```sh
-   openssl rand -base64 48 | npx wrangler secret put AUTH_SESSION_SECRET
-   ```
-   `OPENAI_API_KEY`: ask the human for a key (never echo it; pipe it to
-   `wrangler secret put`). Without it the site deploys fine and AI features
-   return 503, so this can wait.
-5. **Sign-in providers.** **HUMAN** — these need developer-console clicks:
+   Optional: `--tagline "..."`, and `--origin https://their.domain` when a
+   custom zone exists (otherwise it serves from `workers.dev`). Ask the human
+   which languages/calendars their records use and set
+   `ARCHIVE_NAME_<LANG>` / `ARCHIVE_PROMPT_CONTEXT` vars accordingly. The
+   manual equivalent of everything the script does is in `README.md`.
+3. **`OPENAI_API_KEY`**: ask the human for a key (never echo it; pipe it to
+   `npx wrangler secret put OPENAI_API_KEY --name <worker>`). Without it the
+   site deploys fine and AI features return 503, so this can wait.
+4. **Sign-in providers.** **HUMAN** — these need developer-console clicks:
    - Google: create an OAuth client (web) in Google Cloud Console with
      redirect URI `<PUBLIC_ORIGIN>/api/auth/google/callback`; set the
      `GOOGLE_CLIENT_ID` var and `GOOGLE_CLIENT_SECRET` secret. To publish
@@ -43,13 +33,13 @@ access; steps a human must click through are marked **HUMAN**. Read
      `<PUBLIC_ORIGIN>/api/auth/apple/callback`; vars
      `APPLE_CLIENT_ID`/`APPLE_TEAM_ID`/`APPLE_KEY_ID`, secret `APPLE_PRIVATE_KEY`.
    At least one provider must be configured or nobody can sign in.
-6. **Deploy and verify.**
+5. **Deploy and verify.**
    ```sh
    npm run deploy
    curl -fsS <PUBLIC_ORIGIN>/api/version     # {"version":...} proves the Worker is up
    ```
    The schema self-creates at first request; there is no migration step.
-7. **First sign-in.** **HUMAN** signs in with the `OWNER_EMAIL` account and
+6. **First sign-in.** **HUMAN** signs in with the `OWNER_EMAIL` account and
    lands as admin. Offer to walk them through Settings → Members & access
    (visibility: public / members / password) and their first GEDCOM import
    or archivist conversation.
