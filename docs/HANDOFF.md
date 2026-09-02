@@ -1,5 +1,21 @@
 # Darabiha handoff
 
+## Platform build, third pass (2026-09-02) — versions 204–205
+
+Version 204 completes the mcp-kit token lifecycle: one-hour access tokens,
+hashed rotating refresh tokens inside `agent_token_families` (180-day
+absolute / 30-day inactivity), replay-of-a-consumed-refresh-token revokes the
+family and every access token it issued, and Settings lists/revokes families.
+The loop gate is now 27 steps and green against a virgin local Worker.
+Version 205: `scripts/setup.mjs` provisions a new deployment in one command
+(D1, R2, wrangler rewrite, session secret — AGENTS.md leads with it), the
+Playwright suites take `PLAYWRIGHT_SESSION_SECRET`/`PLAYWRIGHT_MEMBER_EMAIL`
+so strangers can run them, the map gazetteer documents its extension point,
+and `lib/model.ts` is the single model seam behind ask/agent/ingest.
+`docs/PLATFORM.md` carries the status ledger. Open: production loop run
+(monitor armed for the quota reset), a second model provider, i18n language
+configurability, geocoding, the public-history decision.
+
 ## Platform build, second pass (2026-09-02) — versions 202–203
 
 The owner fixed partyparty's scans, but the account quota stays spent until
