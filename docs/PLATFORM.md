@@ -123,6 +123,25 @@ is onboarding: a fresh deploy has no path to its first admin.
   history (`git filter-repo` — destructive, coordinate first) or re-root a
   fresh public history. Decision deferred; nothing above depends on it.
 
+## Phase 5b — the page as a tool (WebMCP)
+
+Shipped in version 206. Alongside the hosted MCP server (a remote agent
+reaching in), the page registers tools on `navigator.modelContext` — the
+W3C WebMCP API in Chrome/Edge 2026 — so a browser-side agent *driving the
+page* gets the archive's tools with no token, acting as the member already
+signed in. WebMCP's unique power over hosted MCP is moving the live UI:
+`show_person_on_canvas` and `switch_view` operate the real canvas, next to
+search/details/relationship reads and an `ask_the_archivist` passthrough.
+`lib/webmcp-tools.ts` is the pure tool logic (unit-tested);
+`app/components/useWebMcp.ts` adapts it to registerTool/unregisterTool with
+feature detection and the mount lifecycle the spec requires (register on
+mount, unregister on unmount). `tests/browser/webmcp.spec.ts` injects a mock
+model-context via addInitScript and proves registration and a UI-moving call
+on Chromium and WebKit. Future: editor-only WebMCP write tools that reuse the
+member's session against the existing mutation routes (the browser agent is
+the present editor, so direct apply is defensible there), and richer
+UI-driving tools (open the record panel, start an import).
+
 ## Phase 5 — the archive as a tool (MCP)
 
 - A hosted MCP server on the Worker (`/api/mcp` or a dedicated route) with
