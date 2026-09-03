@@ -47,6 +47,16 @@ future work, re-run the cut (the exclusion/patch list lives in this
 session's cut script pattern) or cherry-pick - the public repo has no
 shared history with this one by design.
 
+## Submitted to the WebMCP Challenge (2026-09-03)
+
+TreeTree was submitted before the September 3 deadline: live URL
+treetree.app, repo github.com/tetrisgm/treetree, captioned Remotion demo
+video, logo thumbnail, story and additional-info answers. Judging runs
+September 4-21; winners ~September 23. Until then, keep the demo healthy
+and don't break the submitted URLs (treetree.app and
+family-tree-demo.shokunin.workers.dev serve the same worker; both must
+stay up).
+
 ## The public demo instance (2026-09-03)
 
 The generic product's showroom exists:
