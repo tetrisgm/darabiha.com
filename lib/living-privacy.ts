@@ -17,6 +17,9 @@ export function redactLivingDetails(tree: FamilyTree): FamilyTree {
     } : person),
     relationships: tree.relationships,
     stories: tree.stories.filter((story) => !story.personIds.some((id) => livingIds.has(id))),
+    // an id number reveals nothing; losing it broke the landing view for
+    // every anonymous visitor of a public archive
+    rootPersonId: tree.rootPersonId ?? null,
   };
 }
 

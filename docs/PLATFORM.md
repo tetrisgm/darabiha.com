@@ -33,6 +33,22 @@ disputed-claim adjudication, reversible audited mutations, and living-person
 redaction. Mainstream products have none of these; every new agentic surface
 must route through them rather than around them.
 
+## The public demo instance (2026-09-03)
+
+The generic product's showroom exists:
+**https://family-archive-demo.ramine-4e9.workers.dev** - the Everfield
+family, twelve invented people across four generations, deployed with one
+`scripts/setup.mjs` run (which was also the first true end-to-end test of
+the stranger path, and caught two real bugs: secrets cannot be attached
+before the worker exists, so setup now deploys itself; and living-person
+redaction dropped `rootPersonId`, breaking the landing view for anonymous
+visitors of any public archive). It shares the account's D1 free-tier read
+quota with the family instance - the tree is tiny and edge-cached, but if
+the demo is ever hammered, the snapshot circuit breaker is the backstop and
+the paid plan is the fix. The demo has no OpenAI key on purpose: the AI
+chat answers 503 while tree, views, GEDCOM import, MCP, and WebMCP all
+work; add a key later only if the owner wants to spend on it.
+
 ## The boundary between instance and product (owner, 2026-09-03)
 
 darabiha.com is one family's private instance, not the product's public

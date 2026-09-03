@@ -57,9 +57,9 @@ try {
 // Rewrite wrangler.jsonc. String surgery keeps the file's comments/shape.
 let config = readFileSync("wrangler.jsonc", "utf8");
 const swap = (pattern, replacement, label) => {
-  const next = config.replace(pattern, replacement);
-  if (next === config) fail(`could not rewrite ${label} in wrangler.jsonc - has its shape changed?`);
-  config = next;
+  // match, don't compare: the new value may legitimately equal the old one
+  if (!pattern.test(config)) fail(`could not rewrite ${label} in wrangler.jsonc - has its shape changed?`);
+  config = config.replace(pattern, replacement);
 };
 swap(/"name":\s*"[^"]*"/, `"name": ${JSON.stringify(name)}`, "name");
 swap(/"database_name":\s*"[^"]*"/, `"database_name": ${JSON.stringify(dbName)}`, "database_name");
@@ -77,6 +77,26 @@ if (!args.get("origin")) config = config.replace(/,?\s*"routes":\s*\[[^\]]*\]/, 
 writeFileSync("wrangler.jsonc", config);
 console.log("Rewrote wrangler.jsonc for this deployment.");
 
+// First deploy - the worker must exist before a secret can be attached to
+// it, and the deploy output is where the real workers.dev URL appears.
+console.log("Building and deploying (a minute or two)…");
+execFileSync("npm", ["run", "build"], { stdio: ["ignore", "ignore", "inherit"] });
+execFileSync("node", ["scripts/normalize-deploy-config.mjs"], { stdio: "inherit" });
+const deployOutput = execFileSync("npx", ["wrangler", "deploy", "--keep-vars"], { encoding: "utf8" });
+process.stdout.write(deployOutput.split("\n").slice(-6).join("\n"));
+
+// workers.dev URLs carry the account subdomain, which is only knowable from
+// the deploy output; correct PUBLIC_ORIGIN and redeploy the config if the
+// guess was wrong (the second deploy reuses the build).
+let liveOrigin = origin;
+const advertised = deployOutput.match(/https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev/)?.[0];
+if (!args.get("origin") && advertised && advertised !== origin) {
+  liveOrigin = advertised;
+  writeFileSync("wrangler.jsonc", readFileSync("wrangler.jsonc", "utf8").replace(/"PUBLIC_ORIGIN":\s*"[^"]*"/, `"PUBLIC_ORIGIN": ${JSON.stringify(liveOrigin)}`));
+  execFileSync("npx", ["wrangler", "deploy", "--keep-vars"], { stdio: ["ignore", "ignore", "inherit"] });
+  console.log(`Corrected PUBLIC_ORIGIN to ${liveOrigin} and redeployed.`);
+}
+
 // Session secret - kept in this process just long enough to derive the
 // bootstrap sign-in link below; never written to disk here.
 const sessionSecret = randomBytes(48).toString("base64");
@@ -90,19 +110,18 @@ const bootstrap = createHmac("sha256", sessionSecret).update(`bootstrap-signin:$
   .digest("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 
 console.log(`
-Done. Next:
+Deployed. Next:
 
-  1. Deploy:  npm run deploy
-  2. Sign in as the owner - no OAuth setup needed yet - by opening:
+  1. Sign in as the owner - no OAuth setup needed yet - by opening:
 
-       ${origin}/api/auth/bootstrap?token=${bootstrap}
+       ${liveOrigin}/api/auth/bootstrap?token=${bootstrap}
 
      (Keep it private; it is the owner's key until real sign-in exists,
       and it stops working the moment the owner links Apple or Google.)
-  3. Archivist (any time): npx wrangler secret put OPENAI_API_KEY --name ${name}
-  4. Real sign-in, when the family should join (HUMAN, console clicks):
-     - Google: OAuth client with redirect ${origin}/api/auth/google/callback
+  2. Archivist (any time): npx wrangler secret put OPENAI_API_KEY --name ${name}
+  3. Real sign-in, when the family should join (HUMAN, console clicks):
+     - Google: OAuth client with redirect ${liveOrigin}/api/auth/google/callback
        -> set GOOGLE_CLIENT_ID var + GOOGLE_CLIENT_SECRET secret
-     - Apple: Services ID with callback ${origin}/api/auth/apple/callback
+     - Apple: Services ID with callback ${liveOrigin}/api/auth/apple/callback
        -> APPLE_CLIENT_ID/APPLE_TEAM_ID/APPLE_KEY_ID vars + APPLE_PRIVATE_KEY secret
 `);

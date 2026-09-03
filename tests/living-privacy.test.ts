@@ -10,6 +10,11 @@ describe("living-person public privacy", () => {
     expect(isLikelyLiving(person("dead", "1980", "2020"), 2026)).toBe(false);
     expect(isLikelyLiving(person("undated", null, null), 2026)).toBe(false);
   });
+  it("carries the root person through redaction - the landing view depends on it", () => {
+    const redacted = redactLivingDetails({ people: [], relationships: [], stories: [], rootPersonId: "root-1" });
+    expect(redacted.rootPersonId).toBe("root-1");
+  });
+
   it("keeps the public graph while hiding living details, photos, and linked stories", () => {
     const tree: FamilyTree = { people: [person("living", "1980-01-02", null), person("ancestor", "1880", "1950")], relationships: [{ id: "r", fromPersonId: "ancestor", toPersonId: "living", type: "parent" }], stories: [{ id: "s", title: "Private", body: "Story", date: null, place: null, personIds: ["living"], attachmentIds: [] }] };
     const publicTree = redactLivingDetails(tree);

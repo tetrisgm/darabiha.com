@@ -16,10 +16,13 @@ access; steps a human must click through are marked **HUMAN**. Read
    node scripts/setup.mjs --name <family>-tree --owner <their email> --archive-name "<Family>"
    ```
    Optional: `--tagline "..."`, and `--origin https://their.domain` when a
-   custom zone exists (otherwise it serves from `workers.dev`). Ask the human
-   which languages/calendars their records use and set
-   `ARCHIVE_NAME_<LANG>` / `ARCHIVE_PROMPT_CONTEXT` vars accordingly. The
-   manual equivalent of everything the script does is in `README.md`.
+   custom zone exists (otherwise it serves from `workers.dev`). The script
+   builds and deploys, corrects `PUBLIC_ORIGIN` to the real workers.dev URL,
+   sets the session secret, and prints a **bootstrap sign-in link** - hand it
+   to the human; it makes them admin with no OAuth console and retires once
+   a real provider is linked. Ask which languages/calendars their records
+   use and set `ARCHIVE_NAME_<LANG>` / `ARCHIVE_PROMPT_CONTEXT` vars
+   accordingly. The manual equivalent is in `README.md`.
 3. **`OPENAI_API_KEY`**: ask the human for a key (never echo it; pipe it to
    `npx wrangler secret put OPENAI_API_KEY --name <worker>`). Without it the
    site deploys fine and AI features return 503, so this can wait.
