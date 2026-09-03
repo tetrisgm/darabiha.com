@@ -156,7 +156,7 @@ export function describeRelationship(tree: FamilyTree, fromId: string, toId: str
   return describeIndexedRelationship(relationshipIndex(tree), fromId, toId);
 }
 
-/** A sentence a person can read: "Niloufar is your second cousin — you share
+/** A sentence a person can read: "Leila is your second cousin — you share
  * Ghassem Darabi and Robabeh Masoudi." */
 export function relationshipSentence(result: RelationshipResult): string {
   if (result.relationship === "not connected in the records") {

@@ -42,7 +42,7 @@ export const hasRecordedDeath = (person: Person): boolean =>
  * nine deep, and where the living begin depends on the family, not on the
  * depth. But a generation's recorded births place it in time even when most
  * of its people carry no dates - the latest birth recorded anywhere in
- * Nasser's generation is 1952, and in his father's it is 1893. So a
+ * the reference archive's youngest-elder generation is 1952, and in the one above it, 1893. So a
  * generation whose latest recorded birth falls inside a lifetime is a living
  * generation, and so is every generation below it.
  *
@@ -69,7 +69,7 @@ export function familyGenerations(tree: FamilyTree, today = new Date()): Generat
   }
   // The generation above is the parents of living people, and is usually
   // living too - but only where the archive has nothing to say about it. A
-  // generation with dated births is placed by them: the one above Nasser's
+  // generation with dated births is placed by them: the one above it
   // has births in 1893, and no parent of the living was born then.
   if (livingFrom !== null && livingFrom > 0 && !latestBirth.has(livingFrom - 1)) livingFrom -= 1;
   return { depth, deepest, livingFrom };
