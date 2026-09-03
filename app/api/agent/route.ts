@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { LANGUAGE_ENDONYM, LANG_COOKIE, parseLang } from "../../../lib/i18n";
 import { getMemberPerson, listAttachments, readTree, recordAgentQuestions, saveAttachment } from "../../../db/store";
 import { intentContext } from "../../../lib/family-answers";
+import { extractEvidenceUrls, fetchWebEvidence } from "../../../lib/web-evidence";
 import { extractArchive } from "../../../lib/archive-import";
 import { reconcileProposals } from "../../../lib/agent-reconcile";
 import { familyFactoids, onThisDay } from "../../../lib/family-facts";
@@ -71,9 +72,21 @@ export async function POST(request: Request) {
   const stored: Attachment[] = [];
   const deterministicProposals: ChangeProposal[] = [];
   for (const file of files) stored.push(await saveAttachment(file, auth.user.email));
+  // pasted links become evidence: the page is fetched, snapshotted as a
+  // text attachment (so the citation survives link rot), and read like any
+  // uploaded document
+  const webEvidence: string[] = [];
+  for (const url of extractEvidenceUrls(message)) {
+    const fetched = await fetchWebEvidence(url);
+    if ("error" in fetched) { webEvidence.push(`The link ${url} could not be used as evidence: ${fetched.error}.`); continue; }
+    const snapshot = `Source: ${fetched.url}\nSaved: ${new Date().toISOString()}\nTitle: ${fetched.title}\n\n${fetched.text}`;
+    const filename = `web-${new URL(fetched.url).hostname}-${Date.now()}.txt`;
+    stored.push(await saveAttachment(new File([snapshot], filename, { type: "text/plain" }), auth.user.email));
+    webEvidence.push(`Snapshot of ${fetched.url} ("${fetched.title}"), preserved as evidence ${filename}:\n${fetched.text.slice(0, 30_000)}`);
+  }
   const content: Array<Record<string, unknown>> = [{
     type: "input_text",
-    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\n${archivistContext(tree, `${message} ${history}`, egoId)}Current tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,
+    text: `${message || "Please examine the attached material."}\n\nRecent conversation:\n${history || "(none)"}\n\nFolder/file manifest (paths preserve recursive folder structure):\n${manifest || "(none)"}\n\n${webEvidence.length ? `Linked web pages (fetched and preserved as evidence):\n${webEvidence.join("\n\n")}\n\n` : ""}${archivistContext(tree, `${message} ${history}`, egoId)}Current tree JSON:\n${JSON.stringify(tree)}\n\nExisting private attachment metadata:\n${JSON.stringify(existingAttachments)}\n\nNew uploaded evidence IDs:\n${JSON.stringify(stored)}`,
   }];
   for (const file of files) {
     if (file.name.toLowerCase().endsWith(".zip")) {

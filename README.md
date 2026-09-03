@@ -68,6 +68,26 @@ setup contract it will follow. By hand, the same steps are:
    The bootstrap link retires itself the moment the owner links a real
    provider.
 
+## Bringing data in
+
+Three doors, all through the chat:
+
+- **A GEDCOM export from any other service** — Ancestry, MyHeritage, Geni,
+  WikiTree, Gramps and the rest all export one (ask the archivist for the
+  exact menu path for your service). Attach the `.ged` file and it is parsed
+  deterministically — no model in the loop — with conflicts becoming
+  questions for the family instead of silent overwrites.
+- **Documents and photos** — scans, letters, PDFs, spreadsheets, whole
+  folders or ZIPs. The archivist reads them, proposes changes with the
+  document preserved as evidence, and files what it cannot settle as
+  questions.
+- **Links** — paste an https URL (an obituary, a memorial page) and the page
+  is fetched, preserved as a text snapshot in evidence (so the citation
+  survives link rot), and read like any document.
+
+The fourth door is the point of the product: the family talks, and the
+archivist interviews everyone toward the gaps only they can fill.
+
 ## Connect an assistant (MCP)
 
 The archive is itself an MCP server. In Claude, ChatGPT, or any MCP client,
