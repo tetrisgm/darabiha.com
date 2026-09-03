@@ -33,6 +33,16 @@ disputed-claim adjudication, reversible audited mutations, and living-person
 redaction. Mainstream products have none of these; every new agentic surface
 must route through them rather than around them.
 
+## The boundary between instance and product (owner, 2026-09-03)
+
+darabiha.com is one family's private instance, not the product's public
+face. The repo must never point strangers at it; README now describes the
+production deployment without naming or linking it as a destination. When
+the repo goes public (after the history decision), the product gets its own
+home: a template repo page, and - now trivial with `scripts/setup.mjs` - a
+dedicated demo instance on workers.dev seeded only with synthetic people,
+so the showroom is a deployment of the product rather than anyone's family.
+
 ## Status (2026-09-02)
 
 Phases 1–7 are substantially shipped (versions 199–205): config spine and

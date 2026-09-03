@@ -7,10 +7,12 @@ every fact can carry a source, conflicting sources become durable disputed
 claims a person adjudicates, every mutation is audited and reversible, and
 likely-living people are redacted from public view.
 
-The reference instance is [darabiha.com](https://darabiha.com), which deploys
-from `main` of this repo. Try the archivist with synthetic records at
-[darabiha.com/demo](https://darabiha.com/demo) — no sign-in, nothing touches a
-real archive.
+This repo develops against one production deployment — a single family's
+private, password-gated archive. That instance is not the product's demo or
+showroom; it is one family using the thing. Every deployment is like that:
+one Worker, one family, theirs. Your own instance serves a synthetic-data
+sandbox at `/demo` (no sign-in, invented people) for showing relatives what
+the archivist does before they touch the real records.
 
 ## What's inside
 
