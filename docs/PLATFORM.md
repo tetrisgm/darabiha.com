@@ -33,6 +33,20 @@ disputed-claim adjudication, reversible audited mutations, and living-person
 redaction. Mainstream products have none of these; every new agentic surface
 must route through them rather than around them.
 
+## Released (2026-09-03)
+
+The public cut exists: **github.com/tetrisgm/agentic-family-tree** - a
+fresh-rooted single-commit repo under MIT, cut from this tree with the
+instance stripped (docs/, video/, the branded og.png, the instance wrangler
+values, the Keychain test fallbacks) and every family reference removed:
+cookie/storage names neutralized to archive_*, test fixtures reneamed to
+invented people, ancestral surnames swapped. The cut passes its own full
+gate standalone (220 tests, typecheck, lint, build after a clean npm ci).
+This private repo remains the family instance and upstream: to publish
+future work, re-run the cut (the exclusion/patch list lives in this
+session's cut script pattern) or cherry-pick - the public repo has no
+shared history with this one by design.
+
 ## The public demo instance (2026-09-03)
 
 The generic product's showroom exists:
