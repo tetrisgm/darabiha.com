@@ -1,5 +1,20 @@
 # Darabiha handoff
 
+## Production agentic-surface verification (2026-09-03, quota reset)
+
+The account D1 quota reset on schedule and the deferred production checks all
+passed on Version 209. `scripts/test-oauth-mcp-loop.py` against darabiha.com:
+25/25 steps — discovery, dynamic registration, consent, PKCE, code replay
+rejection, the 12-tool intent registry, reads of the real 415-person archive,
+refresh rotation, refresh-replay family revocation, propose-scope filing,
+editor-apply correctly 403 for the canView suite member, settings revocation,
+dead-token rejection. The loop's one test proposal ("Add Loop Probe 4da228")
+was rejected as admin afterward, per the test-against-production hygiene rule.
+The full browser suite then passed 66 with the two known members-only skips —
+including the live archivist (intent context in the prompt) and both WebMCP
+specs against production. Versions 199–209 are now all verified end to end on
+the live site.
+
 ## Platform build, third pass (2026-09-02) — versions 204–205
 
 Version 204 completes the mcp-kit token lifecycle: one-hour access tokens,
