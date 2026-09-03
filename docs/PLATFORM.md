@@ -35,7 +35,7 @@ must route through them rather than around them.
 
 ## Released (2026-09-03)
 
-The public cut exists: **github.com/tetrisgm/agentic-family-tree** - a
+The public cut exists: **github.com/tetrisgm/family-tree** (the product is named Family Tree; the old repo URL redirects) - a
 fresh-rooted single-commit repo under MIT, cut from this tree with the
 instance stripped (docs/, video/, the branded og.png, the instance wrangler
 values, the Keychain test fallbacks) and every family reference removed:
@@ -50,7 +50,7 @@ shared history with this one by design.
 ## The public demo instance (2026-09-03)
 
 The generic product's showroom exists:
-**https://family-archive-demo.ramine-4e9.workers.dev** - the Everfield
+**https://family-tree-demo.shokunin.workers.dev** (live once the account's workers.dev subdomain is renamed to shokunin in the dashboard; until then the same worker answers on the old subdomain) - the Everfield
 family, twelve invented people across four generations, deployed with one
 `scripts/setup.mjs` run (which was also the first true end-to-end test of
 the stranger path, and caught two real bugs: secrets cannot be attached
