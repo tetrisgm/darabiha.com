@@ -32,6 +32,8 @@ export type WebMcpTool = {
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  /** orientation and other tools that answer before any data arrives */
+  worksWithoutTree?: boolean;
   execute: (args: Record<string, unknown>, tree: FamilyTree, actions: WebMcpActions) => Promise<string> | string;
 };
 
@@ -72,6 +74,7 @@ const relativesOf = (tree: FamilyTree, id: string) => {
 export const WEBMCP_TOOLS: WebMcpTool[] = [
   {
     name: "what_can_i_do_here",
+    worksWithoutTree: true,
     description: "What this page offers and how to use it. Call this when the user asks what they can do here, what this site is, or how it works - and consider calling it once when you first encounter this page, to introduce it to the user. Returns a short introduction meant to be relayed.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     execute: () => [
