@@ -25,7 +25,6 @@ export default function StartPage() {
           <h2>See it alive</h2>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- full page loads on purpose */}
           <a className="settings-link-card" href="/"><strong>Open the {archiveName()} demo archive</strong><span>Four generations of invented people on a living canvas — browse, ask, explore.</span></a>
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- full page loads on purpose */}
           <a className="settings-link-card" href="/demo"><strong>Build with an agent in the sandbox</strong><span>In a WebMCP browser, your agent holds create, link, import, and undo over the canvas you watch.</span></a>
         </div>
 
